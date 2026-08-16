@@ -84,4 +84,42 @@ describe("buildAgentMonitorForest", () => {
     ]);
     expect(forest.every((node) => node.children.length === 0)).toBe(true);
   });
+
+  it("preserves the complete per-agent token breakdown and marks absent models unavailable", () => {
+    const forest = buildAgentMonitorForest({
+      threads: [{ id: "agent", name: "Agent", updatedAt: 10 }],
+      threadParentById: {},
+      threadStatusById: {},
+      tokenUsageByThread: {
+        agent: {
+          total: {
+            totalTokens: 130,
+            inputTokens: 100,
+            cachedInputTokens: 40,
+            outputTokens: 30,
+            reasoningOutputTokens: 10,
+          },
+          last: {
+            totalTokens: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: null,
+        },
+      },
+      now: 1_000,
+    });
+
+    expect(forest[0]).toMatchObject({
+      modelId: null,
+      tokenUsage: {
+        inputTokens: 100,
+        cachedInputTokens: 40,
+        outputTokens: 30,
+        totalTokens: 130,
+      },
+    });
+  });
 });

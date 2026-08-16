@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { AgentMonitorPage } from "./AgentMonitorPage";
+
+afterEach(cleanup);
 
 describe("AgentMonitorPage", () => {
   it("renders the agent hierarchy and existing model usage proportions", () => {
@@ -49,5 +51,36 @@ describe("AgentMonitorPage", () => {
     expect(screen.getAllByText("gpt-5.4").length).toBeGreaterThan(0);
     expect(screen.getByText("Running")).toBeTruthy();
     expect(screen.getByText("80%")).toBeTruthy();
+  });
+
+  it("filters the call tree to the selected workspace and session", () => {
+    render(
+      <AgentMonitorPage
+        threadsByWorkspace={{
+          codex: [
+            { id: "main", name: "Fix build", updatedAt: 1, createdAt: 1, modelId: "gpt-5.6-terra" },
+            { id: "child", name: "Investigate", updatedAt: 2, modelId: "gpt-5.6-sol", isSubagent: true },
+          ],
+          other: [{ id: "other", name: "Other project", updatedAt: 3, modelId: "gpt-5.6-luna" }],
+        }}
+        workspaceOptions={[
+          { id: "codex", label: "CodexMonitor" },
+          { id: "other", label: "Other" },
+        ]}
+        threadParentById={{ child: "main" }}
+        threadStatusById={{}}
+        tokenUsageByThread={{}}
+        localUsageSnapshot={null}
+        now={6_000}
+      />,
+    );
+
+    expect(screen.getByLabelText("Workspace")).toBeTruthy();
+    expect(screen.getByLabelText("Session")).toBeTruthy();
+    expect(screen.getAllByText("Fix build").length).toBeGreaterThan(1);
+    fireEvent.change(screen.getByLabelText("Workspace"), { target: { value: "codex" } });
+    fireEvent.change(screen.getByLabelText("Session"), { target: { value: "main" } });
+    expect(screen.getByText(/Created:/)).toBeTruthy();
+    expect(screen.queryByText("Other project")).toBeNull();
   });
 });

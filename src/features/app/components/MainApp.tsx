@@ -1814,6 +1814,11 @@ export default function MainApp() {
       threadStatusById={threadStatusById}
       tokenUsageByThread={tokenUsageByThread}
       localUsageSnapshot={localUsageSnapshot}
+      workspaceOptions={workspaces.map((workspace) => ({
+        id: workspace.id,
+        label: workspace.name || workspace.path,
+        path: workspace.path,
+      }))}
       onBack={() => setShowAgentMonitor(false)}
     />
   );

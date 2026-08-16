@@ -359,6 +359,8 @@ export function useThreads({
                   : {}),
                 ...(summary.subagentRole ? { subagentRole: summary.subagentRole } : {}),
                 ...(summary.createdAt !== undefined ? { createdAt: summary.createdAt } : {}),
+                ...(summary.modelId ? { modelId: summary.modelId } : {}),
+                ...(summary.effort ? { effort: summary.effort } : {}),
               },
             });
             if (summary.updatedAt > 0) {

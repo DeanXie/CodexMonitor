@@ -23,10 +23,13 @@ export function AgentTreeNode({ node, depth = 0 }: { node: AgentMonitorNode; dep
           <strong>{node.name}</strong>
           <span>{node.isSubagent ? node.role ?? "Sub Agent" : "Main Agent"}</span>
         </div>
-        <div className="agent-monitor-agent-metric"><span>Model</span><strong>{node.modelId ?? "Unknown"}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Model</span><strong>{node.modelId ?? "unavailable"}</strong></div>
         <div className="agent-monitor-agent-metric"><span>Status</span><strong>{node.status === "running" ? "Running" : node.status === "reviewing" ? "Reviewing" : "Idle"}</strong></div>
         <div className="agent-monitor-agent-metric"><span>Runtime</span><strong>{formatRuntime(node.runtimeMs)}</strong></div>
-        <div className="agent-monitor-agent-metric"><span>Tokens</span><strong>{node.totalTokens.toLocaleString()}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Input</span><strong>{node.tokenUsage.inputTokens.toLocaleString()}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Output</span><strong>{node.tokenUsage.outputTokens.toLocaleString()}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Cached</span><strong>{node.tokenUsage.cachedInputTokens.toLocaleString()}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Total</span><strong>{node.totalTokens.toLocaleString()}</strong></div>
       </div>
       {hasChildren && expanded ? <ul>{node.children.map((child) => <AgentTreeNode key={child.threadId} node={child} depth={depth + 1} />)}</ul> : null}
     </li>

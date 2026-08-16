@@ -1,4 +1,4 @@
-import type { ThreadSummary, ThreadTokenUsage } from "@/types";
+import type { ThreadSummary, ThreadTokenUsage, TokenUsageBreakdown } from "@/types";
 
 export type AgentMonitorStatus = "idle" | "reviewing" | "running";
 
@@ -7,6 +7,12 @@ export type AgentMonitorThreadStatus = {
   isReviewing?: boolean;
   processingStartedAt?: number | null;
   lastDurationMs?: number | null;
+};
+
+export type AgentMonitorWorkspaceOption = {
+  id: string;
+  label: string;
+  path?: string;
 };
 
 export type AgentMonitorNode = {
@@ -19,6 +25,7 @@ export type AgentMonitorNode = {
   status: AgentMonitorStatus;
   runtimeMs: number | null;
   totalTokens: number;
+  tokenUsage: TokenUsageBreakdown;
   children: AgentMonitorNode[];
 };
 

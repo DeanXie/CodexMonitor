@@ -7,8 +7,29 @@ export type AgentMonitorSummary = {
   primaryModel: string | null;
 };
 
+export type AgentMonitorModelUsage = {
+  model: string;
+  tokens: number;
+  sharePercent: number;
+};
+
 function flattenNodes(nodes: AgentMonitorNode[]): AgentMonitorNode[] {
   return nodes.flatMap((node) => [node, ...flattenNodes(node.children)]);
+}
+
+export function buildAgentMonitorModelUsage(
+  roots: AgentMonitorNode[],
+): AgentMonitorModelUsage[] {
+  const tokensByModel = new Map<string, number>();
+  flattenNodes(roots).forEach((node) => {
+    if (!node.modelId || node.totalTokens <= 0) return;
+    tokensByModel.set(node.modelId, (tokensByModel.get(node.modelId) ?? 0) + node.totalTokens);
+  });
+  const totalTokens = Array.from(tokensByModel.values()).reduce((total, tokens) => total + tokens, 0);
+  if (!totalTokens) return [];
+  return Array.from(tokensByModel.entries())
+    .map(([model, tokens]) => ({ model, tokens, sharePercent: Math.round((tokens / totalTokens) * 1000) / 10 }))
+    .sort((left, right) => right.tokens - left.tokens);
 }
 
 export function buildAgentMonitorSummary(

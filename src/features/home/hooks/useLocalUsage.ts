@@ -25,7 +25,7 @@ export function useLocalUsage(enabled: boolean, workspacePath: string | null) {
   useEffect(() => {
     enabledRef.current = enabled;
     if (!enabled) {
-      setState((prev) => ({ ...prev, isLoading: false }));
+      setState((prev) => (prev.isLoading ? { ...prev, isLoading: false } : prev));
     }
   }, [enabled]);
 

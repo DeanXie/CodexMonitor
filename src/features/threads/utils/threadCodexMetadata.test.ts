@@ -52,6 +52,28 @@ describe("extractThreadCodexMetadata", () => {
     });
   });
 
+  it("prefers a token-producing item model over its turn-level model", () => {
+    const metadata = extractThreadCodexMetadata({
+      turns: [
+        {
+          model: "gpt-5.4",
+          items: [
+            { type: "agentMessage", payload: { model: "gpt-5.4" } },
+            {
+              type: "tokenCount",
+              payload: {
+                info: { model_name: "gpt-5.6-terra" },
+                total_tokens: 120,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(metadata.modelId).toBe("gpt-5.6-terra");
+  });
+
   it("normalizes missing/default effort to null", () => {
     const metadata = extractThreadCodexMetadata({
       modelId: "gpt-5",

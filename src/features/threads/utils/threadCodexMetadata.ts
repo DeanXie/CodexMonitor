@@ -97,13 +97,35 @@ function extractFromTurn(turn: Record<string, unknown>): {
   let modelId: string | null = null;
   let effort: string | null = null;
 
-  const turnLevel = extractFromRecord(turn);
-  modelId = turnLevel.modelId;
-  effort = turnLevel.effort;
-
   const items = Array.isArray(turn.items)
     ? (turn.items as unknown[])
     : [];
+
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = asRecord(items[index]);
+    const itemType = asString(item?.type)?.toLowerCase() ?? "";
+    if (!item || !itemType.includes("token")) {
+      continue;
+    }
+    const extracted = extractFromRecord(item);
+    if (extracted.modelId) {
+      modelId = extracted.modelId;
+    }
+    if (!effort && extracted.effort) {
+      effort = extracted.effort;
+    }
+    if (modelId) {
+      break;
+    }
+  }
+
+  const turnLevel = extractFromRecord(turn);
+  if (!modelId) {
+    modelId = turnLevel.modelId;
+  }
+  if (!effort) {
+    effort = turnLevel.effort;
+  }
 
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = asRecord(items[index]);

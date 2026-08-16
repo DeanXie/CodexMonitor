@@ -15,6 +15,7 @@ describe("buildAgentMonitorSummary", () => {
         status: "running",
         runtimeMs: 1_000,
         totalTokens: 100,
+        tokenUsage: { totalTokens: 100, inputTokens: 70, cachedInputTokens: 20, outputTokens: 30, reasoningOutputTokens: 10 },
         children: [
           {
             threadId: "child",
@@ -26,6 +27,7 @@ describe("buildAgentMonitorSummary", () => {
             status: "reviewing",
             runtimeMs: 2_000,
             totalTokens: 150,
+            tokenUsage: { totalTokens: 150, inputTokens: 100, cachedInputTokens: 30, outputTokens: 50, reasoningOutputTokens: 20 },
             children: [],
           },
         ],

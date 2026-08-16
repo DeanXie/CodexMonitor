@@ -1,11 +1,13 @@
 type HomeActionsProps = {
   onAddWorkspace: () => void;
   onAddWorkspaceFromUrl: () => void;
+  onOpenAgentMonitor?: () => void;
 };
 
 export function HomeActions({
   onAddWorkspace,
   onAddWorkspaceFromUrl,
+  onOpenAgentMonitor,
 }: HomeActionsProps) {
   return (
     <div className="home-actions">
@@ -19,6 +21,11 @@ export function HomeActions({
         </span>
         Add Workspaces
       </button>
+      {onOpenAgentMonitor ? (
+        <button className="home-button secondary" onClick={onOpenAgentMonitor} data-tauri-drag-region="false">
+          Agent Monitor
+        </button>
+      ) : null}
       <button
         className="home-button secondary home-add-workspace-from-url-button"
         onClick={onAddWorkspaceFromUrl}

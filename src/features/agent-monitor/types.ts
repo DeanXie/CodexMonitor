@@ -1,0 +1,31 @@
+import type { ThreadSummary, ThreadTokenUsage } from "@/types";
+
+export type AgentMonitorStatus = "idle" | "reviewing" | "running";
+
+export type AgentMonitorThreadStatus = {
+  isProcessing?: boolean;
+  isReviewing?: boolean;
+  processingStartedAt?: number | null;
+  lastDurationMs?: number | null;
+};
+
+export type AgentMonitorNode = {
+  threadId: string;
+  name: string;
+  modelId: string | null;
+  effort: string | null;
+  role: string | null;
+  isSubagent: boolean;
+  status: AgentMonitorStatus;
+  runtimeMs: number | null;
+  totalTokens: number;
+  children: AgentMonitorNode[];
+};
+
+export type AgentMonitorTreeInput = {
+  threads: ThreadSummary[];
+  threadParentById: Record<string, string>;
+  threadStatusById: Record<string, AgentMonitorThreadStatus | undefined>;
+  tokenUsageByThread: Record<string, ThreadTokenUsage | undefined>;
+  now: number;
+};

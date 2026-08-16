@@ -15,6 +15,7 @@ import type {
 type HomeProps = {
   onAddWorkspace: () => void;
   onAddWorkspaceFromUrl: () => void;
+  onOpenAgentMonitor?: () => void;
   latestAgentRuns: LatestAgentRun[];
   isLoadingLatestAgents: boolean;
   localUsageSnapshot: LocalUsageSnapshot | null;
@@ -35,6 +36,7 @@ type HomeProps = {
 export function Home({
   onAddWorkspace,
   onAddWorkspaceFromUrl,
+  onOpenAgentMonitor,
   latestAgentRuns,
   isLoadingLatestAgents,
   localUsageSnapshot,
@@ -67,6 +69,7 @@ export function Home({
       <HomeActions
         onAddWorkspace={onAddWorkspace}
         onAddWorkspaceFromUrl={onAddWorkspaceFromUrl}
+        onOpenAgentMonitor={onOpenAgentMonitor}
       />
       <HomeUsageSection
         accountInfo={accountInfo}

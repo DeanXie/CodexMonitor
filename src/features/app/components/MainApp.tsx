@@ -51,6 +51,7 @@ import { useMainAppWorkspaceActions } from "@app/hooks/useMainAppWorkspaceAction
 import { useMainAppWorkspaceLifecycle } from "@app/hooks/useMainAppWorkspaceLifecycle";
 import { useMainAppMobileThreadRefresh } from "@app/hooks/useMainAppMobileThreadRefresh";
 import { useHomeAccount } from "@app/hooks/useHomeAccount";
+import { AgentMonitorPage } from "@/features/agent-monitor/components/AgentMonitorPage";
 import type {
   ComposerEditorSettings,
   ServiceTier,
@@ -129,6 +130,7 @@ export default function MainApp() {
   const [activeTab, setActiveTab] = useState<
     "home" | "projects" | "codex" | "git" | "log"
   >("codex");
+  const [showAgentMonitor, setShowAgentMonitor] = useState(false);
   const tabletTab =
     activeTab === "projects" || activeTab === "home" ? "codex" : activeTab;
   const {
@@ -1642,6 +1644,7 @@ export default function MainApp() {
     usageWorkspaceId,
     usageWorkspaceOptions,
     onUsageWorkspaceChange: setUsageWorkspaceId,
+    onOpenAgentMonitor: () => setShowAgentMonitor(true),
     gitState,
     selectedServiceTier: selectedServiceTier ?? null,
     composerWorkspaceState,
@@ -1804,6 +1807,16 @@ export default function MainApp() {
     compactGitBackNode,
   } = useMainAppLayoutNodes(layoutSurfaces);
 
+  const agentMonitorNode = (
+    <AgentMonitorPage
+      threadsByWorkspace={threadsByWorkspace}
+      threadParentById={threadParentById}
+      threadStatusById={threadStatusById}
+      tokenUsageByThread={tokenUsageByThread}
+      localUsageSnapshot={localUsageSnapshot}
+      onBack={() => setShowAgentMonitor(false)}
+    />
+  );
   const mainMessagesNode = showWorkspaceHome ? workspaceHomeNode : messagesNode;
   const compactThreadConnectionState: "live" | "polling" | "disconnected" =
     !activeWorkspace?.connected
@@ -1850,7 +1863,7 @@ export default function MainApp() {
       approvalToastsNode,
       updateToastNode,
       errorToastsNode,
-      homeNode,
+      homeNode: showAgentMonitor ? agentMonitorNode : homeNode,
       mainHeaderNode,
       tabletNavNode,
       tabBarNode,

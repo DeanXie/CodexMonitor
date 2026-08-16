@@ -123,6 +123,7 @@ type UseMainAppLayoutSurfacesArgs = {
   startUncommittedReview: (workspaceId: string | null) => void;
   handleAddWorkspace: () => void;
   openWorkspaceFromUrlPrompt: () => void;
+  onOpenAgentMonitor: () => void;
   handleAddAgent: SidebarProps["onAddAgent"];
   handleAddWorktreeAgent: SidebarProps["onAddWorktreeAgent"];
   handleAddCloneAgent: SidebarProps["onAddCloneAgent"];
@@ -296,6 +297,7 @@ function buildPrimarySurface({
   openAppIconById,
   handleAddWorkspace,
   openWorkspaceFromUrlPrompt,
+  onOpenAgentMonitor,
   handleAddAgent,
   handleAddWorktreeAgent,
   handleAddCloneAgent,
@@ -583,6 +585,7 @@ function buildPrimarySurface({
     homeProps: {
       onAddWorkspace: handleAddWorkspace,
       onAddWorkspaceFromUrl: openWorkspaceFromUrlPrompt,
+      onOpenAgentMonitor,
       latestAgentRuns,
       isLoadingLatestAgents,
       localUsageSnapshot,
@@ -1007,6 +1010,7 @@ export function useMainAppLayoutSurfaces({
   startUncommittedReview,
   handleAddWorkspace,
   openWorkspaceFromUrlPrompt,
+  onOpenAgentMonitor,
   handleAddAgent,
   handleAddWorktreeAgent,
   handleAddCloneAgent,
@@ -1169,6 +1173,7 @@ export function useMainAppLayoutSurfaces({
     startUncommittedReview,
     handleAddWorkspace,
     openWorkspaceFromUrlPrompt,
+    onOpenAgentMonitor,
     handleAddAgent,
     handleAddWorktreeAgent,
     handleAddCloneAgent,

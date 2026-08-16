@@ -7,6 +7,10 @@ function formatRuntime(runtimeMs: number | null) {
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+function formatTokens(value: number | null | undefined) {
+  return value === null || value === undefined ? "unavailable" : value.toLocaleString();
+}
+
 export function AgentTreeNode({ node, depth = 0 }: { node: AgentMonitorNode; depth?: number }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
@@ -26,10 +30,10 @@ export function AgentTreeNode({ node, depth = 0 }: { node: AgentMonitorNode; dep
         <div className="agent-monitor-agent-metric"><span>Model</span><strong>{node.modelId ?? "unavailable"}</strong></div>
         <div className="agent-monitor-agent-metric"><span>Status</span><strong>{node.status === "running" ? "Running" : node.status === "reviewing" ? "Reviewing" : "Idle"}</strong></div>
         <div className="agent-monitor-agent-metric"><span>Runtime</span><strong>{formatRuntime(node.runtimeMs)}</strong></div>
-        <div className="agent-monitor-agent-metric"><span>Input</span><strong>{node.tokenUsage.inputTokens.toLocaleString()}</strong></div>
-        <div className="agent-monitor-agent-metric"><span>Output</span><strong>{node.tokenUsage.outputTokens.toLocaleString()}</strong></div>
-        <div className="agent-monitor-agent-metric"><span>Cached</span><strong>{node.tokenUsage.cachedInputTokens.toLocaleString()}</strong></div>
-        <div className="agent-monitor-agent-metric"><span>Total</span><strong>{node.totalTokens.toLocaleString()}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Input</span><strong>{formatTokens(node.tokenUsage?.inputTokens)}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Output</span><strong>{formatTokens(node.tokenUsage?.outputTokens)}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Cached</span><strong>{formatTokens(node.tokenUsage?.cachedInputTokens)}</strong></div>
+        <div className="agent-monitor-agent-metric"><span>Total</span><strong>{formatTokens(node.totalTokens)}</strong></div>
       </div>
       {hasChildren && expanded ? <ul>{node.children.map((child) => <AgentTreeNode key={child.threadId} node={child} depth={depth + 1} />)}</ul> : null}
     </li>

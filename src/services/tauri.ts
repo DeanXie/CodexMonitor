@@ -722,10 +722,14 @@ export async function checkoutGitHubPullRequest(
 export async function localUsageSnapshot(
   days?: number,
   workspacePath?: string | null,
+  sessionId?: string | null,
 ): Promise<LocalUsageSnapshot> {
-  const payload: { days: number; workspacePath?: string } = { days: days ?? 30 };
+  const payload: { days: number; workspacePath?: string; sessionId?: string } = { days: days ?? 30 };
   if (workspacePath) {
     payload.workspacePath = workspacePath;
+  }
+  if (sessionId) {
+    payload.sessionId = sessionId;
   }
   return invoke("local_usage_snapshot", payload);
 }

@@ -22,7 +22,7 @@ export function buildAgentMonitorModelUsage(
 ): AgentMonitorModelUsage[] {
   const tokensByModel = new Map<string, number>();
   flattenNodes(roots).forEach((node) => {
-    if (!node.modelId || node.totalTokens <= 0) return;
+    if (!node.modelId || !node.totalTokens || node.totalTokens <= 0) return;
     tokensByModel.set(node.modelId, (tokensByModel.get(node.modelId) ?? 0) + node.totalTokens);
   });
   const totalTokens = Array.from(tokensByModel.values()).reduce((total, tokens) => total + tokens, 0);
@@ -38,7 +38,7 @@ export function buildAgentMonitorSummary(
   const nodes = flattenNodes(roots);
   const tokensByModel = new Map<string, number>();
   nodes.forEach((node) => {
-    if (!node.modelId) {
+    if (!node.modelId || node.totalTokens === null) {
       return;
     }
     tokensByModel.set(
@@ -53,7 +53,7 @@ export function buildAgentMonitorSummary(
   return {
     totalAgents: nodes.length,
     activeAgents: nodes.filter((node) => node.status !== "idle").length,
-    totalTokens: nodes.reduce((total, node) => total + node.totalTokens, 0),
+    totalTokens: nodes.reduce((total, node) => total + (node.totalTokens ?? 0), 0),
     primaryModel,
   };
 }

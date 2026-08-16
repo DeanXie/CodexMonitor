@@ -34,6 +34,7 @@ pub(crate) async fn local_usage_snapshot_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     days: Option<u32>,
     workspace_path: Option<String>,
+    session_id: Option<String>,
 ) -> Result<LocalUsageSnapshot, String> {
     let days = days.unwrap_or(30).clamp(1, 90);
     let workspace_path = workspace_path.and_then(|value| {
@@ -49,7 +50,7 @@ pub(crate) async fn local_usage_snapshot_core(
         resolve_sessions_roots(&workspaces, workspace_path.as_deref())
     };
     let snapshot = tokio::task::spawn_blocking(move || {
-        scan_local_usage(days, workspace_path.as_deref(), &sessions_roots)
+        scan_local_usage(days, workspace_path.as_deref(), session_id.as_deref(), &sessions_roots)
     })
     .await
     .map_err(|err| err.to_string())??;
@@ -59,6 +60,7 @@ pub(crate) async fn local_usage_snapshot_core(
 fn scan_local_usage(
     days: u32,
     workspace_path: Option<&Path>,
+    session_id: Option<&str>,
     sessions_roots: &[PathBuf],
 ) -> Result<LocalUsageSnapshot, String> {
     let updated_at = SystemTime::now()
@@ -74,8 +76,9 @@ fn scan_local_usage(
     let mut model_totals: HashMap<String, i64> = HashMap::new();
 
     if sessions_roots.is_empty() {
-        return Ok(build_snapshot(updated_at, day_keys, daily, HashMap::new()));
+        return Ok(build_snapshot(updated_at, day_keys, daily, HashMap::new(), session_id.map(|_| false)));
     }
+    let mut session_linked = false;
 
     for root in sessions_roots {
         for day_key in &day_keys {
@@ -92,12 +95,12 @@ fn scan_local_usage(
                 if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
                     continue;
                 }
-                scan_file(&path, &mut daily, &mut model_totals, workspace_path)?;
+                session_linked |= scan_file(&path, &mut daily, &mut model_totals, workspace_path, session_id)?;
             }
         }
     }
 
-    Ok(build_snapshot(updated_at, day_keys, daily, model_totals))
+    Ok(build_snapshot(updated_at, day_keys, daily, model_totals, session_id.map(|_| session_linked)))
 }
 
 fn build_snapshot(
@@ -105,6 +108,7 @@ fn build_snapshot(
     day_keys: Vec<String>,
     daily: HashMap<String, DailyTotals>,
     model_totals: HashMap<String, i64>,
+    session_linked: Option<bool>,
 ) -> LocalUsageSnapshot {
     let mut days: Vec<LocalUsageDay> = Vec::with_capacity(day_keys.len());
     let mut total_tokens = 0;
@@ -176,6 +180,7 @@ fn build_snapshot(
             peak_day_tokens,
         },
         top_models,
+        session_linked,
     }
 }
 
@@ -184,11 +189,12 @@ fn scan_file(
     daily: &mut HashMap<String, DailyTotals>,
     model_totals: &mut HashMap<String, i64>,
     workspace_path: Option<&Path>,
-) -> Result<(), String> {
+    session_id: Option<&str>,
+) -> Result<bool, String> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => {
-            return Ok(());
+            return Ok(false);
         }
     };
     let reader = BufReader::new(file);
@@ -198,6 +204,7 @@ fn scan_file(
     let mut seen_runs: HashSet<i64> = HashSet::new();
     let mut match_known = workspace_path.is_none();
     let mut matches_workspace = workspace_path.is_none();
+    let mut matches_session = session_id.is_none();
 
     for line in reader.lines() {
         let line = match line {
@@ -229,6 +236,19 @@ fn scan_file(
             }
         }
 
+        if entry_type == "session_meta" {
+            let found_id = value
+                .get("payload")
+                .and_then(|payload| payload.get("id"))
+                .and_then(|id| id.as_str());
+            if let Some(expected_id) = session_id {
+                matches_session = found_id == Some(expected_id);
+                if !matches_session {
+                    return Ok(false);
+                }
+            }
+        }
+
         if entry_type == "turn_context" {
             if let Some(model) = extract_model_from_turn_context(&value) {
                 current_model = Some(model);
@@ -237,6 +257,10 @@ fn scan_file(
         }
 
         if entry_type == "session_meta" {
+            continue;
+        }
+
+        if !matches_session {
             continue;
         }
 
@@ -409,7 +433,7 @@ fn scan_file(
         }
     }
 
-    Ok(())
+    Ok(matches_session)
 }
 
 fn extract_model_from_turn_context(value: &Value) -> Option<String> {
@@ -645,7 +669,7 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        scan_file(&path, &mut daily, &mut model_totals, None, None).expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.input, 10);
@@ -663,7 +687,7 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        scan_file(&path, &mut daily, &mut model_totals, None, None).expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.input, 20);
@@ -682,7 +706,7 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        scan_file(&path, &mut daily, &mut model_totals, None, None).expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.input, 12);
@@ -700,7 +724,7 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        scan_file(&path, &mut daily, &mut model_totals, None, None).expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.agent_ms, 5_000);
@@ -717,7 +741,7 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        scan_file(&path, &mut daily, &mut model_totals, None, None).expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.agent_runs, 2);
@@ -735,7 +759,7 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        scan_file(&path, &mut daily, &mut model_totals, None, None).expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.agent_ms, 10_000);
@@ -758,12 +782,36 @@ mod tests {
             &mut daily,
             &mut model_totals,
             Some(Path::new("/tmp/other-project")),
+            None,
         )
         .expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.agent_ms, 0);
         assert_eq!(totals.input, 0);
+    }
+
+    #[test]
+    fn scan_local_usage_returns_only_the_requested_session_history() {
+        let root = make_temp_sessions_root();
+        let day_key = Local::now().format("%Y-%m-%d").to_string();
+        let timestamp_ms = Local::now().timestamp_millis();
+        write_session_file(
+            &root,
+            &day_key,
+            &[
+                r#"{"type":"session_meta","payload":{"id":"thread-a"}}"#.to_string(),
+                r#"{"type":"turn_context","payload":{"model":"gpt-5.6-terra"}}"#.to_string(),
+                format!(r#"{{"timestamp":{timestamp_ms},"type":"event_msg","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":100,"cached_input_tokens":40,"output_tokens":30}}}}}}}}"#),
+            ],
+        );
+
+        let snapshot = scan_local_usage(2, None, Some("thread-a"), &[root])
+            .expect("scan selected session");
+
+        assert_eq!(snapshot.totals.last30_days_tokens, 130);
+        assert_eq!(snapshot.top_models[0].model, "gpt-5.6-terra");
+        assert_eq!(snapshot.session_linked, Some(true));
     }
 
     #[test]
@@ -795,7 +843,7 @@ mod tests {
         write_session_file(&root_a, &day_key, &[line_a]);
         write_session_file(&root_b, &day_key, &[line_b]);
 
-        let snapshot = scan_local_usage(2, None, &[root_a, root_b]).expect("scan usage");
+        let snapshot = scan_local_usage(2, None, None, &[root_a, root_b]).expect("scan usage");
         let day = snapshot
             .days
             .iter()

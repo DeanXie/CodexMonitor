@@ -10,6 +10,7 @@ use crate::types::LocalUsageSnapshot;
 pub(crate) async fn local_usage_snapshot(
     days: Option<u32>,
     workspace_path: Option<String>,
+    session_id: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<LocalUsageSnapshot, String> {
@@ -18,11 +19,11 @@ pub(crate) async fn local_usage_snapshot(
             &*state,
             app,
             "local_usage_snapshot",
-            json!({ "days": days, "workspacePath": workspace_path }),
+            json!({ "days": days, "workspacePath": workspace_path, "sessionId": session_id }),
         )
         .await?;
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    local_usage_core::local_usage_snapshot_core(&state.workspaces, days, workspace_path).await
+    local_usage_core::local_usage_snapshot_core(&state.workspaces, days, workspace_path, session_id).await
 }

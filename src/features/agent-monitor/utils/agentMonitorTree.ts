@@ -47,14 +47,8 @@ export function buildAgentMonitorForest({
       isSubagent: Boolean(thread.isSubagent),
       status: status?.isReviewing ? "reviewing" : status?.isProcessing ? "running" : "idle",
       runtimeMs,
-      totalTokens: tokenUsageByThread[thread.id]?.total.totalTokens ?? 0,
-      tokenUsage: tokenUsageByThread[thread.id]?.total ?? {
-        totalTokens: 0,
-        inputTokens: 0,
-        cachedInputTokens: 0,
-        outputTokens: 0,
-        reasoningOutputTokens: 0,
-      },
+      totalTokens: tokenUsageByThread[thread.id]?.total.totalTokens ?? null,
+      tokenUsage: tokenUsageByThread[thread.id]?.total ?? null,
       children: [],
     });
   });

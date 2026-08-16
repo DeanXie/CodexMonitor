@@ -16,11 +16,12 @@ const emptyState: LocalUsageState = {
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
-export function useLocalUsage(enabled: boolean, workspacePath: string | null) {
+export function useLocalUsage(enabled: boolean, workspacePath: string | null, sessionId?: string | null) {
   const [state, setState] = useState<LocalUsageState>(emptyState);
   const requestIdRef = useRef(0);
   const enabledRef = useRef(enabled);
   const workspaceRef = useRef(workspacePath);
+  const sessionRef = useRef(sessionId ?? null);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -32,6 +33,9 @@ export function useLocalUsage(enabled: boolean, workspacePath: string | null) {
   useEffect(() => {
     workspaceRef.current = workspacePath;
   }, [workspacePath]);
+  useEffect(() => {
+    sessionRef.current = sessionId ?? null;
+  }, [sessionId]);
 
   const refresh = useCallback(() => {
     if (!enabledRef.current) {
@@ -40,7 +44,7 @@ export function useLocalUsage(enabled: boolean, workspacePath: string | null) {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
-    return localUsageSnapshot(30, workspaceRef.current ?? undefined)
+    return localUsageSnapshot(sessionRef.current ? 90 : 30, workspaceRef.current ?? undefined, sessionRef.current)
       .then((snapshot) => {
         if (requestIdRef.current !== requestId || !enabledRef.current) {
           return;
@@ -67,7 +71,7 @@ export function useLocalUsage(enabled: boolean, workspacePath: string | null) {
     return () => {
       window.clearInterval(interval);
     };
-  }, [enabled, refresh, workspacePath]);
+  }, [enabled, refresh, workspacePath, sessionId]);
 
   return { ...state, refresh };
 }

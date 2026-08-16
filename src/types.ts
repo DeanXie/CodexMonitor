@@ -568,6 +568,7 @@ export type LocalUsageSnapshot = {
   days: LocalUsageDay[];
   totals: LocalUsageTotals;
   topModels: LocalUsageModel[];
+  sessionLinked?: boolean | null;
 };
 
 export type TurnPlanStepStatus = "pending" | "inProgress" | "completed";

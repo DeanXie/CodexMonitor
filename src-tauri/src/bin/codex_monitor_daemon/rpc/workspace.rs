@@ -266,7 +266,8 @@ pub(super) async fn try_handle(
         "local_usage_snapshot" => {
             let days = parse_optional_u32(params, "days");
             let workspace_path = parse_optional_string(params, "workspacePath");
-            Some(serialize_result(state.local_usage_snapshot(days, workspace_path)).await)
+            let session_id = parse_optional_string(params, "sessionId");
+            Some(serialize_result(state.local_usage_snapshot(days, workspace_path, session_id)).await)
         }
         _ => None,
     }

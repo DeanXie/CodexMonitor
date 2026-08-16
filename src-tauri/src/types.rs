@@ -185,6 +185,8 @@ pub(crate) struct LocalUsageSnapshot {
     pub(crate) totals: LocalUsageTotals,
     #[serde(default)]
     pub(crate) top_models: Vec<LocalUsageModel>,
+    #[serde(default)]
+    pub(crate) session_linked: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

@@ -24,8 +24,8 @@ export type AgentMonitorNode = {
   isSubagent: boolean;
   status: AgentMonitorStatus;
   runtimeMs: number | null;
-  totalTokens: number;
-  tokenUsage: TokenUsageBreakdown;
+  totalTokens: number | null;
+  tokenUsage: TokenUsageBreakdown | null;
   children: AgentMonitorNode[];
 };
 

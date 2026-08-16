@@ -1333,8 +1333,9 @@ impl DaemonState {
         &self,
         days: Option<u32>,
         workspace_path: Option<String>,
+        session_id: Option<String>,
     ) -> Result<LocalUsageSnapshot, String> {
-        local_usage_core::local_usage_snapshot_core(&self.workspaces, days, workspace_path).await
+        local_usage_core::local_usage_snapshot_core(&self.workspaces, days, workspace_path, session_id).await
     }
 
     async fn menu_set_accelerators(&self, _updates: Vec<Value>) -> Result<(), String> {

@@ -1,0 +1,16 @@
+{
+  "evidence": {
+    "kind": "official-upstream-integration-test",
+    "source": "codex-rs/app-server/tests/suite/v2/turn_start.rs",
+    "scenario": "delete_live_parent_with_one_spawned_child"
+  },
+  "request": {
+    "method": "thread/delete",
+    "params": { "threadId": "thread-parent" }
+  },
+  "notifications": [
+    { "method": "thread/deleted", "params": { "threadId": "thread-child" } },
+    { "method": "thread/deleted", "params": { "threadId": "thread-parent" } }
+  ],
+  "threadLoadedListAfterDelete": []
+}

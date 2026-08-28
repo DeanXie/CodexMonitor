@@ -1,0 +1,98 @@
+{
+  "fixtureVersion": 1,
+  "capturedAt": "2026-08-26T11:46:06Z",
+  "purpose": "Phase 2.3b A real Monitor-owned app-server LIVE plus rollout NEAR_LIVE pair gate evidence",
+  "threadId": "01a03dda-e7e7-7e21-bf8f-70664528a270",
+  "turnId": "01a03dda-e912-7953-a18c-eb8715c7541b",
+  "sourceLanes": {
+    "live": {
+      "sourceKind": "monitor-app-server",
+      "temporalClass": "LIVE",
+      "sourceInstanceId": "monitor-app-server:8fbe5810-1fd6-4d6e-a55a-33c43a91fa4e",
+      "generation": "process:monitor-app-server:8fbe5810-1fd6-4d6e-a55a-33c43a91fa4e"
+    },
+    "nearLive": {
+      "sourceKind": "codex-cli-rollout",
+      "temporalClass": "NEAR_LIVE",
+      "sourceInstanceId": "rollout-tail:codex-home:76c92e1eaaa451ef02c92f75f12738ea3337e69b890333a72cd14ec778cac75f",
+      "codexHomeIdentity": "codex-home:76c92e1eaaa451ef02c92f75f12738ea3337e69b890333a72cd14ec778cac75f",
+      "sourcePath": "<CODEX_HOME>/sessions/2026/08/26/rollout-2026-08-26T19-35-51-01a03dda-e7e7-7e21-bf8f-70664528a270.jsonl",
+      "generation": "file:695cf30735c4de6323ad800aefdb263335dda19a578f63bf8544a6e665f20dad"
+    }
+  },
+  "registryEvidence": {
+    "canonicalThreadIds": [
+      "01a03dda-e7e7-7e21-bf8f-70664528a270"
+    ],
+    "liveLaneCount": 1,
+    "nearLiveLaneCount": 1,
+    "liveObservationCount": 7,
+    "rolloutObservationCount": 8
+  },
+  "rolloutEvidence": {
+    "recordOrdinals": [1, 2, 8, 16, 20, 23, 29, 30],
+    "committedByteOffset": 340592,
+    "recordOrdinal": 30,
+    "sessionMetaId": "01a03dda-e7e7-7e21-bf8f-70664528a270",
+    "lifecycle": "completed",
+    "observedModel": "gpt-5.6-terra",
+    "finalTokenSnapshot": {
+      "inputTokens": 93714,
+      "cachedInputTokens": 68864,
+      "cacheWriteInputTokens": 0,
+      "outputTokens": 459,
+      "reasoningOutputTokens": 145,
+      "totalTokens": 94173
+    },
+    "lagMs": [711, 711, 118, 161, 404, 402, 571, 554]
+  },
+  "authorityTransitions": [
+    {
+      "evidence": "confirmed app-server model observation",
+      "field": "observedModel",
+      "value": "gpt-5.6-terra",
+      "authority": "monitor-app-server"
+    },
+    {
+      "evidence": "rollout snapshot 46477 arrived while LIVE token snapshot 22776 was still fresh",
+      "field": "tokenSnapshot.totalTokens",
+      "incomingNearLiveValue": 46477,
+      "authoritativeValue": 22776,
+      "authority": "monitor-app-server"
+    },
+    {
+      "evidence": "LIVE became stale before the next rollout snapshot",
+      "field": "tokenSnapshot.totalTokens",
+      "authoritativeValue": 70271,
+      "authority": "codex-cli-rollout"
+    },
+    {
+      "evidence": "rollout completed with a cumulative snapshot",
+      "field": "tokenSnapshot.totalTokens",
+      "authoritativeValue": 94173,
+      "authority": "codex-cli-rollout"
+    },
+    {
+      "evidence": "matching fresh LIVE observations arrived without additive token accounting",
+      "field": "tokenSnapshot.totalTokens",
+      "authoritativeValue": 94173,
+      "authority": "monitor-app-server"
+    }
+  ],
+  "turnBoundaryEvidence": {
+    "taskStartedCount": 1,
+    "taskCompleteCount": 1,
+    "note": "The later user message containing the full Thread ID was appended to the same active turn; no second task_started record was emitted."
+  },
+  "assertions": {
+    "fullThreadIdMatchesAcrossSources": true,
+    "singleCanonicalThread": true,
+    "singleCanonicalRootAgentCandidate": true,
+    "sourceLanesRemainSeparate": true,
+    "freshLiveWins": true,
+    "staleLiveFallsBackToRolloutSnapshot": true,
+    "tokenSnapshotsAreNotAddedAcrossSources": true,
+    "fallbackDoesNotRegressTotalTokens": true,
+    "provenanceAndFreshnessAreObservable": true
+  }
+}

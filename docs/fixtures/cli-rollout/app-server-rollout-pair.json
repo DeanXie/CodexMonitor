@@ -1,0 +1,150 @@
+{
+  "fixtureVersion": 1,
+  "capture": {
+    "scenario": "same-thread-app-server-live-and-rollout-near-live",
+    "codexCliVersion": "0.147.0",
+    "capturedDate": "2026-08-25",
+    "workspace": "C:\\fixture\\workspace",
+    "codexHome": "C:\\fixture\\codex-home"
+  },
+  "appServer": {
+    "threadStart": {
+      "thread": {
+        "id": "thread-paired",
+        "sessionId": "thread-paired",
+        "parentThreadId": null,
+        "path": "C:\\fixture\\codex-home\\sessions\\2026\\08\\25\\rollout-paired.jsonl",
+        "source": "vscode",
+        "status": {
+          "type": "idle"
+        }
+      },
+      "model": "gpt-5.6-sol"
+    },
+    "threadSettingsUpdated": {
+      "threadId": "thread-paired",
+      "threadSettings": {
+        "model": "gpt-5.6-terra",
+        "effort": "low"
+      },
+      "emittedAtMs": 1787667729604
+    },
+    "turnStarted": {
+      "threadId": "thread-paired",
+      "turn": {
+        "id": "turn-paired",
+        "status": "inProgress",
+        "startedAt": 1787667729
+      },
+      "emittedAtMs": 1787667729654
+    },
+    "tokenUsageUpdated": {
+      "threadId": "thread-paired",
+      "turnId": "turn-paired",
+      "tokenUsage": {
+        "total": {
+          "totalTokens": 20635,
+          "inputTokens": 20627,
+          "cachedInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "outputTokens": 8,
+          "reasoningOutputTokens": 0
+        },
+        "last": {
+          "totalTokens": 20635,
+          "inputTokens": 20627,
+          "cachedInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "outputTokens": 8,
+          "reasoningOutputTokens": 0
+        },
+        "modelContextWindow": 258400
+      },
+      "emittedAtMs": 1787667734486
+    },
+    "turnCompleted": {
+      "threadId": "thread-paired",
+      "turn": {
+        "id": "turn-paired",
+        "status": "completed",
+        "startedAt": 1787667729,
+        "completedAt": 1787667734,
+        "durationMs": 4886
+      },
+      "emittedAtMs": 1787667734490
+    }
+  },
+  "rollout": {
+    "file": "C:\\fixture\\codex-home\\sessions\\2026\\08\\25\\rollout-paired.jsonl",
+    "sessionMeta": {
+      "type": "session_meta",
+      "payload": {
+        "session_id": "thread-paired",
+        "id": "thread-paired",
+        "source": "vscode",
+        "thread_source": null,
+        "cli_version": "0.147.0"
+      }
+    },
+    "taskStarted": {
+      "type": "event_msg",
+      "payload": {
+        "type": "task_started",
+        "turn_id": "turn-paired",
+        "started_at": 1787667729
+      }
+    },
+    "turnContext": {
+      "type": "turn_context",
+      "payload": {
+        "turn_id": "turn-paired",
+        "model": "gpt-5.6-terra",
+        "effort": "low"
+      }
+    },
+    "tokenCount": {
+      "type": "event_msg",
+      "payload": {
+        "type": "token_count",
+        "info": {
+          "total_token_usage": {
+            "input_tokens": 20627,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 8,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 20635
+          },
+          "last_token_usage": {
+            "input_tokens": 20627,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 8,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 20635
+          },
+          "model_context_window": 258400
+        }
+      }
+    },
+    "taskComplete": {
+      "type": "event_msg",
+      "payload": {
+        "type": "task_complete",
+        "turn_id": "turn-paired",
+        "started_at": 1787667729,
+        "completed_at": 1787667734,
+        "duration_ms": 4886
+      }
+    }
+  },
+  "exactMatches": [
+    "thread id",
+    "rollout path",
+    "turn id",
+    "resolved turn model",
+    "total Token snapshot",
+    "last Token snapshot",
+    "duration"
+  ]
+}

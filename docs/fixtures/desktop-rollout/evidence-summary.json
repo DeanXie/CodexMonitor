@@ -1,0 +1,32 @@
+{
+  "phase": "2.5",
+  "capturedAt": "2026-08-27T01:50:00+08:00",
+  "surface": "Codex Desktop",
+  "codexHome": "<default-codex-home>",
+  "main": {
+    "source": "vscode",
+    "threadSource": "user",
+    "turnMode": "multiple turns appended to one rollout"
+  },
+  "subAgents": {
+    "count": 3,
+    "separateRolloutPerThread": true,
+    "parentEvidence": "session_meta.source.subagent.thread_spawn.parent_thread_id",
+    "agentPathPresent": true,
+    "independentObservedModel": true,
+    "independentTokenSnapshot": true,
+    "completedLifecycleObserved": true
+  },
+  "nearLiveLagMs": {
+    "minimum": 8,
+    "p50Range": [398, 815],
+    "p95Range": [860, 1227],
+    "maximum": 1334
+  },
+  "criticalBoundary": {
+    "name": "compacted child rollout replays parent session_meta",
+    "effectOnCurrentAdapter": "file owner can be overwritten and child observations can be attributed to the parent",
+    "codingGate": "must be fixed with first-session-meta file ownership and replay-boundary handling before Desktop UI integration"
+  },
+  "sensitiveContentIncluded": false
+}

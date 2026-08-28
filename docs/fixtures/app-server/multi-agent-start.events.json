@@ -1,0 +1,1132 @@
+{
+  "fixtureVersion": 1,
+  "capture": {
+    "scenario": "multi-agent-start-window",
+    "capturedVia": "CodexMonitor Debug Panel Copy",
+    "codexCliVersion": "0.147.0",
+    "codexMonitorVersion": "0.7.68",
+    "capturedDate": "2026-08-23",
+    "debugPanelWindow": {
+      "retainedRecords": 142,
+      "earlyEventsEvicted": false
+    },
+    "sanitization": [
+      "workspace/thread/turn/item identifiers",
+      "local paths",
+      "test and subagent prompts"
+    ]
+  },
+  "records": [
+    {
+      "source": "CLIENT",
+      "capturedAt": "07:15:36",
+      "label": "turn/start",
+      "payload": {
+        "workspaceId": "workspace-multi",
+        "threadId": "thread-main",
+        "turnId": null,
+        "text": "<redacted-test-prompt>",
+        "images": {
+          "_type": "array",
+          "count": 0
+        },
+        "model": "gpt-5.6-sol",
+        "effort": "low",
+        "collaborationMode": {
+          "mode": "default",
+          "settings": {
+            "developer_instructions": null,
+            "model": "gpt-5.6-sol",
+            "reasoning_effort": "low"
+          }
+        },
+        "sendIntent": "default",
+        "threadCustomName": null
+      }
+    },
+    {
+      "source": "SERVER",
+      "capturedAt": "07:15:36",
+      "label": "turn/start response",
+      "payload": {
+        "id": 87,
+        "result": {
+          "turn": {
+            "completedAt": null,
+            "durationMs": null,
+            "error": null,
+            "id": "turn-main-2",
+            "items": [],
+            "itemsView": "notLoaded",
+            "startedAt": null,
+            "status": "inProgress"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:36",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440536767,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "activeFlags": [],
+              "type": "active"
+            },
+            "threadId": "thread-main"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:36",
+      "label": "turn/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440536767,
+          "method": "turn/started",
+          "params": {
+            "threadId": "thread-main",
+            "turn": {
+              "completedAt": null,
+              "durationMs": null,
+              "error": null,
+              "id": "turn-main-2",
+              "items": [],
+              "itemsView": "notLoaded",
+              "startedAt": 1787440536,
+              "status": "inProgress"
+            }
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:43",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440543102,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "notLoaded"
+            },
+            "threadId": "thread-previous-child-a"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:43",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440543204,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "idle"
+            },
+            "threadId": "thread-early-child-a"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:43",
+      "label": "item/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440543205,
+          "method": "item/started",
+          "params": {
+            "item": {
+              "agentPath": "/root/early_a",
+              "agentThreadId": "thread-early-child-a",
+              "id": "item-1",
+              "kind": "started",
+              "type": "subAgentActivity"
+            },
+            "startedAtMs": 1787440543205,
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:43",
+      "label": "item/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440543205,
+          "method": "item/completed",
+          "params": {
+            "completedAtMs": 1787440543205,
+            "item": {
+              "agentPath": "/root/early_a",
+              "agentThreadId": "thread-early-child-a",
+              "id": "item-1",
+              "kind": "started",
+              "type": "subAgentActivity"
+            },
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:43",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440543232,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-main",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 27392,
+                "inputTokens": 28624,
+                "outputTokens": 148,
+                "reasoningOutputTokens": 47,
+                "totalTokens": 28772
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 216832,
+                "inputTokens": 244704,
+                "outputTokens": 1093,
+                "reasoningOutputTokens": 278,
+                "totalTokens": 245797
+              }
+            },
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:43",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440543277,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "activeFlags": [],
+              "type": "active"
+            },
+            "threadId": "thread-early-child-a"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:43",
+      "label": "turn/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440543277,
+          "method": "turn/started",
+          "params": {
+            "threadId": "thread-early-child-a",
+            "turn": {
+              "completedAt": null,
+              "durationMs": null,
+              "error": null,
+              "id": "turn-early-child-a-1",
+              "items": [],
+              "itemsView": "notLoaded",
+              "startedAt": 1787440543,
+              "status": "inProgress"
+            }
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:46",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440546121,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "notLoaded"
+            },
+            "threadId": "thread-previous-child-b"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:46",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440546221,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "idle"
+            },
+            "threadId": "thread-early-child-b"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:46",
+      "label": "item/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440546222,
+          "method": "item/started",
+          "params": {
+            "item": {
+              "agentPath": "/root/early_b",
+              "agentThreadId": "thread-early-child-b",
+              "id": "item-2",
+              "kind": "started",
+              "type": "subAgentActivity"
+            },
+            "startedAtMs": 1787440546222,
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:46",
+      "label": "item/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440546222,
+          "method": "item/completed",
+          "params": {
+            "completedAtMs": 1787440546222,
+            "item": {
+              "agentPath": "/root/early_b",
+              "agentThreadId": "thread-early-child-b",
+              "id": "item-2",
+              "kind": "started",
+              "type": "subAgentActivity"
+            },
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:46",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440546248,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-main",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 28416,
+                "inputTokens": 28794,
+                "outputTokens": 76,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 28870
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 245248,
+                "inputTokens": 273498,
+                "outputTokens": 1169,
+                "reasoningOutputTokens": 278,
+                "totalTokens": 274667
+              }
+            },
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:46",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440546286,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "activeFlags": [],
+              "type": "active"
+            },
+            "threadId": "thread-early-child-b"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:46",
+      "label": "turn/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440546286,
+          "method": "turn/started",
+          "params": {
+            "threadId": "thread-early-child-b",
+            "turn": {
+              "completedAt": null,
+              "durationMs": null,
+              "error": null,
+              "id": "turn-early-child-b-1",
+              "items": [],
+              "itemsView": "notLoaded",
+              "startedAt": 1787440546,
+              "status": "inProgress"
+            }
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:47",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440547713,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-early-child-a",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 21248,
+                "inputTokens": 21805,
+                "outputTokens": 8,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 21813
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 21248,
+                "inputTokens": 21805,
+                "outputTokens": 8,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 21813
+              }
+            },
+            "turnId": "turn-early-child-a-1"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:47",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440547732,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "idle"
+            },
+            "threadId": "thread-early-child-a"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:47",
+      "label": "turn/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440547732,
+          "method": "turn/completed",
+          "params": {
+            "threadId": "thread-early-child-a",
+            "turn": {
+              "completedAt": 1787440547,
+              "durationMs": 4523,
+              "error": null,
+              "id": "turn-early-child-a-1",
+              "items": [
+                {
+                  "id": "item-3",
+                  "memoryCitation": null,
+                  "phase": "final_answer",
+                  "text": "EARLY_A_DONE",
+                  "type": "agentMessage"
+                }
+              ],
+              "itemsView": "summary",
+              "startedAt": 1787440543,
+              "status": "completed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:49",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440549666,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "notLoaded"
+            },
+            "threadId": "thread-previous-reviewer-c"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:49",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440549766,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "idle"
+            },
+            "threadId": "thread-early-reviewer-c"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:49",
+      "label": "item/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440549766,
+          "method": "item/started",
+          "params": {
+            "item": {
+              "agentPath": "/root/early_reviewer_c",
+              "agentThreadId": "thread-early-reviewer-c",
+              "id": "item-4",
+              "kind": "started",
+              "type": "subAgentActivity"
+            },
+            "startedAtMs": 1787440549766,
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:49",
+      "label": "item/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440549766,
+          "method": "item/completed",
+          "params": {
+            "completedAtMs": 1787440549766,
+            "item": {
+              "agentPath": "/root/early_reviewer_c",
+              "agentThreadId": "thread-early-reviewer-c",
+              "id": "item-4",
+              "kind": "started",
+              "type": "subAgentActivity"
+            },
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:49",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440549791,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-main",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 28416,
+                "inputTokens": 28892,
+                "outputTokens": 77,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 28969
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 273664,
+                "inputTokens": 302390,
+                "outputTokens": 1246,
+                "reasoningOutputTokens": 278,
+                "totalTokens": 303636
+              }
+            },
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:49",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440549838,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "activeFlags": [],
+              "type": "active"
+            },
+            "threadId": "thread-early-reviewer-c"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:49",
+      "label": "turn/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440549838,
+          "method": "turn/started",
+          "params": {
+            "threadId": "thread-early-reviewer-c",
+            "turn": {
+              "completedAt": null,
+              "durationMs": null,
+              "error": null,
+              "id": "turn-early-reviewer-c-1",
+              "items": [],
+              "itemsView": "notLoaded",
+              "startedAt": 1787440549,
+              "status": "inProgress"
+            }
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:50",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440550907,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-early-child-b",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 23296,
+                "inputTokens": 23576,
+                "outputTokens": 8,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 23584
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 23296,
+                "inputTokens": 23576,
+                "outputTokens": 8,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 23584
+              }
+            },
+            "turnId": "turn-early-child-b-1"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:50",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440550923,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "idle"
+            },
+            "threadId": "thread-early-child-b"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:50",
+      "label": "turn/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440550923,
+          "method": "turn/completed",
+          "params": {
+            "threadId": "thread-early-child-b",
+            "turn": {
+              "completedAt": 1787440550,
+              "durationMs": 4698,
+              "error": null,
+              "id": "turn-early-child-b-1",
+              "items": [
+                {
+                  "id": "item-5",
+                  "memoryCitation": null,
+                  "phase": "final_answer",
+                  "text": "EARLY_B_DONE",
+                  "type": "agentMessage"
+                }
+              ],
+              "itemsView": "summary",
+              "startedAt": 1787440546,
+              "status": "completed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:52",
+      "label": "item/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440552473,
+          "method": "item/started",
+          "params": {
+            "item": {
+              "agentsStates": {},
+              "id": "item-6",
+              "model": null,
+              "prompt": null,
+              "reasoningEffort": null,
+              "receiverThreadIds": [],
+              "senderThreadId": "thread-main",
+              "status": "inProgress",
+              "tool": "wait",
+              "type": "collabAgentToolCall"
+            },
+            "startedAtMs": 1787440552473,
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:52",
+      "label": "item/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440552473,
+          "method": "item/completed",
+          "params": {
+            "completedAtMs": 1787440552473,
+            "item": {
+              "agentsStates": {},
+              "id": "item-6",
+              "model": null,
+              "prompt": null,
+              "reasoningEffort": null,
+              "receiverThreadIds": [],
+              "senderThreadId": "thread-main",
+              "status": "completed",
+              "tool": "wait",
+              "type": "collabAgentToolCall"
+            },
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:52",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440552529,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-main",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 28416,
+                "inputTokens": 29034,
+                "outputTokens": 21,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 29055
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 302080,
+                "inputTokens": 331424,
+                "outputTokens": 1267,
+                "reasoningOutputTokens": 278,
+                "totalTokens": 332691
+              }
+            },
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:54",
+      "label": "item/started",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440554332,
+          "method": "item/started",
+          "params": {
+            "item": {
+              "agentsStates": {},
+              "id": "item-7",
+              "model": null,
+              "prompt": null,
+              "reasoningEffort": null,
+              "receiverThreadIds": [],
+              "senderThreadId": "thread-main",
+              "status": "inProgress",
+              "tool": "wait",
+              "type": "collabAgentToolCall"
+            },
+            "startedAtMs": 1787440554331,
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:55",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440555731,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-early-reviewer-c",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 23296,
+                "inputTokens": 23580,
+                "outputTokens": 8,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 23588
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 23296,
+                "inputTokens": 23580,
+                "outputTokens": 8,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 23588
+              }
+            },
+            "turnId": "turn-early-reviewer-c-1"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:55",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440555738,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "idle"
+            },
+            "threadId": "thread-early-reviewer-c"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:55",
+      "label": "turn/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440555738,
+          "method": "turn/completed",
+          "params": {
+            "threadId": "thread-early-reviewer-c",
+            "turn": {
+              "completedAt": 1787440555,
+              "durationMs": 5967,
+              "error": null,
+              "id": "turn-early-reviewer-c-1",
+              "items": [
+                {
+                  "id": "item-8",
+                  "memoryCitation": null,
+                  "phase": "final_answer",
+                  "text": "EARLY_C_DONE",
+                  "type": "agentMessage"
+                }
+              ],
+              "itemsView": "summary",
+              "startedAt": 1787440549,
+              "status": "completed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:55",
+      "label": "item/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440555739,
+          "method": "item/completed",
+          "params": {
+            "completedAtMs": 1787440555738,
+            "item": {
+              "agentsStates": {},
+              "id": "item-7",
+              "model": null,
+              "prompt": null,
+              "reasoningEffort": null,
+              "receiverThreadIds": [],
+              "senderThreadId": "thread-main",
+              "status": "completed",
+              "tool": "wait",
+              "type": "collabAgentToolCall"
+            },
+            "threadId": "thread-main",
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:55",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440555754,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-main",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 28416,
+                "inputTokens": 29120,
+                "outputTokens": 21,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 29141
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 330496,
+                "inputTokens": 360544,
+                "outputTokens": 1288,
+                "reasoningOutputTokens": 278,
+                "totalTokens": 361832
+              }
+            },
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:57",
+      "label": "thread/tokenUsage/updated",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440557773,
+          "method": "thread/tokenUsage/updated",
+          "params": {
+            "threadId": "thread-main",
+            "tokenUsage": {
+              "last": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 28416,
+                "inputTokens": 29210,
+                "outputTokens": 18,
+                "reasoningOutputTokens": 0,
+                "totalTokens": 29228
+              },
+              "modelContextWindow": 258400,
+              "total": {
+                "cacheWriteInputTokens": 0,
+                "cachedInputTokens": 358912,
+                "inputTokens": 389754,
+                "outputTokens": 1306,
+                "reasoningOutputTokens": 278,
+                "totalTokens": 391060
+              }
+            },
+            "turnId": "turn-main-2"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:57",
+      "label": "thread/status/changed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440557780,
+          "method": "thread/status/changed",
+          "params": {
+            "status": {
+              "type": "idle"
+            },
+            "threadId": "thread-main"
+          }
+        }
+      }
+    },
+    {
+      "source": "EVENT",
+      "capturedAt": "07:15:57",
+      "label": "turn/completed",
+      "payload": {
+        "workspace_id": "workspace-multi",
+        "message": {
+          "emittedAtMs": 1787440557780,
+          "method": "turn/completed",
+          "params": {
+            "threadId": "thread-main",
+            "turn": {
+              "completedAt": 1787440557,
+              "durationMs": 21022,
+              "error": null,
+              "id": "turn-main-2",
+              "items": [
+                {
+                  "id": "item-9",
+                  "memoryCitation": null,
+                  "phase": "final_answer",
+                  "text": "EARLY_A_DONE\nEARLY_B_DONE\nEARLY_C_DONE",
+                  "type": "agentMessage"
+                }
+              ],
+              "itemsView": "summary",
+              "startedAt": 1787440536,
+              "status": "completed"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+

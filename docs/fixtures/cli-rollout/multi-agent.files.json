@@ -1,0 +1,308 @@
+{
+  "fixtureVersion": 1,
+  "capture": {
+    "scenario": "external-cli-main-plus-three-direct-subagents",
+    "codexCliVersion": "0.147.0",
+    "capturedDate": "2026-08-25",
+    "sanitization": [
+      "thread and turn identifiers",
+      "local paths",
+      "prompts and encrypted agent messages",
+      "agent nicknames"
+    ]
+  },
+  "facts": {
+    "parentSpawnResultContainsChildThreadId": false,
+    "childSessionMetaContainsDirectParentThreadId": true,
+    "childFilesAreIndependent": true,
+    "parentAndChildTokenSnapshotsAreIndependent": true
+  },
+  "files": [
+    {
+      "file": "rollout-main.jsonl",
+      "records": [
+        {
+          "timestamp": "2026-08-25T14:05:27.656Z",
+          "type": "session_meta",
+          "payload": {
+            "session_id": "thread-main",
+            "id": "thread-main",
+            "cwd": "C:\\fixture\\workspace",
+            "originator": "Codex Desktop",
+            "cli_version": "0.147.0",
+            "source": "exec",
+            "thread_source": "user",
+            "model_provider": "openai"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:39.834Z",
+          "type": "response_item",
+          "payload": {
+            "type": "function_call_output",
+            "call_id": "spawn-identity",
+            "output": "{\"task_name\":\"/root/identity_probe\"}"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:42.188Z",
+          "type": "response_item",
+          "payload": {
+            "type": "function_call_output",
+            "call_id": "spawn-token",
+            "output": "{\"task_name\":\"/root/token_probe\"}"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:45.475Z",
+          "type": "response_item",
+          "payload": {
+            "type": "function_call_output",
+            "call_id": "spawn-reviewer",
+            "output": "{\"task_name\":\"/root/reviewer_probe\"}"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:46.901Z",
+          "type": "response_item",
+          "payload": {
+            "type": "function_call",
+            "name": "wait_agent",
+            "call_id": "wait-call-1",
+            "arguments": "{\"timeout_ms\":120000}"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:47.781Z",
+          "type": "response_item",
+          "payload": {
+            "type": "function_call_output",
+            "call_id": "wait-call-1",
+            "output": "{\"message\":\"Wait completed.\",\"timed_out\":false}"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:55.125Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "token_count",
+            "info": {
+              "total_token_usage": {
+                "input_tokens": 125092,
+                "cached_input_tokens": 105728,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 429,
+                "reasoning_output_tokens": 69,
+                "total_tokens": 125521
+              },
+              "last_token_usage": {
+                "input_tokens": 15965,
+                "cached_input_tokens": 15104,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 8,
+                "reasoning_output_tokens": 0,
+                "total_tokens": 15973
+              },
+              "model_context_window": 258400
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "rollout-child-identity.jsonl",
+      "records": [
+        {
+          "timestamp": "2026-08-25T14:05:39.645Z",
+          "type": "session_meta",
+          "payload": {
+            "session_id": "thread-main",
+            "id": "thread-child-identity",
+            "cwd": "C:\\fixture\\workspace",
+            "originator": "Codex Desktop",
+            "cli_version": "0.147.0",
+            "source": {
+              "subagent": {
+                "thread_spawn": {
+                  "parent_thread_id": "thread-main",
+                  "depth": 1,
+                  "agent_path": "/root/identity_probe",
+                  "agent_nickname": "<redacted>",
+                  "agent_role": "explorer"
+                }
+              }
+            },
+            "thread_source": "subagent",
+            "model_provider": "openai"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:45.335Z",
+          "type": "turn_context",
+          "payload": {
+            "turn_id": "turn-child-identity",
+            "cwd": "C:\\fixture\\workspace",
+            "model": "gpt-5.6-luna",
+            "effort": "medium"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:49.281Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "token_count",
+            "info": {
+              "total_token_usage": {
+                "input_tokens": 16567,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 62,
+                "reasoning_output_tokens": 53,
+                "total_tokens": 16629
+              },
+              "last_token_usage": {
+                "input_tokens": 16567,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 62,
+                "reasoning_output_tokens": 53,
+                "total_tokens": 16629
+              },
+              "model_context_window": 258400
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "rollout-child-token.jsonl",
+      "records": [
+        {
+          "timestamp": "2026-08-25T14:05:42.017Z",
+          "type": "session_meta",
+          "payload": {
+            "session_id": "thread-main",
+            "id": "thread-child-token",
+            "cwd": "C:\\fixture\\workspace",
+            "originator": "Codex Desktop",
+            "cli_version": "0.147.0",
+            "source": {
+              "subagent": {
+                "thread_spawn": {
+                  "parent_thread_id": "thread-main",
+                  "depth": 1,
+                  "agent_path": "/root/token_probe",
+                  "agent_nickname": "<redacted>",
+                  "agent_role": "explorer"
+                }
+              }
+            },
+            "thread_source": "subagent",
+            "model_provider": "openai"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:45.508Z",
+          "type": "turn_context",
+          "payload": {
+            "turn_id": "turn-child-token",
+            "cwd": "C:\\fixture\\workspace",
+            "model": "gpt-5.6-luna",
+            "effort": "medium"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:47.769Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "token_count",
+            "info": {
+              "total_token_usage": {
+                "input_tokens": 16565,
+                "cached_input_tokens": 16128,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 36,
+                "reasoning_output_tokens": 27,
+                "total_tokens": 16601
+              },
+              "last_token_usage": {
+                "input_tokens": 16565,
+                "cached_input_tokens": 16128,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 36,
+                "reasoning_output_tokens": 27,
+                "total_tokens": 16601
+              },
+              "model_context_window": 258400
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "rollout-child-reviewer.jsonl",
+      "records": [
+        {
+          "timestamp": "2026-08-25T14:05:45.276Z",
+          "type": "session_meta",
+          "payload": {
+            "session_id": "thread-main",
+            "id": "thread-child-reviewer",
+            "cwd": "C:\\fixture\\workspace",
+            "originator": "Codex Desktop",
+            "cli_version": "0.147.0",
+            "source": {
+              "subagent": {
+                "thread_spawn": {
+                  "parent_thread_id": "thread-main",
+                  "depth": 1,
+                  "agent_path": "/root/reviewer_probe",
+                  "agent_nickname": "<redacted>",
+                  "agent_role": "explorer"
+                }
+              }
+            },
+            "thread_source": "subagent",
+            "model_provider": "openai"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:52.011Z",
+          "type": "turn_context",
+          "payload": {
+            "turn_id": "turn-child-reviewer",
+            "cwd": "C:\\fixture\\workspace",
+            "model": "gpt-5.6-luna",
+            "effort": "medium"
+          }
+        },
+        {
+          "timestamp": "2026-08-25T14:05:53.657Z",
+          "type": "event_msg",
+          "payload": {
+            "type": "token_count",
+            "info": {
+              "total_token_usage": {
+                "input_tokens": 16567,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 27,
+                "reasoning_output_tokens": 17,
+                "total_tokens": 16594
+              },
+              "last_token_usage": {
+                "input_tokens": 16567,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 27,
+                "reasoning_output_tokens": 17,
+                "total_tokens": 16594
+              },
+              "model_context_window": 258400
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

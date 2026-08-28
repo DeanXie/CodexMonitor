@@ -1,0 +1,51 @@
+{
+  "fixtureVersion": 1,
+  "capture": {
+    "codexCliVersion": "0.147.0",
+    "capturedDate": "2026-08-25",
+    "targetPollingIntervalMs": 50,
+    "platform": "Windows"
+  },
+  "explicitModelSingleTurn": {
+    "file": "rollout-single.jsonl",
+    "samples": [
+      { "elapsedMs": 3901, "byteLength": 0, "endsWithLf": null },
+      { "elapsedMs": 3984, "byteLength": 18713, "endsWithLf": true },
+      { "elapsedMs": 12747, "byteLength": 70916, "endsWithLf": true },
+      { "elapsedMs": 12805, "byteLength": 71547, "endsWithLf": true },
+      { "elapsedMs": 14368, "byteLength": 72847, "endsWithLf": true },
+      { "elapsedMs": 14430, "byteLength": 73133, "endsWithLf": true }
+    ],
+    "lastWriteTimeChangedDuringObservedAppends": false,
+    "partialLineObserved": false
+  },
+  "multiAgent": {
+    "mainSamples": [
+      { "elapsedMs": 116, "byteLength": 18713, "endsWithLf": true },
+      { "elapsedMs": 5707, "byteLength": 43294, "endsWithLf": true },
+      { "elapsedMs": 11901, "byteLength": 50767, "endsWithLf": true },
+      { "elapsedMs": 17705, "byteLength": 57107, "endsWithLf": true },
+      { "elapsedMs": 27518, "byteLength": 66578, "endsWithLf": true }
+    ],
+    "childFileCreationElapsedMs": [11965, 14356, 17635],
+    "childFilesInitiallyObservedAsCompleteLfTerminatedBatches": true,
+    "partialLineObserved": false
+  },
+  "resume": {
+    "sameFileBeforeBytes": 73133,
+    "sameFileAfterBytes": 299508,
+    "newRolloutFileCreated": false,
+    "sameSessionId": true,
+    "newTurnId": true,
+    "truncationObserved": false
+  },
+  "activeFileAccess": {
+    "defaultExclusiveStreamReaderFailedOnAnActiveRollout": true,
+    "fileShareReadWriteSucceeded": true
+  },
+  "boundaries": {
+    "pollingDidNotProvePartialWritesImpossible": true,
+    "naturalTruncationWasNotObserved": true,
+    "inSessionRotationWasNotObserved": true
+  }
+}

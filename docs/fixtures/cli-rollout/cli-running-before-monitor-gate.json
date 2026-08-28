@@ -1,0 +1,88 @@
+{
+  "fixtureVersion": 1,
+  "capturedAt": "2026-08-26T12:24:35.511Z",
+  "purpose": "Phase 2.3b B real external CLI-running-before-Monitor discovery, catch-up, and continued tail evidence",
+  "threadId": "01a03e05-354c-7832-b675-5cfaea4b945d",
+  "turnId": "01a03e05-35f5-7861-8ae5-05fbf963d36a",
+  "rollout": {
+    "createdAtUtc": "2026-08-26T12:22:04.036Z",
+    "sourcePath": "<CODEX_HOME>/sessions/2026/08/26/rollout-2026-08-26T20-22-03-01a03e05-354c-7832-b675-5cfaea4b945d.jsonl",
+    "generation": "file:193247765dab5d72ea9e9889170549f2308107fe276087c350f5b6cb5c93412e",
+    "codexHomeIdentity": "codex-home:76c92e1eaaa451ef02c92f75f12738ea3337e69b890333a72cd14ec778cac75f"
+  },
+  "monitor": {
+    "serviceStartedAtUtc": "2026-08-26T12:24:12.210Z",
+    "firstSessionObservedAtUtc": "2026-08-26T12:24:12.270Z",
+    "discoveryAfterServiceStartMs": 60,
+    "sourceInstanceId": "rollout-tail:codex-home:76c92e1eaaa451ef02c92f75f12738ea3337e69b890333a72cd14ec778cac75f"
+  },
+  "catchUp": {
+    "recordCount": 10,
+    "lagMs": [128189, 128189, 122894, 116760, 112374, 105900, 92978, 79605, 40603, 27121],
+    "lifecycleEvidence": "task_started",
+    "lifecycle": "running",
+    "model": "gpt-5.6-terra",
+    "latestTokenSnapshotBeforeMonitorStart": {
+      "inputTokens": 153778,
+      "cachedInputTokens": 127488,
+      "outputTokens": 823,
+      "reasoningOutputTokens": 220,
+      "totalTokens": 154601
+    }
+  },
+  "continuedTail": [
+    {
+      "recordKind": "token_count",
+      "recordOrdinal": 46,
+      "lagMs": 386,
+      "totalTokens": 177587
+    },
+    {
+      "recordKind": "token_count",
+      "recordOrdinal": 50,
+      "lagMs": 435,
+      "totalTokens": 200721
+    },
+    {
+      "recordKind": "token_count",
+      "recordOrdinal": 53,
+      "lagMs": 616,
+      "totalTokens": 223913
+    },
+    {
+      "recordKind": "task_complete",
+      "recordOrdinal": 54,
+      "lagMs": 548,
+      "lifecycle": "completed"
+    }
+  ],
+  "checkpoint": {
+    "generation": "file:193247765dab5d72ea9e9889170549f2308107fe276087c350f5b6cb5c93412e",
+    "committedByteOffset": 349415,
+    "recordOrdinal": 54,
+    "sessionMetaId": "01a03e05-354c-7832-b675-5cfaea4b945d"
+  },
+  "finalAuthority": {
+    "canonicalThreadId": "01a03e05-354c-7832-b675-5cfaea4b945d",
+    "liveLaneCount": 0,
+    "nearLiveLaneCount": 1,
+    "lifecycle": "completed",
+    "model": "gpt-5.6-terra",
+    "totalTokens": 223913,
+    "sourceKind": "codex-cli-rollout",
+    "temporalClass": "NEAR_LIVE",
+    "freshness": "fresh"
+  },
+  "assertions": {
+    "cliWasRunningBeforeMonitor": true,
+    "runningCameFromTaskStartedNotFileExistence": true,
+    "existingRolloutWasDiscovered": true,
+    "existingRecordsWereCaughtUp": true,
+    "postStartAppendsWereObserved": true,
+    "threadAndTurnIdentityRecovered": true,
+    "modelRecovered": true,
+    "tokenSnapshotsAdvanced": true,
+    "taskCompleteObserved": true,
+    "checkpointAdvancedOnlyThroughCompleteRecords": true
+  }
+}

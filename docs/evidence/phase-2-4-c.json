@@ -1,0 +1,39 @@
+{
+  "evidenceVersion": 1,
+  "phase": "2.4",
+  "scenario": "C",
+  "timestamp": "2026-08-26T16:55:03.245Z",
+  "fullThreadId": "01a03e8f-aa9d-77c1-b787-c2a9bd89c8e9",
+  "parentThreadId": null,
+  "childThreadIds": [],
+  "sourceLanes": [
+    {
+      "sourceKind": "monitor-app-server",
+      "temporalClass": "LIVE"
+    },
+    {
+      "sourceKind": "codex-cli-rollout",
+      "temporalClass": "NEAR_LIVE"
+    }
+  ],
+  "observedModels": [
+    {
+      "threadId": "01a03e8f-aa9d-77c1-b787-c2a9bd89c8e9",
+      "model": "gpt-5.6-terra",
+      "provenance": "confirmed observed model retained by canonical source view"
+    }
+  ],
+  "authoritativeTokens": [
+    {
+      "threadId": "01a03e8f-aa9d-77c1-b787-c2a9bd89c8e9",
+      "totalTokens": 312607,
+      "provenance": "Agent Monitor canonical authoritative cumulative snapshot; LIVE was displayed during execution"
+    }
+  ],
+  "lifecycle": "completed",
+  "freshness": "observed LIVE during execution",
+  "lagMs": null,
+  "cursor": null,
+  "result": "PASS",
+  "notes": "Summary timestamp records retention time because the exact gate timestamp was not preserved. UI showed one canonical Main Agent and one c_pair_reader; no duplicate NEAR LIVE Agent or additive Token jump was observed. Child fullThreadId was not retained and is intentionally not reconstructed."
+}

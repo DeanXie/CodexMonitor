@@ -15,6 +15,7 @@ import { useThreadItemEvents } from "./useThreadItemEvents";
 import { useThreadTurnEvents } from "./useThreadTurnEvents";
 import { useThreadUserInputEvents } from "./useThreadUserInputEvents";
 import type { ThreadAction } from "./useThreadsReducer";
+import type { RuntimeProtocolRecord } from "@/features/agent-monitor/runtime";
 
 type ThreadEventHandlersOptions = {
   activeThreadId: string | null;
@@ -42,6 +43,7 @@ type ThreadEventHandlersOptions = {
   ) => void | Promise<void>;
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   onDebug?: (entry: DebugEntry) => void;
+  onRuntimeRecord?: (record: RuntimeProtocolRecord) => void;
   onWorkspaceConnected: (workspaceId: string) => void;
   applyCollabThreadLinks: (
     workspaceId: string,
@@ -75,6 +77,7 @@ export function useThreadEventHandlers({
   onUserMessageCreated,
   pushThreadErrorMessage,
   onDebug,
+  onRuntimeRecord,
   onWorkspaceConnected,
   applyCollabThreadLinks,
   hydrateSubagentThreads,
@@ -158,6 +161,7 @@ export function useThreadEventHandlers({
     onThreadStarted,
     onThreadNameUpdated,
     onThreadArchived,
+    onThreadDeleted,
     onThreadUnarchived,
     onTurnStarted,
     onTurnCompleted,
@@ -199,6 +203,13 @@ export function useThreadEventHandlers({
     (event: AppServerEvent) => {
       const method = getAppServerRawMethod(event) ?? "";
       const inferredSource = method === "codex/stderr" ? "stderr" : "event";
+      const observedAtMs = Date.now();
+      onRuntimeRecord?.({
+        source: "EVENT",
+        capturedAt: new Date(observedAtMs).toISOString(),
+        label: method || "event",
+        payload: event,
+      });
       onDebug?.({
         id: `${Date.now()}-server-event`,
         timestamp: Date.now(),
@@ -207,7 +218,7 @@ export function useThreadEventHandlers({
         payload: event,
       });
     },
-    [onDebug],
+    [onDebug, onRuntimeRecord],
   );
 
   const handlers = useMemo(
@@ -233,6 +244,7 @@ export function useThreadEventHandlers({
       onThreadStarted,
       onThreadNameUpdated,
       onThreadArchived,
+      onThreadDeleted,
       onThreadUnarchived,
       onTurnStarted,
       onTurnCompleted,
@@ -266,6 +278,7 @@ export function useThreadEventHandlers({
       onThreadStarted,
       onThreadNameUpdated,
       onThreadArchived,
+      onThreadDeleted,
       onThreadUnarchived,
       onTurnStarted,
       onTurnCompleted,

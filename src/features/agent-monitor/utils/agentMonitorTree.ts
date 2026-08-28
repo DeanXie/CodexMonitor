@@ -49,6 +49,14 @@ export function buildAgentMonitorForest({
       runtimeMs,
       totalTokens: tokenUsageByThread[thread.id]?.total.totalTokens ?? null,
       tokenUsage: tokenUsageByThread[thread.id]?.total ?? null,
+      source: {
+        sourceKind: "monitor-app-server",
+        temporalClass: "LIVE",
+        freshnessState: "unknown",
+        ageMs: null,
+        sourceTimestampMs: null,
+        observedTimestampMs: null,
+      },
       children: [],
     });
   });

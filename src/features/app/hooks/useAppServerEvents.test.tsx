@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppServerEvent } from "../../../types";
 import { subscribeAppServerEvents } from "../../../services/events";
 import { useAppServerEvents } from "./useAppServerEvents";
+import deleteCascadeProtocol from "../../../../docs/fixtures/app-server/thread-delete-cascade.protocol.json";
 
 vi.mock("../../../services/events", () => ({
   subscribeAppServerEvents: vi.fn(),
@@ -43,6 +44,22 @@ async function mount(handlers: Handlers) {
 }
 
 describe("useAppServerEvents", () => {
+  it("routes the current upstream child-first cascade notifications independently", async () => {
+    const onThreadDeleted = vi.fn();
+    const { root } = await mount({ onThreadDeleted });
+
+    deleteCascadeProtocol.notifications.forEach((message) => {
+      act(() => listener?.({ workspace_id: "ws-1", message }));
+    });
+
+    expect(onThreadDeleted.mock.calls).toEqual([
+      ["ws-1", "thread-child"],
+      ["ws-1", "thread-parent"],
+    ]);
+    expect(deleteCascadeProtocol.threadLoadedListAfterDelete).toEqual([]);
+    await act(async () => root.unmount());
+  });
+
   it("routes app-server events to handlers", async () => {
     const handlers: Handlers = {
       onAppServerEvent: vi.fn(),
@@ -53,6 +70,7 @@ describe("useAppServerEvents", () => {
       onThreadNameUpdated: vi.fn(),
       onThreadStatusChanged: vi.fn(),
       onThreadClosed: vi.fn(),
+      onThreadDeleted: vi.fn(),
       onThreadArchived: vi.fn(),
       onThreadUnarchived: vi.fn(),
       onBackgroundThreadAction: vi.fn(),
@@ -226,6 +244,14 @@ describe("useAppServerEvents", () => {
       });
     });
     expect(handlers.onThreadArchived).toHaveBeenCalledWith("ws-1", "thread-2");
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: { method: "thread/deleted", params: { threadId: "thread-2" } },
+      });
+    });
+    expect(handlers.onThreadDeleted).toHaveBeenCalledWith("ws-1", "thread-2");
 
     act(() => {
       listener?.({

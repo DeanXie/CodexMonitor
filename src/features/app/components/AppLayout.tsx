@@ -30,6 +30,7 @@ type AppLayoutProps = {
   gitDiffPanelNode: ReactNode;
   gitDiffViewerNode: ReactNode;
   planPanelNode: ReactNode;
+  agentMonitorSplitNode?: ReactNode;
   debugPanelNode: ReactNode;
   debugPanelFullNode: ReactNode;
   terminalDockNode: ReactNode;
@@ -69,6 +70,7 @@ export const AppLayout = memo(function AppLayout({
   gitDiffPanelNode,
   gitDiffViewerNode,
   planPanelNode,
+  agentMonitorSplitNode,
   debugPanelNode,
   debugPanelFullNode,
   terminalDockNode,
@@ -148,6 +150,7 @@ export const AppLayout = memo(function AppLayout({
       gitDiffViewerNode={gitDiffViewerNode}
       gitDiffPanelNode={gitDiffPanelNode}
       planPanelNode={planPanelNode}
+      agentMonitorSplitNode={agentMonitorSplitNode}
       composerNode={composerNode}
       terminalDockNode={terminalDockNode}
       debugPanelNode={debugPanelNode}

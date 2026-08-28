@@ -22,6 +22,8 @@ type UseSidebarLayoutActionsOptions = {
     patch: Partial<WorkspaceSettings>,
   ) => void | Promise<unknown>;
   removeThread: (workspaceId: string, threadId: string) => void;
+  requestPermanentThreadDelete?: (workspaceId: string, threadId: string) => void;
+  isPermanentThreadDeleteBlocked?: (threadId: string) => boolean;
   clearDraftForThread: (threadId: string) => void;
   removeImagesForThread: (threadId: string) => void;
   refreshThread: (workspaceId: string, threadId: string) => void | Promise<unknown>;
@@ -47,6 +49,8 @@ export function useSidebarLayoutActions({
   workspacesById,
   updateWorkspaceSettings,
   removeThread,
+  requestPermanentThreadDelete,
+  isPermanentThreadDeleteBlocked,
   clearDraftForThread,
   removeImagesForThread,
   refreshThread,
@@ -132,6 +136,19 @@ export function useSidebarLayoutActions({
     [clearDraftForThread, removeImagesForThread, removeThread],
   );
 
+  const onPermanentlyDeleteThread = useCallback(
+    (workspaceId: string, threadId: string) => {
+      if (!(isPermanentThreadDeleteBlocked?.(threadId) ?? false)) {
+        requestPermanentThreadDelete?.(workspaceId, threadId);
+      }
+    },
+    [isPermanentThreadDeleteBlocked, requestPermanentThreadDelete],
+  );
+  const isThreadDeleteBlocked = useCallback(
+    (threadId: string) => isPermanentThreadDeleteBlocked?.(threadId) ?? false,
+    [isPermanentThreadDeleteBlocked],
+  );
+
   const onSyncThread = useCallback(
     (workspaceId: string, threadId: string) => {
       void refreshThread(workspaceId, threadId);
@@ -190,6 +207,8 @@ export function useSidebarLayoutActions({
     onToggleWorkspaceCollapse,
     onSelectThread,
     onDeleteThread,
+    onPermanentlyDeleteThread,
+    isThreadDeleteBlocked,
     onSyncThread,
     onRenameThread,
     onDeleteWorkspace,

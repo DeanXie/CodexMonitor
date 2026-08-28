@@ -14,6 +14,11 @@ const RenameThreadPrompt = lazy(() =>
     default: module.RenameThreadPrompt,
   })),
 );
+const DeleteThreadPrompt = lazy(() =>
+  import("../../threads/components/DeleteThreadPrompt").then((module) => ({
+    default: module.DeleteThreadPrompt,
+  })),
+);
 const WorktreePrompt = lazy(() =>
   import("../../workspaces/components/WorktreePrompt").then((module) => ({
     default: module.WorktreePrompt,
@@ -60,6 +65,14 @@ type MobileRemoteWorkspacePathPromptState = {
 } | null;
 
 export type AppModalsProps = {
+  deleteThreadPrompt?: {
+    title: string;
+    blocked: boolean;
+    busy: boolean;
+    error: string | null;
+  } | null;
+  onDeleteThreadPromptCancel?: () => void;
+  onDeleteThreadPromptConfirm?: () => void;
   renamePrompt: RenamePromptState;
   onRenamePromptChange: (value: string) => void;
   onRenamePromptCancel: () => void;
@@ -121,6 +134,9 @@ export type AppModalsProps = {
 };
 
 export const AppModals = memo(function AppModals({
+  deleteThreadPrompt,
+  onDeleteThreadPromptCancel,
+  onDeleteThreadPromptConfirm,
   renamePrompt,
   onRenamePromptChange,
   onRenamePromptCancel,
@@ -179,6 +195,15 @@ export const AppModals = memo(function AppModals({
 
   return (
     <>
+      {deleteThreadPrompt && onDeleteThreadPromptCancel && onDeleteThreadPromptConfirm ? (
+        <Suspense fallback={null}>
+          <DeleteThreadPrompt
+            {...deleteThreadPrompt}
+            onCancel={onDeleteThreadPromptCancel}
+            onConfirm={onDeleteThreadPromptConfirm}
+          />
+        </Suspense>
+      ) : null}
       {renamePrompt && (
         <Suspense fallback={null}>
           <RenameThreadPrompt

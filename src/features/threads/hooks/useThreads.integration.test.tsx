@@ -72,6 +72,35 @@ describe("useThreads UX integration", () => {
     nowSpy.mockRestore();
   });
 
+  it("forwards each raw app-server notification to Runtime ingestion", () => {
+    const onRuntimeRecord = vi.fn();
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        onRuntimeRecord,
+      }),
+    );
+    const notification = {
+      workspace_id: "ws-1",
+      message: {
+        method: "thread/settings/updated",
+        params: {
+          threadId: "thread-1",
+          threadSettings: { model: "gpt-observed" },
+        },
+      },
+    };
+
+    act(() => handlers?.onAppServerEvent?.(notification));
+
+    expect(onRuntimeRecord).toHaveBeenCalledWith(expect.objectContaining({
+      source: "EVENT",
+      label: "thread/settings/updated",
+      payload: notification,
+    }));
+  });
+
   it("resumes selected threads when no local items exist", async () => {
     vi.mocked(resumeThread).mockResolvedValue({
       result: {

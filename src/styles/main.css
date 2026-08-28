@@ -49,9 +49,38 @@
 .workspace-header {
   display: flex;
   align-items: center;
+  gap: 10px;
   min-width: 0;
   flex: 1;
   max-width: min(100%, var(--conversation-column-width));
+}
+
+.main-header-navigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.main-header-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px 10px;
+  color: var(--text-muted);
+  -webkit-app-region: no-drag;
+}
+
+.main-header-back:hover,
+.main-header-back:focus-visible {
+  color: var(--text-strong);
+}
+
+.main-header-agent-monitor-toggle {
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
 }
 
 .main-header-actions {
@@ -1046,6 +1075,13 @@
   transition: opacity 200ms ease, transform 200ms ease;
 }
 
+.agent-monitor-split-panel {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .right-panel-drag-strip {
   position: absolute;
   top: 0;
@@ -1162,3 +1198,9 @@
     display: none;
   }
 }
+
+.thread-delete-modal .ds-modal-card { max-width: 460px; }
+.thread-delete-modal p { color: var(--text-subtle); line-height: 1.5; }
+.thread-delete-modal .thread-delete-warning,
+.thread-delete-modal .thread-delete-error { color: var(--text-danger); }
+.thread-delete-confirm { background: var(--text-danger); color: white; }

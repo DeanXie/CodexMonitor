@@ -137,6 +137,8 @@ type SidebarProps = {
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
+  onPermanentlyDeleteThread?: (workspaceId: string, threadId: string) => void;
+  isThreadDeleteBlocked?: (threadId: string) => boolean;
   onSyncThread: (workspaceId: string, threadId: string) => void;
   pinThread: (workspaceId: string, threadId: string) => boolean;
   unpinThread: (workspaceId: string, threadId: string) => void;
@@ -198,6 +200,8 @@ export const Sidebar = memo(function Sidebar({
   onToggleWorkspaceCollapse,
   onSelectThread,
   onDeleteThread,
+  onPermanentlyDeleteThread,
+  isThreadDeleteBlocked,
   onSyncThread,
   pinThread,
   unpinThread,
@@ -244,6 +248,8 @@ export const Sidebar = memo(function Sidebar({
   const { showThreadMenu, showWorkspaceMenu, showWorktreeMenu, showCloneMenu } =
     useSidebarMenus({
       onDeleteThread,
+      onPermanentlyDeleteThread,
+      isThreadDeleteBlocked,
       onSyncThread,
       onPinThread: pinThread,
       onUnpinThread: unpinThread,

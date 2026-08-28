@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { GlobalSourceSnapshot } from "@/features/agent-monitor/global-source/types";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
@@ -1082,6 +1083,14 @@ export async function threadLiveUnsubscribe(workspaceId: string, threadId: strin
 
 export async function archiveThread(workspaceId: string, threadId: string) {
   return invoke<any>("archive_thread", { workspaceId, threadId });
+}
+
+export async function deleteThread(workspaceId: string, threadId: string) {
+  return invoke<any>("delete_thread", { workspaceId, threadId });
+}
+
+export async function getGlobalSourceSnapshot(): Promise<GlobalSourceSnapshot> {
+  return invoke<GlobalSourceSnapshot>("global_source_snapshot");
 }
 
 export async function setThreadName(

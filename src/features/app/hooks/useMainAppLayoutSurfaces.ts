@@ -124,6 +124,8 @@ type UseMainAppLayoutSurfacesArgs = {
   handleAddWorkspace: () => void;
   openWorkspaceFromUrlPrompt: () => void;
   onOpenAgentMonitor: () => void;
+  agentMonitorSplitOpen: boolean;
+  onToggleAgentMonitorSplit: () => void;
   handleAddAgent: SidebarProps["onAddAgent"];
   handleAddWorktreeAgent: SidebarProps["onAddWorktreeAgent"];
   handleAddCloneAgent: SidebarProps["onAddCloneAgent"];
@@ -298,6 +300,8 @@ function buildPrimarySurface({
   handleAddWorkspace,
   openWorkspaceFromUrlPrompt,
   onOpenAgentMonitor,
+  agentMonitorSplitOpen,
+  onToggleAgentMonitorSplit,
   handleAddAgent,
   handleAddWorktreeAgent,
   handleAddCloneAgent,
@@ -419,6 +423,8 @@ function buildPrimarySurface({
       onToggleWorkspaceCollapse: sidebarHandlers.onToggleWorkspaceCollapse,
       onSelectThread: sidebarHandlers.onSelectThread,
       onDeleteThread: sidebarHandlers.onDeleteThread,
+      onPermanentlyDeleteThread: sidebarHandlers.onPermanentlyDeleteThread,
+      isThreadDeleteBlocked: sidebarHandlers.isThreadDeleteBlocked,
       onSyncThread: sidebarHandlers.onSyncThread,
       pinThread: threadPinning.pinThread,
       unpinThread: threadPinning.unpinThread,
@@ -629,6 +635,14 @@ function buildPrimarySurface({
           onCreateBranch: gitState.handleCreateBranch,
           canCopyThread: activeItems.length > 0,
           onCopyThread: handleCopyThread,
+          onBackToHome: threadNavigation.selectHome,
+          onBackToWorkspace: activeThreadId
+            ? () => sidebarHandlers.onSelectWorkspace(activeWorkspace.id)
+            : undefined,
+          agentMonitorOpen: agentMonitorSplitOpen,
+          onToggleAgentMonitor: !isCompact && activeThreadId
+            ? onToggleAgentMonitorSplit
+            : undefined,
           onToggleTerminal: handleToggleTerminalWithFocus,
           isTerminalOpen: terminalOpen,
           showTerminalButton: !isCompact,
@@ -1011,6 +1025,8 @@ export function useMainAppLayoutSurfaces({
   handleAddWorkspace,
   openWorkspaceFromUrlPrompt,
   onOpenAgentMonitor,
+  agentMonitorSplitOpen,
+  onToggleAgentMonitorSplit,
   handleAddAgent,
   handleAddWorktreeAgent,
   handleAddCloneAgent,
@@ -1174,6 +1190,8 @@ export function useMainAppLayoutSurfaces({
     handleAddWorkspace,
     openWorkspaceFromUrlPrompt,
     onOpenAgentMonitor,
+    agentMonitorSplitOpen,
+    onToggleAgentMonitorSplit,
     handleAddAgent,
     handleAddWorktreeAgent,
     handleAddCloneAgent,

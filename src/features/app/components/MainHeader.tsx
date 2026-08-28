@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
@@ -36,6 +37,10 @@ type MainHeaderProps = {
   onCreateBranch: (name: string) => Promise<void> | void;
   canCopyThread?: boolean;
   onCopyThread?: () => void | Promise<void>;
+  onBackToHome?: () => void;
+  onBackToWorkspace?: () => void;
+  agentMonitorOpen?: boolean;
+  onToggleAgentMonitor?: () => void;
   onToggleTerminal: () => void;
   isTerminalOpen: boolean;
   showTerminalButton?: boolean;
@@ -89,6 +94,10 @@ export function MainHeader({
   onCreateBranch,
   canCopyThread = false,
   onCopyThread,
+  onBackToHome,
+  onBackToWorkspace,
+  agentMonitorOpen = false,
+  onToggleAgentMonitor,
   onToggleTerminal,
   isTerminalOpen,
   showTerminalButton = true,
@@ -187,6 +196,32 @@ export function MainHeader({
   return (
     <header className="main-header" data-tauri-drag-region>
       <div className="workspace-header">
+        <div className="main-header-navigation">
+          {onBackToHome ? (
+            <button
+              type="button"
+              className="ghost main-header-back"
+              onClick={onBackToHome}
+              data-tauri-drag-region="false"
+              aria-label="Home"
+            >
+              <ArrowLeft size={14} aria-hidden />
+              <span>Home</span>
+            </button>
+          ) : null}
+          {onBackToWorkspace ? (
+            <button
+              type="button"
+              className="ghost main-header-back"
+              onClick={onBackToWorkspace}
+              data-tauri-drag-region="false"
+              aria-label="Workspace"
+            >
+              <ArrowLeft size={14} aria-hidden />
+              <span>Workspace</span>
+            </button>
+          ) : null}
+        </div>
         <div className="workspace-title-line">
           <span className="workspace-title">
             {parentName ? parentName : workspace.name}
@@ -477,6 +512,18 @@ export function MainHeader({
         </div>
       </div>
       <div className="main-header-actions">
+        {onToggleAgentMonitor ? (
+          <button
+            type="button"
+            className="ghost main-header-agent-monitor-toggle"
+            onClick={onToggleAgentMonitor}
+            data-tauri-drag-region="false"
+            aria-label={agentMonitorOpen ? "Close Agent Monitor" : "Open Agent Monitor"}
+            aria-pressed={agentMonitorOpen}
+          >
+            {agentMonitorOpen ? "Close Agent Monitor" : "Open Agent Monitor"}
+          </button>
+        ) : null}
         {showWorkspaceTools &&
           onRunLaunchScript &&
           onOpenLaunchScriptEditor &&

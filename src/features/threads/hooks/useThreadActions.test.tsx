@@ -115,10 +115,11 @@ describe("useThreadActions", () => {
 
   it("starts a thread and activates it by default", async () => {
     vi.mocked(startThread).mockResolvedValue({
-      result: { thread: { id: "thread-1" } },
+      result: { thread: { id: "thread-1" }, model: "gpt-observed" },
     });
 
-    const { result, dispatch, loadedThreadsRef } = renderActions();
+    const onRuntimeRecord = vi.fn();
+    const { result, dispatch, loadedThreadsRef } = renderActions({ onRuntimeRecord });
 
     let threadId: string | null = null;
     await act(async () => {
@@ -138,6 +139,11 @@ describe("useThreadActions", () => {
       threadId: "thread-1",
     });
     expect(loadedThreadsRef.current["thread-1"]).toBe(true);
+    expect(onRuntimeRecord).toHaveBeenCalledWith(expect.objectContaining({
+      source: "SERVER",
+      label: "thread/start response",
+      payload: { result: { thread: { id: "thread-1" }, model: "gpt-observed" } },
+    }));
   });
 
   it("forks a thread and activates the fork", async () => {
@@ -1427,6 +1433,25 @@ describe("useThreadActions", () => {
       workspaceId: "ws-1",
       isLoading: true,
     });
+  });
+
+  it("supports authoritative reconciliation without retaining absent anchors", async () => {
+    vi.mocked(listThreads).mockResolvedValue({ result: { data: [], nextCursor: null } });
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+        preserveAnchors: false,
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [],
+      preserveAnchors: false,
+    }));
   });
 
   it("requests created_at sorting when provided", async () => {

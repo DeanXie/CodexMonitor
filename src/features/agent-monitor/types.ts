@@ -1,6 +1,15 @@
 import type { ThreadSummary, ThreadTokenUsage, TokenUsageBreakdown } from "@/types";
 
-export type AgentMonitorStatus = "idle" | "reviewing" | "running";
+export type AgentMonitorStatus =
+  | "active"
+  | "idle"
+  | "notLoaded"
+  | "reviewing"
+  | "running"
+  | "waiting"
+  | "completed"
+  | "failed"
+  | "unavailable";
 
 export type AgentMonitorThreadStatus = {
   isProcessing?: boolean;
@@ -15,6 +24,22 @@ export type AgentMonitorWorkspaceOption = {
   path?: string;
 };
 
+export type AgentMonitorSourceInfo = {
+  sourceKind:
+    | "monitor-app-server"
+    | "codex-cli-rollout"
+    | "historical-rollout-scan";
+  temporalClass: "LIVE" | "NEAR_LIVE" | "HISTORICAL";
+  freshnessState: "fresh" | "stale" | "settled" | "unknown";
+  ageMs: number | null;
+  observedAgeMs?: number | null;
+  sourceTimestampMs: number | null;
+  observedTimestampMs: number | null;
+  sourceInstanceId?: string | null;
+  sourceGeneration?: string | null;
+  freshnessReason?: string | null;
+};
+
 export type AgentMonitorNode = {
   threadId: string;
   name: string;
@@ -26,7 +51,28 @@ export type AgentMonitorNode = {
   runtimeMs: number | null;
   totalTokens: number | null;
   tokenUsage: TokenUsageBreakdown | null;
+  source: AgentMonitorSourceInfo;
+  modelSource?: AgentMonitorSourceInfo | null;
   children: AgentMonitorNode[];
+};
+
+export type AgentMonitorRuntimeThread = Omit<AgentMonitorNode, "children"> & {
+  codexHomeIdentity: string | null;
+  workspaceId: string | null;
+  parentThreadId: string | null;
+  createdAtMs: number | null;
+  isCurrentEligible: boolean;
+};
+
+export type AgentMonitorRuntimeView = {
+  roots: AgentMonitorNode[];
+  threads: AgentMonitorRuntimeThread[];
+};
+
+export type AgentMonitorSessionOption = {
+  threadId: string;
+  label: string;
+  isCurrent: boolean;
 };
 
 export type AgentMonitorTreeInput = {

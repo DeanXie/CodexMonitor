@@ -1,9 +1,16 @@
 import type { AgentMonitorNode } from "../types";
+import type { AgentMonitorActivityFilter } from "./agentMonitorActivity";
+
+export type AgentMonitorActivityMetric = {
+  label: "Active" | "Recorded Active";
+  value: number;
+  tooltip: string | null;
+};
 
 export type AgentMonitorSummary = {
   totalAgents: number;
-  activeAgents: number;
-  totalTokens: number;
+  activityMetric: AgentMonitorActivityMetric | null;
+  totalTokens: number | null;
   primaryModel: string | null;
 };
 
@@ -34,26 +41,28 @@ export function buildAgentMonitorModelUsage(
 
 export function buildAgentMonitorSummary(
   roots: AgentMonitorNode[],
+  activityFilter: AgentMonitorActivityFilter,
 ): AgentMonitorSummary {
   const nodes = flattenNodes(roots);
-  const tokensByModel = new Map<string, number>();
-  nodes.forEach((node) => {
-    if (!node.modelId || node.totalTokens === null) {
-      return;
-    }
-    tokensByModel.set(
-      node.modelId,
-      (tokensByModel.get(node.modelId) ?? 0) + node.totalTokens,
-    );
-  });
-  const primaryModel = Array.from(tokensByModel.entries()).sort(
-    ([, left], [, right]) => right - left,
-  )[0]?.[0] ?? null;
+  const activeStatuses = new Set(["active", "running", "waiting", "reviewing"]);
+  const observedModels = Array.from(
+    new Set(nodes.map((node) => node.modelId).filter((model): model is string => Boolean(model))),
+  );
+  const activityMetric = activityFilter === "settled"
+    ? null
+    : {
+        label: activityFilter === "all" ? "Recorded Active" as const : "Active" as const,
+        value: nodes.filter((node) => activeStatuses.has(node.status)
+          && (activityFilter === "all" || node.source.freshnessState === "fresh")).length,
+        tooltip: activityFilter === "all"
+          ? "Includes stale unresolved agents whose last recorded lifecycle was Running or Waiting."
+          : null,
+      };
 
   return {
     totalAgents: nodes.length,
-    activeAgents: nodes.filter((node) => node.status !== "idle").length,
-    totalTokens: nodes.reduce((total, node) => total + (node.totalTokens ?? 0), 0),
-    primaryModel,
+    activityMetric,
+    totalTokens: roots.length === 1 ? roots[0].totalTokens : null,
+    primaryModel: observedModels.length === 1 ? observedModels[0] : null,
   };
 }

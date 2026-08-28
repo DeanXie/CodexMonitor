@@ -15,6 +15,7 @@ import {
   getGitHubIssues,
   getGitLog,
   getGitStatus,
+  getGlobalSourceSnapshot,
   getOpenAppIcon,
   listThreads,
   listMcpServerStatus,
@@ -48,6 +49,7 @@ import {
   createAgent,
   updateAgent,
   deleteAgent,
+  deleteThread,
   readAgentConfigToml,
   readImageAsDataUrl,
   generateAgentDescription,
@@ -86,6 +88,21 @@ describe("tauri invoke wrappers", () => {
       }
       return undefined;
     });
+  });
+
+  it("uses the permanent delete command for deleteThread", async () => {
+    await deleteThread("ws-1", "thread-parent");
+
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("delete_thread", {
+      workspaceId: "ws-1",
+      threadId: "thread-parent",
+    });
+  });
+
+  it("reads the immutable Global Source snapshot through its dedicated command", async () => {
+    await getGlobalSourceSnapshot();
+
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("global_source_snapshot");
   });
 
   it("uses path-only payload for addWorkspace", async () => {

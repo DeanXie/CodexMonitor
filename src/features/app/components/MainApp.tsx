@@ -33,6 +33,8 @@ import { useThreadRows } from "@app/hooks/useThreadRows";
 import { useInterruptShortcut } from "@app/hooks/useInterruptShortcut";
 import { useArchiveShortcut } from "@app/hooks/useArchiveShortcut";
 import { useCopyThread } from "@threads/hooks/useCopyThread";
+import { useDeleteThreadPrompt } from "@threads/hooks/useDeleteThreadPrompt";
+import { collectThreadDeletionSubtree, isThreadDeletionBlocked } from "@threads/utils/threadDeletion";
 import { useTerminalController } from "@/features/terminal/hooks/useTerminalController";
 import { useWorkspaceLaunchScript } from "@app/hooks/useWorkspaceLaunchScript";
 import { useWorkspaceLaunchScripts } from "@app/hooks/useWorkspaceLaunchScripts";
@@ -52,6 +54,9 @@ import { useMainAppWorkspaceLifecycle } from "@app/hooks/useMainAppWorkspaceLife
 import { useMainAppMobileThreadRefresh } from "@app/hooks/useMainAppMobileThreadRefresh";
 import { useHomeAccount } from "@app/hooks/useHomeAccount";
 import { AgentMonitorPage } from "@/features/agent-monitor/components/AgentMonitorPage";
+import { useAgentRuntimeStore } from "@/features/agent-monitor/hooks/useAgentRuntimeStore";
+import { useAgentRuntimeHydration } from "@/features/agent-monitor/hooks/useAgentRuntimeHydration";
+import { useGlobalSourceViewStore } from "@/features/agent-monitor/hooks/useGlobalSourceViewStore";
 import type {
   ComposerEditorSettings,
   ServiceTier,
@@ -81,6 +86,7 @@ import {
 import { useAppShellOrchestration } from "@app/orchestration/useLayoutOrchestration";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
 import { subscribeTrayOpenThread } from "@services/events";
+import { deleteThread as deleteThreadService } from "@services/tauri";
 
 const SettingsView = lazy(() =>
   import("@settings/components/SettingsView").then((module) => ({
@@ -89,6 +95,14 @@ const SettingsView = lazy(() =>
 );
 
 export default function MainApp() {
+  const {
+    runtimeState: agentRuntimeState,
+    ingestRuntimeRecord,
+    clearLiveRuntime,
+    canClearLiveRuntime,
+    activeRuntimeTurnCount,
+  } = useAgentRuntimeStore();
+  const { snapshot: globalSourceSnapshot } = useGlobalSourceViewStore();
   const {
     appSettings,
     setAppSettings,
@@ -131,6 +145,7 @@ export default function MainApp() {
     "home" | "projects" | "codex" | "git" | "log"
   >("codex");
   const [showAgentMonitor, setShowAgentMonitor] = useState(false);
+  const [agentMonitorSplitOpen, setAgentMonitorSplitOpen] = useState(false);
   const tabletTab =
     activeTab === "projects" || activeTab === "home" ? "codex" : activeTab;
   const {
@@ -259,6 +274,12 @@ export default function MainApp() {
     onCollapseRightPanel: collapseRightPanel,
     onExpandRightPanel: expandRightPanel,
   };
+  const handleToggleAgentMonitorSplit = useCallback(() => {
+    if (!agentMonitorSplitOpen) {
+      expandRightPanel();
+    }
+    setAgentMonitorSplitOpen((open) => !open);
+  }, [agentMonitorSplitOpen, expandRightPanel]);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const workspaceHomeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -450,6 +471,7 @@ export default function MainApp() {
     pinnedThreadsVersion,
     interruptTurn,
     removeThread,
+    forgetThreads,
     pinThread,
     unpinThread,
     isThreadPinned,
@@ -500,6 +522,7 @@ export default function MainApp() {
     activeWorkspace,
     onWorkspaceConnected: markWorkspaceConnected,
     onDebug: addDebugEntry,
+    onRuntimeRecord: ingestRuntimeRecord,
     model: resolvedModel,
     effort: resolvedEffort,
     serviceTier: selectedServiceTier,
@@ -517,6 +540,13 @@ export default function MainApp() {
     onMessageActivity: handleThreadMessageActivity,
     threadSortKey: threadListSortKey,
     onThreadCodexMetadataDetected: handleThreadCodexMetadataDetected,
+  });
+  useAgentRuntimeHydration({
+    threadsByWorkspace,
+    threadParentById,
+    threadStatusById,
+    activeTurnIdByThread,
+    ingestRuntimeRecord,
   });
   const { connectionState: remoteThreadConnectionState, reconnectLive } =
     useRemoteThreadLiveConnection({
@@ -940,7 +970,7 @@ export default function MainApp() {
     },
   });
 
-  const { appModalsProps, modalActions } = useMainAppModals({
+  const { appModalsProps: baseAppModalsProps, modalActions } = useMainAppModals({
     settingsViewComponent: SettingsView,
     workspaces,
     workspaceGroups,
@@ -1026,7 +1056,6 @@ export default function MainApp() {
       dictationModel,
     },
   });
-
   useBranchSwitcherShortcut({
     shortcut: appSettings.branchSwitcherShortcut,
     isEnabled: isBranchSwitcherEnabled,
@@ -1320,6 +1349,73 @@ export default function MainApp() {
     handleSend,
   });
 
+  const deletionParentByThreadId = useMemo(() => {
+    const parents = { ...threadParentById };
+    Object.values(agentRuntimeState.assignments).forEach((assignment) => {
+      parents[assignment.childThreadId] = assignment.parentThreadId;
+    });
+    return parents;
+  }, [agentRuntimeState.assignments, threadParentById]);
+  const runtimeTurnsForDeletion = useMemo(
+    () => Object.values(agentRuntimeState.turns).map((turn) => ({
+      threadId: turn.threadId,
+      status: turn.status?.value ?? "unavailable",
+    })),
+    [agentRuntimeState.turns],
+  );
+  const [deletedRuntimeThreadIds, setDeletedRuntimeThreadIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const handleDeletedThreads = useCallback(async (
+    workspaceId: string,
+    deletedThreadIds: Set<string>,
+  ) => {
+    forgetThreads(workspaceId, deletedThreadIds);
+    deletedThreadIds.forEach((threadId) => {
+      clearDraftForThread(threadId);
+      removeImagesForThread(threadId);
+    });
+    setDeletedRuntimeThreadIds((current) => new Set([...current, ...deletedThreadIds]));
+    if (activeThreadId && deletedThreadIds.has(activeThreadId)) {
+      exitDiffView();
+      resetPullRequestSelection();
+      clearDraftStateIfDifferentWorkspace(workspaceId);
+      selectWorkspace(workspaceId);
+      setActiveThreadId(null, workspaceId);
+    }
+    const workspace = workspacesById.get(workspaceId);
+    if (workspace) {
+      await listThreadsForWorkspace(workspace, {
+        preserveState: true,
+        preserveAnchors: false,
+      });
+    }
+    refreshLocalUsage();
+  }, [
+    activeThreadId, clearDraftForThread, clearDraftStateIfDifferentWorkspace,
+    exitDiffView, forgetThreads, listThreadsForWorkspace, removeImagesForThread,
+    refreshLocalUsage, resetPullRequestSelection, selectWorkspace, setActiveThreadId,
+    workspacesById,
+  ]);
+  const deleteThreadPrompt = useDeleteThreadPrompt({
+    threadsByWorkspace,
+    threadParentById: deletionParentByThreadId,
+    threadStatusById,
+    runtimeTurns: runtimeTurnsForDeletion,
+    deleteThread: deleteThreadService,
+    onDeleted: handleDeletedThreads,
+  });
+  const isPermanentThreadDeleteBlocked = useCallback((threadId: string) => {
+    const subtree = collectThreadDeletionSubtree(threadId, deletionParentByThreadId);
+    return isThreadDeletionBlocked(subtree, threadStatusById, runtimeTurnsForDeletion);
+  }, [deletionParentByThreadId, runtimeTurnsForDeletion, threadStatusById]);
+  const appModalsProps = useMemo(() => ({
+    ...baseAppModalsProps,
+    deleteThreadPrompt: deleteThreadPrompt.prompt,
+    onDeleteThreadPromptCancel: deleteThreadPrompt.cancelDelete,
+    onDeleteThreadPromptConfirm: () => { void deleteThreadPrompt.confirmDelete(); },
+  }), [baseAppModalsProps, deleteThreadPrompt]);
+
   const {
     handleComposerSendWithDraftStart,
     handleSelectWorkspaceInstance,
@@ -1434,6 +1530,8 @@ export default function MainApp() {
       workspacesById,
       updateWorkspaceSettings,
       removeThread,
+      requestPermanentThreadDelete: deleteThreadPrompt.requestDelete,
+      isPermanentThreadDeleteBlocked,
       clearDraftForThread,
       removeImagesForThread,
       refreshThread,
@@ -1645,6 +1743,8 @@ export default function MainApp() {
     usageWorkspaceOptions,
     onUsageWorkspaceChange: setUsageWorkspaceId,
     onOpenAgentMonitor: () => setShowAgentMonitor(true),
+    agentMonitorSplitOpen,
+    onToggleAgentMonitorSplit: handleToggleAgentMonitorSplit,
     gitState,
     selectedServiceTier: selectedServiceTier ?? null,
     composerWorkspaceState,
@@ -1807,21 +1907,58 @@ export default function MainApp() {
     compactGitBackNode,
   } = useMainAppLayoutNodes(layoutSurfaces);
 
+  const agentMonitorThreadTitlesById = useMemo(
+    () => Object.fromEntries(
+      Object.values(threadsByWorkspace)
+        .flat()
+        .map((thread) => [thread.id, thread.name] as const),
+    ),
+    [threadsByWorkspace],
+  );
   const agentMonitorNode = (
     <AgentMonitorPage
-      threadsByWorkspace={threadsByWorkspace}
-      threadParentById={threadParentById}
-      threadStatusById={threadStatusById}
-      tokenUsageByThread={tokenUsageByThread}
+      runtimeState={agentRuntimeState}
+      globalSourceSnapshot={globalSourceSnapshot}
+      excludedThreadIds={deletedRuntimeThreadIds}
       localUsageSnapshot={localUsageSnapshot}
+      currentThreadId={activeThreadId}
+      threadTitlesById={agentMonitorThreadTitlesById}
+      canClearLiveRuntime={canClearLiveRuntime}
+      activeRuntimeTurnCount={activeRuntimeTurnCount}
+      onClearLiveRuntime={clearLiveRuntime}
       workspaceOptions={workspaces.map((workspace) => ({
         id: workspace.id,
         label: workspace.name || workspace.path,
         path: workspace.path,
       }))}
-      onBack={() => setShowAgentMonitor(false)}
+      onBack={() => {
+        setShowAgentMonitor(false);
+        sidebarMenuOrchestration.onSelectHome();
+      }}
     />
   );
+  const agentMonitorSplitNode = agentMonitorSplitOpen && activeWorkspace && activeThreadId
+    ? (
+      <AgentMonitorPage
+        runtimeState={agentRuntimeState}
+        globalSourceSnapshot={globalSourceSnapshot}
+        excludedThreadIds={deletedRuntimeThreadIds}
+        localUsageSnapshot={localUsageSnapshot}
+        currentThreadId={activeThreadId}
+        threadTitlesById={agentMonitorThreadTitlesById}
+        canClearLiveRuntime={canClearLiveRuntime}
+        activeRuntimeTurnCount={activeRuntimeTurnCount}
+        onClearLiveRuntime={clearLiveRuntime}
+        workspaceOptions={workspaces.map((workspace) => ({
+          id: workspace.id,
+          label: workspace.name || workspace.path,
+          path: workspace.path,
+        }))}
+        variant="split"
+        onClose={() => setAgentMonitorSplitOpen(false)}
+      />
+    )
+    : null;
   const mainMessagesNode = showWorkspaceHome ? workspaceHomeNode : messagesNode;
   const compactThreadConnectionState: "live" | "polling" | "disconnected" =
     !activeWorkspace?.connected
@@ -1875,6 +2012,7 @@ export default function MainApp() {
       gitDiffPanelNode,
       gitDiffViewerNode,
       planPanelNode,
+      agentMonitorSplitNode,
       debugPanelNode,
       debugPanelFullNode,
       terminalDockNode,

@@ -5,6 +5,7 @@ import type {
   DictationModelStatus,
   TrayOpenThreadPayload,
 } from "../types";
+import type { GlobalSourceSnapshot } from "@/features/agent-monitor/global-source/types";
 
 export type Unsubscribe = () => void;
 
@@ -87,6 +88,9 @@ function createEventHub<T>(eventName: string) {
 }
 
 const appServerHub = createEventHub<AppServerEvent>("app-server-event");
+const globalSourceSnapshotHub = createEventHub<GlobalSourceSnapshot>(
+  "global-source-snapshot-updated",
+);
 const dictationDownloadHub = createEventHub<DictationModelStatus>("dictation-download");
 const dictationEventHub = createEventHub<DictationEvent>("dictation-event");
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
@@ -123,6 +127,13 @@ export function subscribeAppServerEvents(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return appServerHub.subscribe(onEvent, options);
+}
+
+export function subscribeGlobalSourceSnapshot(
+  onEvent: (snapshot: GlobalSourceSnapshot) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return globalSourceSnapshotHub.subscribe(onEvent, options);
 }
 
 export function subscribeDictationDownload(

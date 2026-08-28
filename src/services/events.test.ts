@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Event, EventCallback, UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import type { AppServerEvent } from "../types";
+import type { GlobalSourceSnapshot } from "@/features/agent-monitor/global-source/types";
 import {
   subscribeAppServerEvents,
+  subscribeGlobalSourceSnapshot,
   subscribeMenuCycleCollaborationMode,
   subscribeMenuCycleModel,
   subscribeMenuNewAgent,
@@ -43,6 +45,30 @@ describe("events subscriptions", () => {
     listener(event);
     expect(onEvent).toHaveBeenCalledWith(payload);
 
+    cleanup();
+    await Promise.resolve();
+    expect(unlisten).toHaveBeenCalledTimes(1);
+  });
+
+  it("fans out immutable Global Source snapshot updates", async () => {
+    let listener: EventCallback<GlobalSourceSnapshot> = () => {};
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<GlobalSourceSnapshot>;
+      return Promise.resolve(unlisten);
+    });
+    const onEvent = vi.fn();
+    const cleanup = subscribeGlobalSourceSnapshot(onEvent);
+    const payload: GlobalSourceSnapshot = {
+      revision: 2,
+      generatedAtMs: 10,
+      workspaceCodexHomeIdentities: {},
+      threads: [],
+    };
+
+    listener({ event: "global-source-snapshot-updated", id: 2, payload });
+
+    expect(onEvent).toHaveBeenCalledWith(payload);
     cleanup();
     await Promise.resolve();
     expect(unlisten).toHaveBeenCalledTimes(1);

@@ -71,6 +71,7 @@ type DesktopLayoutProps = {
   gitDiffViewerNode: ReactNode;
   gitDiffPanelNode: ReactNode;
   planPanelNode: ReactNode;
+  agentMonitorSplitNode?: ReactNode;
   composerNode: ReactNode;
   terminalDockNode: ReactNode;
   debugPanelNode: ReactNode;
@@ -98,6 +99,7 @@ export function DesktopLayout({
   gitDiffViewerNode,
   gitDiffPanelNode,
   planPanelNode,
+  agentMonitorSplitNode,
   composerNode,
   terminalDockNode,
   debugPanelNode,
@@ -227,15 +229,21 @@ export function DesktopLayout({
             />
             <div className={`right-panel ${hasActivePlan ? "" : "plan-collapsed"}`}>
               <div className="right-panel-drag-strip" />
-              <div className="right-panel-top">{gitDiffPanelNode}</div>
-              <div
-                className="right-panel-divider"
-                role="separator"
-                aria-orientation="horizontal"
-                aria-label="Resize plan panel"
-                onMouseDown={onPlanPanelResizeStart}
-              />
-              <div className="right-panel-bottom">{planPanelNode}</div>
+              {agentMonitorSplitNode ? (
+                <div className="agent-monitor-split-panel">{agentMonitorSplitNode}</div>
+              ) : (
+                <>
+                  <div className="right-panel-top">{gitDiffPanelNode}</div>
+                  <div
+                    className="right-panel-divider"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Resize plan panel"
+                    onMouseDown={onPlanPanelResizeStart}
+                  />
+                  <div className="right-panel-bottom">{planPanelNode}</div>
+                </>
+              )}
             </div>
             {terminalDockNode}
             {debugPanelNode}

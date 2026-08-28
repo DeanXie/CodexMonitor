@@ -8,6 +8,7 @@ import type {
   ThreadListSortKey,
   WorkspaceInfo,
 } from "@/types";
+import type { RuntimeProtocolRecord } from "@/features/agent-monitor/runtime";
 import { CHAT_SCROLLBACK_DEFAULT } from "@utils/chatScrollback";
 import { useAppServerEvents } from "@app/hooks/useAppServerEvents";
 import { initialState, threadReducer } from "./useThreadsReducer";
@@ -44,6 +45,7 @@ type UseThreadsOptions = {
   activeWorkspace: WorkspaceInfo | null;
   onWorkspaceConnected: (id: string) => void;
   onDebug?: (entry: DebugEntry) => void;
+  onRuntimeRecord?: (record: RuntimeProtocolRecord) => void;
   ensureWorkspaceRuntimeCodexArgs?: (
     workspaceId: string,
     threadId: string | null,
@@ -78,6 +80,7 @@ export function useThreads({
   activeWorkspace,
   onWorkspaceConnected,
   onDebug,
+  onRuntimeRecord,
   ensureWorkspaceRuntimeCodexArgs,
   model,
   effort,
@@ -426,6 +429,7 @@ export function useThreads({
     onUserMessageCreated,
     pushThreadErrorMessage,
     onDebug,
+    onRuntimeRecord,
     onWorkspaceConnected: handleWorkspaceConnected,
     applyCollabThreadLinks,
     hydrateSubagentThreads,
@@ -580,6 +584,7 @@ export function useThreads({
     threadStatusById: state.threadStatusById,
     threadSortKey,
     onDebug,
+    onRuntimeRecord,
     getCustomName,
     threadActivityRef,
     loadedThreadsRef,
@@ -786,6 +791,7 @@ export function useThreads({
     recordThreadActivity,
     safeMessageActivity,
     onDebug,
+    onRuntimeRecord,
     pushThreadErrorMessage,
     ensureThreadForActiveWorkspace,
     ensureThreadForWorkspace,
@@ -861,6 +867,17 @@ export function useThreads({
     [archiveThread, unpinThread],
   );
 
+  const forgetThreads = useCallback(
+    (workspaceId: string, threadIds: Iterable<string>) => {
+      for (const threadId of threadIds) {
+        unpinThread(workspaceId, threadId);
+        dispatch({ type: "hideThread", workspaceId, threadId });
+        dispatch({ type: "removeThread", workspaceId, threadId });
+      }
+    },
+    [dispatch, unpinThread],
+  );
+
   return {
     activeThreadId,
     setActiveThreadId,
@@ -888,6 +905,7 @@ export function useThreads({
     refreshAccountInfo,
     interruptTurn,
     removeThread,
+    forgetThreads,
     pinThread,
     unpinThread,
     isThreadPinned,

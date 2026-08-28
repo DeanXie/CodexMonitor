@@ -29,6 +29,7 @@ import {
   parseReviewTarget,
 } from "@threads/utils/threadNormalize";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
+import type { RuntimeProtocolRecord } from "@/features/agent-monitor/runtime";
 import { useReviewPrompt } from "./useReviewPrompt";
 import {
   buildAppsLines,
@@ -78,6 +79,7 @@ type UseThreadMessagingOptions = {
   ) => void;
   safeMessageActivity: () => void;
   onDebug?: (entry: DebugEntry) => void;
+  onRuntimeRecord?: (record: RuntimeProtocolRecord) => void;
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   ensureThreadForActiveWorkspace: () => Promise<string | null>;
   ensureThreadForWorkspace: (workspaceId: string) => Promise<string | null>;
@@ -122,6 +124,7 @@ export function useThreadMessaging({
   recordThreadActivity,
   safeMessageActivity,
   onDebug,
+  onRuntimeRecord,
   pushThreadErrorMessage,
   ensureThreadForActiveWorkspace,
   ensureThreadForWorkspace,
@@ -202,24 +205,33 @@ export function useThreadMessaging({
       });
       markProcessing(threadId, true);
       safeMessageActivity();
+      const runtimeRequestPayload = {
+        workspaceId: workspace.id,
+        threadId,
+        turnId: activeTurnId,
+        text: finalText,
+        images,
+        model: resolvedModel,
+        effort: resolvedEffort,
+        serviceTier: resolvedServiceTier,
+        collaborationMode: sanitizedCollaborationMode,
+        sendIntent,
+        threadCustomName: customThreadName,
+      };
+      if (!shouldSteer) {
+        onRuntimeRecord?.({
+          source: "CLIENT",
+          capturedAt: new Date(timestamp).toISOString(),
+          label: "turn/start",
+          payload: runtimeRequestPayload,
+        });
+      }
       onDebug?.({
         id: `${Date.now()}-${shouldSteer ? "client-turn-steer" : "client-turn-start"}`,
         timestamp: Date.now(),
         source: "client",
         label: shouldSteer ? "turn/steer" : "turn/start",
-        payload: {
-          workspaceId: workspace.id,
-          threadId,
-          turnId: activeTurnId,
-          text: finalText,
-          images,
-          model: resolvedModel,
-          effort: resolvedEffort,
-          serviceTier: resolvedServiceTier,
-          collaborationMode: sanitizedCollaborationMode,
-          sendIntent,
-          threadCustomName: customThreadName,
-        },
+        payload: runtimeRequestPayload,
       });
       try {
         const shouldPreflightRuntimeCodexArgs =
@@ -353,6 +365,7 @@ export function useThreadMessaging({
       markProcessing,
       model,
       onDebug,
+      onRuntimeRecord,
       pushThreadErrorMessage,
       recordThreadActivity,
       safeMessageActivity,

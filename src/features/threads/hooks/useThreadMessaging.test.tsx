@@ -99,6 +99,7 @@ describe("useThreadMessaging telemetry", () => {
 
   it("records prompt_sent once for one message send", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
+    const onRuntimeRecord = vi.fn();
     const { result } = renderHook(() =>
       useThreadMessaging({
         activeWorkspace: workspace,
@@ -123,6 +124,7 @@ describe("useThreadMessaging telemetry", () => {
         recordThreadActivity: vi.fn(),
         safeMessageActivity: vi.fn(),
         onDebug: vi.fn(),
+        onRuntimeRecord,
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
@@ -156,6 +158,14 @@ describe("useThreadMessaging telemetry", () => {
     );
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledTimes(1);
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(onRuntimeRecord).toHaveBeenCalledWith(expect.objectContaining({
+      source: "CLIENT",
+      label: "turn/start",
+      payload: expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+      }),
+    }));
   });
 
   it("forwards explicit app mentions to turn/start", async () => {

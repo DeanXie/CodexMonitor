@@ -1,5 +1,5 @@
 import { useCallback, type MouseEvent } from "react";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
+import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -9,6 +9,8 @@ import { fileManagerName } from "../../../utils/platformPaths";
 
 type SidebarMenuHandlers = {
   onDeleteThread: (workspaceId: string, threadId: string) => void;
+  onPermanentlyDeleteThread?: (workspaceId: string, threadId: string) => void;
+  isThreadDeleteBlocked?: (threadId: string) => boolean;
   onSyncThread: (workspaceId: string, threadId: string) => void;
   onPinThread: (workspaceId: string, threadId: string) => void;
   onUnpinThread: (workspaceId: string, threadId: string) => void;
@@ -21,6 +23,8 @@ type SidebarMenuHandlers = {
 
 export function useSidebarMenus({
   onDeleteThread,
+  onPermanentlyDeleteThread,
+  isThreadDeleteBlocked,
   onSyncThread,
   onPinThread,
   onUnpinThread,
@@ -51,6 +55,15 @@ export function useSidebarMenus({
         text: "Archive",
         action: () => onDeleteThread(workspaceId, threadId),
       });
+      const deleteBlocked = isThreadDeleteBlocked?.(threadId) ?? false;
+      const deleteItem = await MenuItem.new({
+        text: "Delete",
+        enabled: !deleteBlocked,
+        action: () => {
+          if (!deleteBlocked) onPermanentlyDeleteThread?.(workspaceId, threadId);
+        },
+      });
+      const separator = await PredefinedMenuItem.new({ item: "Separator" });
       const copyItem = await MenuItem.new({
         text: "Copy ID",
         action: async () => {
@@ -61,7 +74,7 @@ export function useSidebarMenus({
           }
         },
       });
-      const items = [renameItem, syncItem];
+      const items: Array<MenuItem | PredefinedMenuItem> = [renameItem, syncItem];
       if (canPin) {
         const isPinned = isThreadPinned(workspaceId, threadId);
         items.push(
@@ -77,7 +90,7 @@ export function useSidebarMenus({
           }),
         );
       }
-      items.push(copyItem, archiveItem);
+      items.push(copyItem, archiveItem, separator, deleteItem);
       const menu = await Menu.new({ items });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
@@ -85,7 +98,9 @@ export function useSidebarMenus({
     },
     [
       isThreadPinned,
+      isThreadDeleteBlocked,
       onDeleteThread,
+      onPermanentlyDeleteThread,
       onPinThread,
       onRenameThread,
       onSyncThread,

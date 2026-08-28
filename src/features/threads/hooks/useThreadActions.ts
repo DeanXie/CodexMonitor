@@ -36,6 +36,7 @@ import {
   resolveWorkspaceIdForThreadPath,
 } from "@threads/utils/threadActionHelpers";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
+import type { RuntimeProtocolRecord } from "@/features/agent-monitor/runtime";
 
 const THREAD_LIST_TARGET_COUNT = 20;
 const THREAD_LIST_PAGE_SIZE = 100;
@@ -54,6 +55,7 @@ type UseThreadActionsOptions = {
   threadStatusById: ThreadState["threadStatusById"];
   threadSortKey: ThreadListSortKey;
   onDebug?: (entry: DebugEntry) => void;
+  onRuntimeRecord?: (record: RuntimeProtocolRecord) => void;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   threadActivityRef: MutableRefObject<Record<string, Record<string, number>>>;
   loadedThreadsRef: MutableRefObject<Record<string, boolean>>;
@@ -83,6 +85,7 @@ export function useThreadActions({
   threadStatusById,
   threadSortKey,
   onDebug,
+  onRuntimeRecord,
   getCustomName,
   threadActivityRef,
   loadedThreadsRef,
@@ -156,6 +159,13 @@ export function useThreadActions({
       });
       try {
         const response = await startThreadService(workspaceId);
+        const capturedAtMs = Date.now();
+        onRuntimeRecord?.({
+          source: "SERVER",
+          capturedAt: new Date(capturedAtMs).toISOString(),
+          label: "thread/start response",
+          payload: response,
+        });
         onDebug?.({
           id: `${Date.now()}-server-thread-start`,
           timestamp: Date.now(),
@@ -184,7 +194,7 @@ export function useThreadActions({
         throw error;
       }
     },
-    [dispatch, extractThreadId, loadedThreadsRef, onDebug],
+    [dispatch, extractThreadId, loadedThreadsRef, onDebug, onRuntimeRecord],
   );
 
   const resumeThreadForWorkspace = useCallback(
@@ -459,6 +469,7 @@ export function useThreadActions({
       workspaces: WorkspaceInfo[],
       options?: {
         preserveState?: boolean;
+        preserveAnchors?: boolean;
         sortKey?: ThreadListSortKey;
         maxPages?: number;
       },
@@ -468,6 +479,7 @@ export function useThreadActions({
         return;
       }
       const preserveState = options?.preserveState ?? false;
+      const preserveAnchors = options?.preserveAnchors ?? true;
       const requestedSortKey = options?.sortKey ?? threadSortKey;
       const maxPages = Math.max(1, options?.maxPages ?? THREAD_LIST_MAX_PAGES_DEFAULT);
       if (!preserveState) {
@@ -616,7 +628,7 @@ export function useThreadActions({
             workspaceId: workspace.id,
             threads: threadListState.summaries,
             sortKey: requestedSortKey,
-            preserveAnchors: true,
+            preserveAnchors,
           });
           dispatch({
             type: "setThreadListCursor",
@@ -671,6 +683,7 @@ export function useThreadActions({
       workspace: WorkspaceInfo,
       options?: {
         preserveState?: boolean;
+        preserveAnchors?: boolean;
         sortKey?: ThreadListSortKey;
         maxPages?: number;
       },

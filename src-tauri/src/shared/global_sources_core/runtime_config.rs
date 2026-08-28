@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GlobalSourceRuntimePaths {
     pub checkpoint_path: PathBuf,
+    pub deletion_tombstones_path: PathBuf,
     pub diagnostics_path: PathBuf,
 }
 
@@ -15,6 +16,7 @@ impl GlobalSourceRuntimePaths {
         let root = app_data_root.join("global-sources");
         Self {
             checkpoint_path: root.join("rollout-watcher-checkpoint.json"),
+            deletion_tombstones_path: root.join("deletion-tombstones.json"),
             diagnostics_path: root.join("rollout-watcher-diagnostics.jsonl"),
         }
     }
@@ -99,6 +101,10 @@ mod tests {
             paths.checkpoint_path,
             root.join("global-sources")
                 .join("rollout-watcher-checkpoint.json")
+        );
+        assert_eq!(
+            paths.deletion_tombstones_path,
+            root.join("global-sources").join("deletion-tombstones.json")
         );
         assert_eq!(
             paths.diagnostics_path,

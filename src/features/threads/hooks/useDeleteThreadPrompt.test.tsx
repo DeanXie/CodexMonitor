@@ -49,7 +49,12 @@ describe("useDeleteThreadPrompt", () => {
     act(() => result.current.requestDelete("ws-1", "main"));
     await act(async () => result.current.confirmDelete());
 
-    expect(deleteThread).toHaveBeenCalledWith("ws-1", "main");
+    expect(deleteThread).toHaveBeenCalledWith(
+      "ws-1",
+      "main",
+      ["child"],
+      expect.stringMatching(/^[0-9a-f-]{36}$/),
+    );
     expect(onDeleted).toHaveBeenCalledWith(
       "ws-1",
       new Set(["main", "child"]),

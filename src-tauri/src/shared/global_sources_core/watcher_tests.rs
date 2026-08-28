@@ -1,3 +1,7 @@
+use super::deletion_tombstone::{
+    DeletionReconciliationState, DeletionTombstone, DeletionTombstoneDocument,
+    DeletionTombstoneStore,
+};
 use super::rollout_checkpoint::{RolloutSourceCheckpoint, RolloutWatcherCheckpoint};
 use super::rollout_discovery::{discover_rollout_sources, CodexHomeSource};
 use super::rollout_identity::CodexThreadKey;
@@ -168,6 +172,7 @@ fn config(root: &Path, identity: &str, checkpoint: &Path) -> RolloutWatcherConfi
     RolloutWatcherConfig {
         homes: vec![home(root, identity)],
         checkpoint_path: checkpoint.to_path_buf(),
+        deletion_tombstones_path: checkpoint.with_file_name("deletion-tombstones.json"),
         retry: WatcherRetryPolicy {
             max_attempts: 3,
             initial_backoff_ms: 0,
@@ -176,6 +181,222 @@ fn config(root: &Path, identity: &str, checkpoint: &Path) -> RolloutWatcherConfi
         settled_after_ms: 10_000,
         reconciliation_interval_ms: 1_000,
     }
+}
+
+#[test]
+fn confirmed_deletion_retires_root_descendant_checkpoint_and_stale_missing_path() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let root_path = rollout_path(&root, "delete-root");
+    let child_path = rollout_path(&root, "delete-child");
+    let unrelated_path = rollout_path(&root, "unrelated");
+    write_lines(&root_path, &[session_meta("thread-root", "C:\\fixture")]);
+    write_lines(
+        &child_path,
+        &[subagent_session_meta(
+            "thread-child",
+            "thread-root",
+            "/root/child",
+        )],
+    );
+    write_lines(
+        &unrelated_path,
+        &[session_meta("thread-other", "C:\\fixture")],
+    );
+    let mut watcher = RolloutTailWatcher::new(config(&root, "home-a", &checkpoint));
+    watcher.reconcile(1_000).expect("initial reconcile");
+
+    let child_key = CodexThreadKey::new("home-a", "thread-child");
+    assert!(!watcher
+        .record_thread_deleted_confirmation(&child_key)
+        .expect("pre-response confirmation"));
+    assert!(!watcher
+        .record_thread_deleted_confirmation(&child_key)
+        .expect("duplicate pre-response confirmation"));
+
+    fs::remove_file(&root_path).expect("remove root rollout");
+    fs::remove_file(&child_path).expect("remove child rollout");
+    let report = watcher
+        .reconcile_deletion(DeletionTombstone::confirmed(
+            "15e1cc50-9afd-4fbb-a8a7-8df5f5657407",
+            CodexThreadKey::new("home-a", "thread-root"),
+            vec![CodexThreadKey::new("home-a", "thread-child")],
+            2_000,
+        ))
+        .expect("reconcile deletion");
+    assert_eq!(report.registry_retirement_count, 2);
+    assert_eq!(report.watcher_source_retirement_count, 2);
+    assert_eq!(
+        watcher
+            .registry()
+            .snapshot()
+            .threads
+            .iter()
+            .map(|thread| thread.key.thread_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["thread-other"]
+    );
+
+    watcher.record_filesystem_signal([root_path.clone(), child_path.clone()], 2_100);
+    let first = watcher.reconcile(2_200).expect("stale signal reconcile");
+    let second = watcher.reconcile(2_300).expect("periodic reconcile");
+    assert!(first.read_failures.is_empty());
+    assert!(second.read_failures.is_empty());
+    assert!(watcher.health_for_path(&root_path).is_none());
+    assert!(watcher.health_for_path(&child_path).is_none());
+
+    let saved: RolloutWatcherCheckpoint =
+        serde_json::from_slice(&fs::read(&checkpoint).expect("checkpoint"))
+            .expect("valid checkpoint");
+    assert_eq!(saved.sources.len(), 1);
+    assert_eq!(
+        saved.sources[0].source_file.normalized_path.to_lowercase(),
+        unrelated_path.to_string_lossy().to_lowercase()
+    );
+    let tombstones = DeletionTombstoneStore::new(root.join("deletion-tombstones.json"))
+        .load()
+        .expect("tombstones");
+    assert_eq!(
+        tombstones.operations[0].reconciliation_state,
+        DeletionReconciliationState::Completed
+    );
+    assert_eq!(tombstones.operations[0].retired_source_files.len(), 2);
+    assert_eq!(
+        tombstones.operations[0].thread_deleted_confirmations,
+        vec!["thread-child"]
+    );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn pending_tombstone_recovers_before_checkpoint_source_can_be_read() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "pending-recovery");
+    write_lines(&path, &[session_meta("thread-pending", "C:\\fixture")]);
+    let watcher_config = config(&root, "home-a", &checkpoint);
+    let mut initial = RolloutTailWatcher::new(watcher_config.clone());
+    initial.reconcile(1_000).expect("initial checkpoint");
+    drop(initial);
+
+    let store = DeletionTombstoneStore::new(watcher_config.deletion_tombstones_path.clone());
+    store
+        .save(&DeletionTombstoneDocument {
+            version: 1,
+            operations: vec![DeletionTombstone::confirmed(
+                "3318d616-f282-47e7-b8ea-736e23987672",
+                CodexThreadKey::new("home-a", "thread-pending"),
+                Vec::new(),
+                2_000,
+            )],
+        })
+        .expect("persist pending tombstone");
+    fs::remove_file(&path).expect("delete rollout before restart");
+
+    let mut restarted = RolloutTailWatcher::new(watcher_config);
+    let report = restarted.reconcile(3_000).expect("startup recovery");
+    assert!(report.read_failures.is_empty());
+    assert!(restarted.health_for_path(&path).is_none());
+    assert!(restarted
+        .registry()
+        .is_tombstoned(&CodexThreadKey::new("home-a", "thread-pending")));
+    let recovered = store.load().expect("reloaded tombstone");
+    assert_eq!(
+        recovered.operations[0].reconciliation_state,
+        DeletionReconciliationState::Completed
+    );
+    let saved: RolloutWatcherCheckpoint =
+        serde_json::from_slice(&fs::read(&checkpoint).expect("checkpoint"))
+            .expect("valid checkpoint");
+    assert!(saved.sources.is_empty());
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn checkpoint_rewrite_failure_keeps_persisted_tombstone_pending() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint-target");
+    let watcher_config = config(&root, "home-a", &checkpoint);
+    let tombstone_path = watcher_config.deletion_tombstones_path.clone();
+    let mut watcher = RolloutTailWatcher::new(watcher_config);
+    fs::create_dir_all(&checkpoint).expect("make checkpoint target unwritable as a file");
+
+    let error = watcher
+        .reconcile_deletion(DeletionTombstone::confirmed(
+            "38a6e11e-3bc5-4874-8866-2219536264b8",
+            CodexThreadKey::new("home-a", "thread-pending"),
+            Vec::new(),
+            1_000,
+        ))
+        .expect_err("checkpoint rewrite must fail");
+    assert!(!error.to_string().is_empty());
+    let persisted = DeletionTombstoneStore::new(tombstone_path)
+        .load()
+        .expect("pending tombstone remains readable");
+    assert_eq!(
+        persisted.operations[0].reconciliation_state,
+        DeletionReconciliationState::Pending
+    );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn tombstone_persistence_failure_rolls_back_in_memory_without_retirement() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let watcher_config = config(&root, "home-a", &checkpoint);
+    let tombstone_path = watcher_config.deletion_tombstones_path.clone();
+    let mut watcher = RolloutTailWatcher::new(watcher_config);
+    fs::create_dir_all(&tombstone_path).expect("block tombstone file creation");
+    let key = CodexThreadKey::new("home-a", "thread-not-persisted");
+
+    let failure = watcher
+        .reconcile_deletion(DeletionTombstone::confirmed(
+            "8b8dd7f0-a04b-4fcb-9733-a4f19ea39331",
+            key.clone(),
+            Vec::new(),
+            1_000,
+        ))
+        .expect_err("tombstone persistence must fail");
+
+    assert!(!failure.tombstone_persisted);
+    assert!(!watcher.registry().is_tombstoned(&key));
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn retired_deleted_rollout_os_error_2_count_stops_increasing() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "os-error-2-retirement");
+    write_lines(&path, &[session_meta("thread-retired-path", "C:\\fixture")]);
+    let mut watcher = RolloutTailWatcher::new(config(&root, "home-a", &checkpoint));
+    watcher.reconcile(1_000).expect("initial reconcile");
+    fs::remove_file(&path).expect("delete rollout");
+    watcher
+        .reconcile_deletion(DeletionTombstone::confirmed(
+            "8d461812-df22-42aa-bf4f-167175159f3f",
+            CodexThreadKey::new("home-a", "thread-retired-path"),
+            Vec::new(),
+            2_000,
+        ))
+        .expect("retire deleted source");
+
+    let mut os_error_2_count = 0;
+    for observed_at in [2_100, 2_200, 2_300, 2_400, 2_500] {
+        watcher.record_filesystem_signal([path.clone()], observed_at);
+        let report = watcher
+            .reconcile(observed_at)
+            .expect("post-retirement reconcile");
+        os_error_2_count += report
+            .read_failures
+            .iter()
+            .filter(|failure| failure.message.contains("os error 2"))
+            .count();
+    }
+    assert_eq!(os_error_2_count, 0);
+    assert!(watcher.health_for_path(&path).is_none());
+    fs::remove_dir_all(root).ok();
 }
 
 #[test]

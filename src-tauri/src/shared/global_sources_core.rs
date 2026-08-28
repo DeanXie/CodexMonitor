@@ -1,3 +1,4 @@
+pub(crate) mod deletion_tombstone;
 pub(crate) mod rollout_checkpoint;
 pub(crate) mod rollout_discovery;
 pub(crate) mod rollout_identity;
@@ -16,3 +17,7 @@ mod tests;
 #[cfg(test)]
 #[path = "global_sources_core/watcher_tests.rs"]
 mod watcher_tests;
+
+#[cfg(test)]
+#[path = "global_sources_core/deletion_tests.rs"]
+mod deletion_tests;

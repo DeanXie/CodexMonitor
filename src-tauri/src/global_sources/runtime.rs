@@ -4,7 +4,10 @@ use std::sync::{Mutex, RwLock};
 
 use crate::global_sources::app_server_live::normalize_app_server_live;
 use crate::global_sources::snapshot::GlobalSourceSnapshot;
+use crate::shared::global_sources_core::deletion_tombstone::DeletionTombstone;
+use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
 use crate::shared::global_sources_core::rollout_watch_service::RolloutWatchCommand;
+use crate::shared::global_sources_core::rollout_watcher::DeletionReconciliationReport;
 use crate::shared::global_sources_core::source_envelope::CodexHomeIdentity;
 use crate::shared::global_sources_core::source_registry::CanonicalSourceSnapshot;
 use crate::shared::global_sources_core::source_registry::SourceLaneUpdate;
@@ -102,6 +105,61 @@ impl GlobalRolloutRuntime {
             })
     }
 
+    pub(crate) async fn reconcile_confirmed_deletion(
+        &self,
+        workspace_id: &str,
+        root_thread_id: &str,
+        descendant_thread_ids: impl IntoIterator<Item = String>,
+        monitor_delete_operation_id: &str,
+        deleted_at_ms: i64,
+    ) -> Result<DeletionReconciliationReport, String> {
+        uuid::Uuid::parse_str(monitor_delete_operation_id)
+            .map_err(|error| format!("invalid monitor delete operation id: {error}"))?;
+        let home_identity = self
+            .live_sources
+            .read()
+            .expect("global live source config lock")
+            .workspace_homes
+            .get(workspace_id)
+            .map(|home| home.identity.clone())
+            .ok_or_else(|| {
+                format!("no canonical CODEX_HOME identity for workspace {workspace_id}")
+            })?;
+        let root_thread_key = CodexThreadKey::new(&home_identity, root_thread_id);
+        let mut seen = std::collections::HashSet::new();
+        let mut descendant_thread_keys = descendant_thread_ids
+            .into_iter()
+            .filter(|thread_id| thread_id != root_thread_id && seen.insert(thread_id.clone()))
+            .map(|thread_id| CodexThreadKey::new(&home_identity, thread_id))
+            .collect::<Vec<_>>();
+        descendant_thread_keys.sort_by(|left, right| left.thread_id.cmp(&right.thread_id));
+        let tombstone = DeletionTombstone::confirmed(
+            monitor_delete_operation_id,
+            root_thread_key,
+            descendant_thread_keys,
+            deleted_at_ms,
+        );
+        let (response, receiver) = tokio::sync::oneshot::channel();
+        let commands = self
+            .worker
+            .lock()
+            .expect("global rollout runtime lock")
+            .as_ref()
+            .map(|worker| worker.commands.clone())
+            .ok_or_else(|| "global rollout watch service is not running".to_string())?;
+        commands
+            .send(RolloutWatchCommand::ReconcileDeletion {
+                tombstone,
+                response,
+            })
+            .map_err(|_| {
+                "global rollout watch service stopped before deletion reconciliation".to_string()
+            })?;
+        receiver.await.map_err(|_| {
+            "global rollout watch service dropped deletion reconciliation response".to_string()
+        })?
+    }
+
     pub(crate) fn configure_live_sources(
         &self,
         source_instance_id: impl Into<String>,
@@ -129,6 +187,36 @@ impl GlobalRolloutRuntime {
         let Some(home) = config.workspace_homes.get(workspace_id) else {
             return false;
         };
+        if message.get("method").and_then(Value::as_str) == Some("thread/deleted") {
+            let thread_id = message.get("params").and_then(|params| {
+                params
+                    .get("threadId")
+                    .or_else(|| params.get("thread_id"))
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        params
+                            .get("thread")
+                            .and_then(|thread| thread.get("id"))
+                            .and_then(Value::as_str)
+                    })
+            });
+            let Some(thread_id) = thread_id else {
+                return false;
+            };
+            let key = CodexThreadKey::new(&home.identity, thread_id);
+            drop(config);
+            return self
+                .worker
+                .lock()
+                .expect("global rollout runtime lock")
+                .as_ref()
+                .is_some_and(|worker| {
+                    worker
+                        .commands
+                        .send(RolloutWatchCommand::ConfirmThreadDeleted(key))
+                        .is_ok()
+                });
+        }
         let Some(update) = normalize_app_server_live(
             &config.source_instance_id,
             workspace_id,
@@ -188,6 +276,7 @@ mod tests {
                 command = commands.recv() => {
                     let update = match command {
                         Some(RolloutWatchCommand::IngestLive(update)) => update,
+                        Some(_) => panic!("unexpected command"),
                         None => panic!("command channel closed"),
                     };
                     let _ = received_tx.send(update.thread_key.thread_id);
@@ -241,6 +330,7 @@ mod tests {
         assert!(runtime.start(move |_, mut commands| async move {
             let update = match commands.recv().await {
                 Some(RolloutWatchCommand::IngestLive(update)) => update,
+                Some(_) => panic!("unexpected command"),
                 None => panic!("command channel closed"),
             };
             let _ = received_tx.send(update.thread_key);
@@ -265,6 +355,110 @@ mod tests {
         let key = received_rx.await.expect("live update");
         assert_eq!(key.codex_home_identity, "codex-home:fixture");
         assert_eq!(key.thread_id, "thread-1");
+        runtime.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn thread_deleted_notification_routes_exact_identity_as_confirmation_evidence() {
+        let runtime = GlobalRolloutRuntime::default();
+        let (received_tx, received_rx) = tokio::sync::oneshot::channel();
+        assert!(runtime.start(move |_, mut commands| async move {
+            let command = commands.recv().await.expect("confirmation command");
+            let RolloutWatchCommand::ConfirmThreadDeleted(key) = command else {
+                panic!("expected deletion confirmation command");
+            };
+            let _ = received_tx.send(key);
+        }));
+        runtime.configure_live_sources(
+            "monitor-process-1",
+            [(
+                "workspace-1".to_string(),
+                CodexHomeIdentity {
+                    normalized_path: "C:\\fixture\\codex-home".to_string(),
+                    identity: "codex-home:fixture".to_string(),
+                },
+            )],
+        );
+        assert!(runtime.ingest_app_server_event(
+            "workspace-1",
+            &json!({
+                "method": "thread/deleted",
+                "params": { "thread": { "id": "thread-child" } }
+            }),
+            1_000,
+        ));
+        assert_eq!(
+            received_rx.await.expect("confirmation identity"),
+            CodexThreadKey::new("codex-home:fixture", "thread-child")
+        );
+        runtime.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn configured_workspace_submits_exact_confirmed_deletion_identity() {
+        use crate::shared::global_sources_core::deletion_tombstone::DeletionReconciliationState;
+        use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
+        use crate::shared::global_sources_core::rollout_watcher::DeletionReconciliationReport;
+
+        let runtime = GlobalRolloutRuntime::default();
+        assert!(runtime.start(move |_, mut commands| async move {
+            let command = commands.recv().await.expect("deletion command");
+            let RolloutWatchCommand::ReconcileDeletion {
+                tombstone,
+                response,
+            } = command
+            else {
+                panic!("expected deletion command");
+            };
+            assert_eq!(
+                tombstone.root_thread_key,
+                CodexThreadKey::new("codex-home:fixture", "root")
+            );
+            assert_eq!(
+                tombstone.descendant_thread_keys,
+                vec![CodexThreadKey::new("codex-home:fixture", "child")]
+            );
+            assert_eq!(
+                tombstone.monitor_delete_operation_id,
+                "7fa286f5-d496-4345-9280-0daf06cf6e85"
+            );
+            let _ = response.send(Ok(DeletionReconciliationReport {
+                monitor_delete_operation_id: tombstone.monitor_delete_operation_id,
+                root_thread_id: "root".to_string(),
+                descendant_thread_ids: vec!["child".to_string()],
+                tombstone_persisted: true,
+                registry_retirement_count: 2,
+                watcher_source_retirement_count: 2,
+                checkpoint_rewritten: true,
+                reconciliation_state: Some(DeletionReconciliationState::Completed),
+                desktop_reconciliation: Some(
+                    crate::shared::global_sources_core::deletion_tombstone::DesktopReconciliationState::RefreshPending,
+                ),
+                snapshot_publication_revision: Some(4),
+            }));
+        }));
+        runtime.configure_live_sources(
+            "monitor-process-1",
+            [(
+                "workspace-1".to_string(),
+                CodexHomeIdentity {
+                    normalized_path: "C:\\fixture\\codex-home".to_string(),
+                    identity: "codex-home:fixture".to_string(),
+                },
+            )],
+        );
+
+        let report = runtime
+            .reconcile_confirmed_deletion(
+                "workspace-1",
+                "root",
+                ["child".to_string()],
+                "7fa286f5-d496-4345-9280-0daf06cf6e85",
+                1_000,
+            )
+            .await
+            .expect("accepted deletion");
+        assert_eq!(report.registry_retirement_count, 2);
         runtime.shutdown().await;
     }
 

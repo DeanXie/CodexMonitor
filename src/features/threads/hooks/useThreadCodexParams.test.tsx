@@ -154,6 +154,23 @@ describe("useThreadCodexParams", () => {
     expect(result.current.getThreadCodexParams("ws-1", "thread-3")).toBeNull();
   });
 
+  it("deletes root and descendant overrides without touching unrelated identities", () => {
+    const { result } = renderHook(() => useThreadCodexParams());
+    act(() => {
+      result.current.patchThreadCodexParams("ws-1", "root", { modelId: "gpt-root" });
+      result.current.patchThreadCodexParams("ws-1", "child", { modelId: "gpt-child" });
+      result.current.patchThreadCodexParams("ws-1", "keep", { modelId: "gpt-keep" });
+      result.current.patchThreadCodexParams("ws-2", "root", { modelId: "gpt-other" });
+    });
+
+    act(() => result.current.deleteThreadsCodexParams("ws-1", ["root", "child"]));
+
+    expect(result.current.getThreadCodexParams("ws-1", "root")).toBeNull();
+    expect(result.current.getThreadCodexParams("ws-1", "child")).toBeNull();
+    expect(result.current.getThreadCodexParams("ws-1", "keep")?.modelId).toBe("gpt-keep");
+    expect(result.current.getThreadCodexParams("ws-2", "root")?.modelId).toBe("gpt-other");
+  });
+
   it("keeps explicit undefined codexArgsOverride as inherit in memory", () => {
     const { result } = renderHook(() => useThreadCodexParams());
 

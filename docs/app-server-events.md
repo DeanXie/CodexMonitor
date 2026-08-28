@@ -184,8 +184,12 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   also deletes its spawned descendants. Current upstream integration coverage
   emits `thread/deleted` child-first for every deleted thread and then observes
   an empty `thread/loaded/list`. CodexMonitor does not depend on that per-child
-  notification granularity: after a successful delete it performs an
-  authoritative `thread/list` reconciliation with anchor preservation disabled.
+  notification granularity: after a successful delete it persists a canonical
+  fullThreadId tombstone for the root and confirmed descendants, retires their
+  Registry/Watcher/checkpoint state, and then performs an authoritative
+  `thread/list` reconciliation with anchor preservation disabled. Independent
+  `thread/deleted` notifications are retained as confirmation evidence but do
+  not create a local delete operation or infer a descendant closure.
   Sanitized protocol evidence lives in
   `docs/fixtures/app-server/thread-delete-cascade.protocol.json`.
 

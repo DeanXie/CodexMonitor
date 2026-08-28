@@ -30,6 +30,7 @@ type UseThreadCodexParamsResult = {
     patch: ThreadCodexParamsPatch,
   ) => void;
   deleteThreadCodexParams: (workspaceId: string, threadId: string) => void;
+  deleteThreadsCodexParams: (workspaceId: string, threadIds: Iterable<string>) => void;
 };
 
 const DEFAULT_ENTRY: ThreadCodexParams = {
@@ -150,13 +151,32 @@ export function useThreadCodexParams(): UseThreadCodexParamsResult {
     setVersion((v) => v + 1);
   }, []);
 
+  const deleteThreadsCodexParams = useCallback(
+    (workspaceId: string, threadIds: Iterable<string>) => {
+      const keys = new Set(
+        [...threadIds].map((threadId) => makeThreadCodexParamsKey(workspaceId, threadId)),
+      );
+      const next = Object.fromEntries(
+        Object.entries(paramsRef.current).filter(([key]) => !keys.has(key)),
+      );
+      if (Object.keys(next).length === Object.keys(paramsRef.current).length) {
+        return;
+      }
+      paramsRef.current = next;
+      saveThreadCodexParams(next);
+      setVersion((v) => v + 1);
+    },
+    [],
+  );
+
   return useMemo(
     () => ({
       version,
       getThreadCodexParams,
       patchThreadCodexParams,
       deleteThreadCodexParams,
+      deleteThreadsCodexParams,
     }),
-    [deleteThreadCodexParams, getThreadCodexParams, patchThreadCodexParams, version],
+    [deleteThreadCodexParams, deleteThreadsCodexParams, getThreadCodexParams, patchThreadCodexParams, version],
   );
 }

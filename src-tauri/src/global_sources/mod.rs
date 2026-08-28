@@ -61,12 +61,14 @@ pub(crate) fn start(app: &AppHandle) -> Result<(), String> {
             json!({
                 "codexHomeCount": homes.len(),
                 "checkpointPath": paths.checkpoint_path,
+                "deletionTombstonesPath": paths.deletion_tombstones_path,
             }),
         )
         .map_err(|error| error.to_string())?;
     let config = RolloutWatcherConfig {
         homes: homes.clone(),
         checkpoint_path: paths.checkpoint_path.clone(),
+        deletion_tombstones_path: paths.deletion_tombstones_path.clone(),
         retry: WatcherRetryPolicy {
             max_attempts: 5,
             initial_backoff_ms: 50,
@@ -94,16 +96,17 @@ pub(crate) fn start(app: &AppHandle) -> Result<(), String> {
                 }),
             );
             let result = service
-                .run_until(shutdown, commands, |event, registry| {
-                    let _ = journal.record_watch_event(&event, registry);
-                    if let Some(snapshot) = snapshot_app
-                        .state::<AppState>()
-                        .global_rollout_runtime
-                        .publish_canonical_snapshot(
+                .run_until(shutdown, commands, |mut event, registry| {
+                    let runtime = &snapshot_app.state::<AppState>().global_rollout_runtime;
+                    let published_snapshot = runtime.publish_canonical_snapshot(
                             registry.snapshot(),
                             chrono::Utc::now().timestamp_millis(),
-                        )
-                    {
+                        );
+                    if let crate::shared::global_sources_core::rollout_watch_service::RolloutWatchEvent::DeletionReconciled(report) = &mut event {
+                        report.snapshot_publication_revision = Some(runtime.snapshot().revision);
+                    }
+                    let _ = journal.record_watch_event(&event, registry);
+                    if let Some(snapshot) = published_snapshot {
                         let _ = snapshot_app
                             .emit(snapshot::GLOBAL_SOURCE_SNAPSHOT_UPDATED_EVENT, snapshot);
                     }

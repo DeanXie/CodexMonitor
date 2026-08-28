@@ -160,7 +160,8 @@ impl Error for SourceRegistryError {}
 #[derive(Clone, Default)]
 pub(crate) struct SourceAuthorityRegistry {
     threads: HashMap<CodexThreadKey, ThreadSourceLanes>,
-    observation_keys: HashSet<String>,
+    observation_keys: HashMap<String, CodexThreadKey>,
+    tombstoned_thread_keys: HashSet<CodexThreadKey>,
 }
 
 impl SourceAuthorityRegistry {
@@ -186,6 +187,9 @@ impl SourceAuthorityRegistry {
         parent_thread_key: Option<CodexThreadKey>,
         agent_path: Option<String>,
     ) {
+        if self.tombstoned_thread_keys.contains(&update.thread_key) {
+            return;
+        }
         let provenance = provenance_from_update(update);
         let thread = self.threads.entry(update.thread_key.clone()).or_default();
         update_field(
@@ -197,6 +201,9 @@ impl SourceAuthorityRegistry {
     }
 
     pub(crate) fn ingest(&mut self, update: SourceLaneUpdate) -> Result<bool, SourceRegistryError> {
+        if self.tombstoned_thread_keys.contains(&update.thread_key) {
+            return Ok(false);
+        }
         validate_lane(&update)?;
         let observation_key = format!(
             "{}\u{1f}{}\u{1f}{}\u{1f}{}",
@@ -205,7 +212,7 @@ impl SourceAuthorityRegistry {
             update.source_generation,
             update.observation_id
         );
-        if self.observation_keys.contains(&observation_key) {
+        if self.observation_keys.contains_key(&observation_key) {
             return Ok(false);
         }
 
@@ -246,8 +253,29 @@ impl SourceAuthorityRegistry {
                 Some(ExternalLifecycle::Waiting) | None => {}
             }
         }
-        self.observation_keys.insert(observation_key);
+        self.observation_keys
+            .insert(observation_key, update.thread_key);
         Ok(true)
+    }
+
+    pub(crate) fn retire_threads(
+        &mut self,
+        keys: impl IntoIterator<Item = CodexThreadKey>,
+    ) -> usize {
+        let mut newly_retired = 0;
+        for key in keys {
+            if self.tombstoned_thread_keys.insert(key.clone()) {
+                newly_retired += 1;
+            }
+            self.threads.remove(&key);
+            self.observation_keys
+                .retain(|_, observation_thread_key| observation_thread_key != &key);
+        }
+        newly_retired
+    }
+
+    pub(crate) fn is_tombstoned(&self, key: &CodexThreadKey) -> bool {
+        self.tombstoned_thread_keys.contains(key)
     }
 
     pub(crate) fn thread_count(&self) -> usize {

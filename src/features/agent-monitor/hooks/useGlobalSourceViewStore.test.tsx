@@ -81,4 +81,20 @@ describe("useGlobalSourceViewStore", () => {
     await waitFor(() => expect(result.current.snapshot.revision).toBe(4));
     expect(result.current.snapshot.threads[0]?.key.threadId).toBe("event-first");
   });
+
+  it("removes a deleted Agent Monitor session when the canonical snapshot retires it", async () => {
+    let listener: (snapshot: GlobalSourceSnapshot) => void = () => {};
+    vi.mocked(subscribeGlobalSourceSnapshot).mockImplementation((onSnapshot) => {
+      listener = onSnapshot;
+      return vi.fn();
+    });
+    vi.mocked(getGlobalSourceSnapshot).mockResolvedValue(snapshot(1, "thread-deleted"));
+    const { result } = renderHook(() => useGlobalSourceViewStore());
+    await waitFor(() => expect(result.current.snapshot.threads).toHaveLength(1));
+
+    act(() => listener({ ...snapshot(2, "ignored"), threads: [] }));
+
+    expect(result.current.snapshot.revision).toBe(2);
+    expect(result.current.snapshot.threads).toEqual([]);
+  });
 });

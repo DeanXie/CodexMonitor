@@ -1,13 +1,19 @@
 use super::rollout_watcher::{
-    FsRolloutDeltaReader, ReconcileReport, RolloutDeltaReader, RolloutTailWatcher,
+    DeletionReconciliationFailure, DeletionReconciliationReport, FsRolloutDeltaReader,
+    ReconcileReport, RolloutDeltaReader, RolloutTailWatcher,
 };
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::io;
 use std::path::PathBuf;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) enum RolloutWatchCommand {
     IngestLive(super::source_registry::SourceLaneUpdate),
+    ReconcileDeletion {
+        tombstone: super::deletion_tombstone::DeletionTombstone,
+        response: tokio::sync::oneshot::Sender<Result<DeletionReconciliationReport, String>>,
+    },
+    ConfirmThreadDeleted(super::rollout_identity::CodexThreadKey),
 }
 
 #[derive(Clone, Debug)]
@@ -17,6 +23,8 @@ pub(crate) enum RolloutWatchEvent {
         update: super::source_registry::SourceLaneUpdate,
         accepted: bool,
     },
+    DeletionReconciled(DeletionReconciliationReport),
+    DeletionReconciliationFailed(DeletionReconciliationFailure),
 }
 
 pub(crate) struct RolloutWatchService<R = FsRolloutDeltaReader> {
@@ -83,6 +91,27 @@ impl<R: RolloutDeltaReader + Send + 'static> RolloutWatchService<R> {
                                 RolloutWatchEvent::LiveIngested { update, accepted },
                                 self.core.registry(),
                             );
+                        }
+                        RolloutWatchCommand::ReconcileDeletion { tombstone, response } => {
+                            match self.core.reconcile_deletion(tombstone) {
+                                Ok(report) => {
+                                    on_event(
+                                        RolloutWatchEvent::DeletionReconciled(report.clone()),
+                                        self.core.registry(),
+                                    );
+                                    let _ = response.send(Ok(report));
+                                }
+                                Err(error) => {
+                                    on_event(
+                                        RolloutWatchEvent::DeletionReconciliationFailed(error.clone()),
+                                        self.core.registry(),
+                                    );
+                                    let _ = response.send(Err(error.to_string()));
+                                }
+                            }
+                        }
+                        RolloutWatchCommand::ConfirmThreadDeleted(key) => {
+                            let _ = self.core.record_thread_deleted_confirmation(&key);
                         }
                     }
                 }

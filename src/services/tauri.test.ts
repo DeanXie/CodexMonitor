@@ -91,11 +91,18 @@ describe("tauri invoke wrappers", () => {
   });
 
   it("uses the permanent delete command for deleteThread", async () => {
-    await deleteThread("ws-1", "thread-parent");
+    await deleteThread(
+      "ws-1",
+      "thread-parent",
+      ["thread-child"],
+      "a2b87b3b-871f-44dd-a74e-277fd2fce9ee",
+    );
 
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("delete_thread", {
       workspaceId: "ws-1",
       threadId: "thread-parent",
+      descendantThreadIds: ["thread-child"],
+      monitorDeleteOperationId: "a2b87b3b-871f-44dd-a74e-277fd2fce9ee",
     });
   });
 

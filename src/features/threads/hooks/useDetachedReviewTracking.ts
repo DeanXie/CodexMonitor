@@ -138,8 +138,53 @@ export function useDetachedReviewTracking({
     [activeThreadId, dispatch, recordThreadActivity, safeMessageActivity],
   );
 
+  const forgetDetachedReviewThreads = useCallback(
+    (workspaceId: string, threadIds: Iterable<string>) => {
+      const ids = new Set(threadIds);
+      const workspaceLinks = detachedReviewLinksByWorkspaceRef.current[workspaceId] ?? {};
+      const removedRelations = new Set(
+        Object.entries(workspaceLinks)
+          .filter(([childId, parentId]) => ids.has(childId) || ids.has(parentId))
+          .map(([childId, parentId]) => `${parentId}->${childId}`),
+      );
+      const removedChildIds = new Set(
+        Object.entries(workspaceLinks)
+          .filter(([childId, parentId]) => ids.has(childId) || ids.has(parentId))
+          .map(([childId]) => childId),
+      );
+      const nextWorkspaceLinks = Object.fromEntries(
+        Object.entries(workspaceLinks).filter(
+          ([childId, parentId]) => !ids.has(childId) && !ids.has(parentId),
+        ),
+      );
+      const nextLinksByWorkspace = { ...detachedReviewLinksByWorkspaceRef.current };
+      if (Object.keys(nextWorkspaceLinks).length > 0) {
+        nextLinksByWorkspace[workspaceId] = nextWorkspaceLinks;
+      } else {
+        delete nextLinksByWorkspace[workspaceId];
+      }
+      detachedReviewLinksByWorkspaceRef.current = nextLinksByWorkspace;
+      saveDetachedReviewLinks(nextLinksByWorkspace);
+
+      detachedReviewParentByChildRef.current = Object.fromEntries(
+        Object.entries(detachedReviewParentByChildRef.current).filter(
+          ([childId]) => !removedChildIds.has(childId),
+        ),
+      );
+      const keepNotice = (notice: string) => !removedRelations.has(notice);
+      detachedReviewStartedNoticeRef.current = new Set(
+        [...detachedReviewStartedNoticeRef.current].filter(keepNotice),
+      );
+      detachedReviewCompletedNoticeRef.current = new Set(
+        [...detachedReviewCompletedNoticeRef.current].filter(keepNotice),
+      );
+    },
+    [],
+  );
+
   return {
     registerDetachedReviewChild,
     handleReviewExited,
+    forgetDetachedReviewThreads,
   };
 }

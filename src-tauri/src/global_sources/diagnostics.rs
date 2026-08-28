@@ -51,6 +51,33 @@ impl DiagnosticJournal {
             RolloutWatchEvent::LiveIngested { update, accepted } => {
                 self.append(&diagnostic_from_live(update, *accepted, registry))?;
             }
+            RolloutWatchEvent::DeletionReconciled(report) => {
+                self.append(&json!({
+                    "eventKind": "deletionReconciled",
+                    "monitorDeleteOperationId": report.monitor_delete_operation_id,
+                    "rootThreadId": report.root_thread_id,
+                    "descendantThreadIds": report.descendant_thread_ids,
+                    "tombstonePersistenceOutcome": report.tombstone_persisted,
+                    "registryRetirementCount": report.registry_retirement_count,
+                    "watcherSourceRetirementCount": report.watcher_source_retirement_count,
+                    "checkpointRewriteOutcome": report.checkpoint_rewritten,
+                    "reconciliationState": report.reconciliation_state,
+                    "desktopReconciliation": report.desktop_reconciliation,
+                    "snapshotPublicationRevision": report.snapshot_publication_revision,
+                    "observedTimestampMs": chrono::Utc::now().timestamp_millis(),
+                }))?;
+            }
+            RolloutWatchEvent::DeletionReconciliationFailed(failure) => {
+                self.append(&json!({
+                    "eventKind": "deletionReconciliationFailed",
+                    "monitorDeleteOperationId": failure.monitor_delete_operation_id,
+                    "rootThreadId": failure.root_thread_id,
+                    "descendantThreadIds": failure.descendant_thread_ids,
+                    "tombstonePersistenceOutcome": failure.tombstone_persisted,
+                    "message": failure.message,
+                    "observedTimestampMs": chrono::Utc::now().timestamp_millis(),
+                }))?;
+            }
         }
         Ok(())
     }
@@ -445,6 +472,7 @@ mod tests {
         let homes = discover_runtime_codex_homes(Some(codex_home), []);
         let watcher = RolloutTailWatcher::new(RolloutWatcherConfig {
             homes,
+            deletion_tombstones_path: checkpoint.with_file_name("deletion-tombstones.json"),
             checkpoint_path: checkpoint,
             retry: WatcherRetryPolicy {
                 max_attempts: 5,

@@ -298,20 +298,53 @@ pub(crate) async fn archive_thread(
 pub(crate) async fn delete_thread(
     workspace_id: String,
     thread_id: String,
+    descendant_thread_ids: Vec<String>,
+    monitor_delete_operation_id: String,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
-    if remote_backend::is_remote_mode(&*state).await {
-        return remote_backend::call_remote(
+    let delete_result = if remote_backend::is_remote_mode(&*state).await {
+        remote_backend::call_remote(
             &*state,
             app,
             "delete_thread",
             json!({ "workspaceId": workspace_id, "threadId": thread_id }),
         )
-        .await;
-    }
+        .await
+    } else {
+        codex_core::delete_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone())
+            .await
+    };
+    reconcile_after_confirmed_delete(
+        delete_result,
+        state.global_rollout_runtime.reconcile_confirmed_deletion(
+            &workspace_id,
+            &thread_id,
+            descendant_thread_ids,
+            &monitor_delete_operation_id,
+            chrono::Utc::now().timestamp_millis(),
+        ),
+    )
+    .await
+}
 
-    codex_core::delete_thread_core(&state.sessions, workspace_id, thread_id).await
+async fn reconcile_after_confirmed_delete<F>(
+    delete_result: Result<Value, String>,
+    reconciliation: F,
+) -> Result<Value, String>
+where
+    F: std::future::Future<
+        Output = Result<
+            crate::shared::global_sources_core::rollout_watcher::DeletionReconciliationReport,
+            String,
+        >,
+    >,
+{
+    let response = delete_result?;
+    reconciliation.await.map_err(|error| {
+        format!("thread/delete succeeded but deletion reconciliation failed: {error}")
+    })?;
+    Ok(response)
 }
 
 #[tauri::command]
@@ -1034,4 +1067,48 @@ pub(crate) async fn generate_agent_description(
         },
     )
     .await
+}
+
+#[cfg(test)]
+mod deletion_tests {
+    use super::reconcile_after_confirmed_delete;
+    use crate::shared::global_sources_core::deletion_tombstone::DeletionReconciliationState;
+    use crate::shared::global_sources_core::rollout_watcher::DeletionReconciliationReport;
+    use serde_json::json;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[tokio::test]
+    async fn failed_official_delete_does_not_poll_reconciliation_or_create_tombstone() {
+        let reconciliation_polled = AtomicBool::new(false);
+        let reconciliation = async {
+            reconciliation_polled.store(true, Ordering::SeqCst);
+            Ok(DeletionReconciliationReport::default())
+        };
+
+        let result = reconcile_after_confirmed_delete(
+            Err("official delete rejected".to_string()),
+            reconciliation,
+        )
+        .await;
+
+        assert_eq!(result, Err("official delete rejected".to_string()));
+        assert!(!reconciliation_polled.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn successful_official_delete_waits_for_completed_reconciliation() {
+        let result = reconcile_after_confirmed_delete(Ok(json!({ "ok": true })), async {
+            Ok(DeletionReconciliationReport {
+                monitor_delete_operation_id: "operation".to_string(),
+                registry_retirement_count: 1,
+                watcher_source_retirement_count: 1,
+                checkpoint_rewritten: true,
+                reconciliation_state: Some(DeletionReconciliationState::Completed),
+                ..DeletionReconciliationReport::default()
+            })
+        })
+        .await;
+
+        assert_eq!(result, Ok(json!({ "ok": true })));
+    }
 }

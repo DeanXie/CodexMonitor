@@ -142,6 +142,17 @@ export function saveCustomName(workspaceId: string, threadId: string, name: stri
   }
 }
 
+export function saveCustomNames(names: CustomNamesMap): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(STORAGE_KEY_CUSTOM_NAMES, JSON.stringify(names));
+  } catch {
+    // Best-effort persistence.
+  }
+}
+
 export function makePinKey(workspaceId: string, threadId: string): string {
   return `${workspaceId}:${threadId}`;
 }

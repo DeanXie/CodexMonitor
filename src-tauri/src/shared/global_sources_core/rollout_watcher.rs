@@ -1,3 +1,7 @@
+use super::deletion_tombstone::{
+    DeletionReconciliationState, DeletionTombstone, DeletionTombstoneDocument,
+    DeletionTombstoneStore, DesktopReconciliationState,
+};
 use super::rollout_checkpoint::{
     RolloutAdapterCheckpoint, RolloutCheckpointStore, RolloutSourceCheckpoint,
     RolloutWatcherCheckpoint,
@@ -16,7 +20,7 @@ use super::source_registry::{
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -32,6 +36,7 @@ pub(crate) struct WatcherRetryPolicy {
 pub(crate) struct RolloutWatcherConfig {
     pub homes: Vec<CodexHomeSource>,
     pub checkpoint_path: PathBuf,
+    pub deletion_tombstones_path: PathBuf,
     pub retry: WatcherRetryPolicy,
     pub fresh_window_ms: i64,
     pub settled_after_ms: i64,
@@ -97,6 +102,37 @@ pub(crate) struct ReconcileReport {
     pub read_failures: Vec<SourceReadFailure>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DeletionReconciliationReport {
+    pub monitor_delete_operation_id: String,
+    pub root_thread_id: String,
+    pub descendant_thread_ids: Vec<String>,
+    pub tombstone_persisted: bool,
+    pub registry_retirement_count: usize,
+    pub watcher_source_retirement_count: usize,
+    pub checkpoint_rewritten: bool,
+    pub reconciliation_state: Option<DeletionReconciliationState>,
+    pub desktop_reconciliation: Option<DesktopReconciliationState>,
+    pub snapshot_publication_revision: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DeletionReconciliationFailure {
+    pub monitor_delete_operation_id: String,
+    pub root_thread_id: String,
+    pub descendant_thread_ids: Vec<String>,
+    pub tombstone_persisted: bool,
+    pub message: String,
+}
+
+impl std::fmt::Display for DeletionReconciliationFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for DeletionReconciliationFailure {}
+
 pub(crate) trait RolloutDeltaReader: Clone {
     fn read_delta(
         &self,
@@ -125,12 +161,19 @@ impl RolloutDeltaReader for FsRolloutDeltaReader {
 pub(crate) struct RolloutTailWatcher<R = FsRolloutDeltaReader> {
     config: RolloutWatcherConfig,
     checkpoint_store: RolloutCheckpointStore,
+    tombstone_store: DeletionTombstoneStore,
+    tombstones: DeletionTombstoneDocument,
+    retired_source_files: HashSet<SourceFileIdentity>,
     restored: HashMap<String, RolloutSourceCheckpoint>,
     sources: HashMap<String, WatchedSource>,
     pending_signal_times: HashMap<String, i64>,
+    pending_thread_deleted_confirmations: HashSet<super::rollout_identity::CodexThreadKey>,
     registry: SourceAuthorityRegistry,
     reader: R,
     startup_error: Option<(io::ErrorKind, String)>,
+    startup_checkpoint_dirty: bool,
+    startup_tombstones_dirty: bool,
+    pending_checkpoint_rewrite: bool,
 }
 
 impl RolloutTailWatcher<FsRolloutDeltaReader> {
@@ -141,36 +184,90 @@ impl RolloutTailWatcher<FsRolloutDeltaReader> {
 
 impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
     pub(crate) fn with_reader(config: RolloutWatcherConfig, reader: R) -> Self {
+        let tombstone_store = DeletionTombstoneStore::new(config.deletion_tombstones_path.clone());
+        let (mut tombstones, tombstone_error) = match tombstone_store.load() {
+            Ok(document) => (document, None),
+            Err(error) => (
+                DeletionTombstoneDocument::default(),
+                Some((error.kind(), error.to_string())),
+            ),
+        };
+        let tombstoned_keys = tombstones
+            .operations
+            .iter()
+            .flat_map(|operation| operation.thread_keys().cloned())
+            .collect::<HashSet<_>>();
+        let mut retired_source_files = tombstones
+            .operations
+            .iter()
+            .flat_map(|operation| operation.retired_source_files.iter().cloned())
+            .collect::<HashSet<_>>();
         let checkpoint_store = RolloutCheckpointStore::new(config.checkpoint_path.clone());
-        let (checkpoint, startup_error) = match checkpoint_store.load() {
+        let (checkpoint, checkpoint_error) = match checkpoint_store.load() {
             Ok(checkpoint) => (checkpoint, None),
             Err(error) => (
                 RolloutWatcherCheckpoint::default(),
                 Some((error.kind(), error.to_string())),
             ),
         };
+        let mut startup_checkpoint_dirty = false;
+        let mut startup_tombstones_dirty = false;
         let restored = checkpoint
             .sources
             .into_iter()
-            .map(|checkpoint| {
-                (
+            .filter_map(|checkpoint| {
+                let retired_by_owner = checkpoint
+                    .adapter
+                    .thread_key
+                    .as_ref()
+                    .is_some_and(|key| tombstoned_keys.contains(key));
+                let retired_by_file = retired_source_files.contains(&checkpoint.source_file);
+                if retired_by_owner || retired_by_file {
+                    startup_checkpoint_dirty = true;
+                    retired_source_files.insert(checkpoint.source_file.clone());
+                    if let Some(owner) = checkpoint.adapter.thread_key.as_ref() {
+                        if let Some(operation) = tombstones
+                            .operations
+                            .iter_mut()
+                            .find(|operation| operation.contains_thread_key(owner))
+                        {
+                            startup_tombstones_dirty |= operation
+                                .record_retired_source_file(checkpoint.source_file.clone());
+                        }
+                    }
+                    return None;
+                }
+                Some((
                     source_key(
                         &checkpoint.codex_home_identity,
                         &checkpoint.source_file.normalized_path,
                     ),
                     checkpoint,
-                )
+                ))
             })
             .collect();
+        let mut registry = SourceAuthorityRegistry::default();
+        registry.retire_threads(tombstoned_keys);
+        let pending_checkpoint_rewrite = startup_checkpoint_dirty
+            || tombstones.operations.iter().any(|operation| {
+                operation.reconciliation_state == DeletionReconciliationState::Pending
+            });
         Self {
             config,
             checkpoint_store,
+            tombstone_store,
+            tombstones,
+            retired_source_files,
             restored,
             sources: HashMap::new(),
             pending_signal_times: HashMap::new(),
-            registry: SourceAuthorityRegistry::default(),
+            pending_thread_deleted_confirmations: HashSet::new(),
+            registry,
             reader,
-            startup_error,
+            startup_error: tombstone_error.or(checkpoint_error),
+            startup_checkpoint_dirty,
+            startup_tombstones_dirty,
+            pending_checkpoint_rewrite,
         }
     }
 
@@ -193,6 +290,9 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
         let discovered = discover_rollout_sources(&self.config.homes)?;
         let mut report = ReconcileReport::default();
         for source in discovered {
+            if self.retired_source_files.contains(&source.file_identity) {
+                continue;
+            }
             let key = source_key(
                 &source.codex_home.identity,
                 &source.file_identity.normalized_path,
@@ -250,7 +350,9 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
         }
 
         let keys = self.sources.keys().cloned().collect::<Vec<_>>();
-        let mut checkpoint_dirty = report.discovered_sources > 0;
+        let mut checkpoint_dirty = report.discovered_sources > 0
+            || self.startup_checkpoint_dirty
+            || self.pending_checkpoint_rewrite;
         for key in keys {
             let Some(mut source) = self.sources.remove(&key) else {
                 continue;
@@ -262,6 +364,17 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
             );
             match self.process_source(&mut source, observed_timestamp_ms, observe_after_read) {
                 Ok(envelopes) => {
+                    if source
+                        .adapter
+                        .thread_key
+                        .as_ref()
+                        .is_some_and(|key| self.registry.is_tombstoned(key))
+                    {
+                        self.record_retired_source(&source);
+                        self.tombstone_store.save(&self.tombstones)?;
+                        checkpoint_dirty = true;
+                        continue;
+                    }
                     let after_cursor = (
                         source.source_file.generation.clone(),
                         source.tail.checkpoint().committed_byte_offset,
@@ -295,8 +408,213 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
 
         if checkpoint_dirty {
             self.save_checkpoint()?;
+            self.startup_checkpoint_dirty = false;
+            self.pending_checkpoint_rewrite = false;
+        }
+        if self.startup_tombstones_dirty {
+            self.tombstone_store.save(&self.tombstones)?;
+            self.startup_tombstones_dirty = false;
+        }
+        if !self.pending_checkpoint_rewrite
+            && self.tombstones.operations.iter().any(|operation| {
+                operation.reconciliation_state == DeletionReconciliationState::Pending
+            })
+        {
+            for operation in &mut self.tombstones.operations {
+                if operation.reconciliation_state == DeletionReconciliationState::Pending {
+                    operation.mark_local_reconciliation_completed();
+                }
+            }
+            if let Err(error) = self.tombstone_store.save(&self.tombstones) {
+                for operation in &mut self.tombstones.operations {
+                    if operation.reconciliation_state == DeletionReconciliationState::Completed {
+                        operation.reconciliation_state = DeletionReconciliationState::Pending;
+                    }
+                }
+                return Err(error);
+            }
         }
         Ok(report)
+    }
+
+    pub(crate) fn reconcile_deletion(
+        &mut self,
+        tombstone: DeletionTombstone,
+    ) -> Result<DeletionReconciliationReport, DeletionReconciliationFailure> {
+        let operation_id = tombstone.monitor_delete_operation_id.clone();
+        let root_thread_id = tombstone.root_thread_key.thread_id.clone();
+        let descendant_thread_ids = tombstone
+            .descendant_thread_keys
+            .iter()
+            .map(|key| key.thread_id.clone())
+            .collect::<Vec<_>>();
+        let failure = |tombstone_persisted: bool, error: &dyn std::fmt::Display| {
+            DeletionReconciliationFailure {
+                monitor_delete_operation_id: operation_id.clone(),
+                root_thread_id: root_thread_id.clone(),
+                descendant_thread_ids: descendant_thread_ids.clone(),
+                tombstone_persisted,
+                message: error.to_string(),
+            }
+        };
+        if let Some((kind, message)) = &self.startup_error {
+            return Err(failure(false, &io::Error::new(*kind, message.clone())));
+        }
+        let original_tombstones = self.tombstones.clone();
+        self.tombstones.upsert(tombstone);
+        if let Some(operation) = self
+            .tombstones
+            .operations
+            .iter_mut()
+            .find(|operation| operation.monitor_delete_operation_id == operation_id)
+        {
+            let confirmations = self
+                .pending_thread_deleted_confirmations
+                .iter()
+                .filter(|key| operation.contains_thread_key(key))
+                .cloned()
+                .collect::<Vec<_>>();
+            for key in confirmations {
+                operation.record_thread_deleted_confirmation(&key.thread_id);
+                self.pending_thread_deleted_confirmations.remove(&key);
+            }
+        }
+        // The pending tombstone must be durable before Registry or Watcher mutation.
+        if let Err(error) = self.tombstone_store.save(&self.tombstones) {
+            self.tombstones = original_tombstones;
+            return Err(failure(false, &error));
+        }
+
+        let keys = self
+            .tombstones
+            .operations
+            .iter()
+            .find(|operation| operation.monitor_delete_operation_id == operation_id)
+            .map(|operation| operation.thread_keys().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        let registry_retirement_count = self.registry.retire_threads(keys.clone());
+        self.pending_checkpoint_rewrite = true;
+        let key_set = keys.into_iter().collect::<HashSet<_>>();
+        let mut retired_sources = Vec::new();
+        self.sources.retain(|_, source| {
+            let should_retire = source
+                .adapter
+                .thread_key
+                .as_ref()
+                .is_some_and(|key| key_set.contains(key));
+            if should_retire {
+                retired_sources.push((source.path.clone(), source.source_file.clone()));
+            }
+            !should_retire
+        });
+        self.restored.retain(|_, source| {
+            let should_retire = source
+                .adapter
+                .thread_key
+                .as_ref()
+                .is_some_and(|key| key_set.contains(key));
+            if should_retire {
+                retired_sources.push((
+                    PathBuf::from(&source.source_file.normalized_path),
+                    source.source_file.clone(),
+                ));
+            }
+            !should_retire
+        });
+        let watcher_source_retirement_count = retired_sources.len();
+        if let Some(operation) = self
+            .tombstones
+            .operations
+            .iter_mut()
+            .find(|operation| operation.monitor_delete_operation_id == operation_id)
+        {
+            for (path, source_file) in retired_sources {
+                self.pending_signal_times.remove(&path_key(&path));
+                self.retired_source_files.insert(source_file.clone());
+                operation.record_retired_source_file(source_file);
+            }
+        }
+        self.tombstone_store
+            .save(&self.tombstones)
+            .map_err(|error| failure(true, &error))?;
+        self.save_checkpoint()
+            .map_err(|error| failure(true, &error))?;
+        self.pending_checkpoint_rewrite = false;
+        let (reconciliation_state, desktop_reconciliation) = if let Some(operation) = self
+            .tombstones
+            .operations
+            .iter_mut()
+            .find(|operation| operation.monitor_delete_operation_id == operation_id)
+        {
+            operation.mark_local_reconciliation_completed();
+            (
+                Some(operation.reconciliation_state),
+                Some(operation.desktop_reconciliation),
+            )
+        } else {
+            (None, None)
+        };
+        if let Err(error) = self.tombstone_store.save(&self.tombstones) {
+            if let Some(operation) = self
+                .tombstones
+                .operations
+                .iter_mut()
+                .find(|operation| operation.monitor_delete_operation_id == operation_id)
+            {
+                operation.reconciliation_state = DeletionReconciliationState::Pending;
+            }
+            return Err(failure(true, &error));
+        }
+        Ok(DeletionReconciliationReport {
+            monitor_delete_operation_id: operation_id,
+            root_thread_id,
+            descendant_thread_ids,
+            tombstone_persisted: true,
+            registry_retirement_count,
+            watcher_source_retirement_count,
+            checkpoint_rewritten: true,
+            reconciliation_state,
+            desktop_reconciliation,
+            snapshot_publication_revision: None,
+        })
+    }
+
+    pub(crate) fn record_thread_deleted_confirmation(
+        &mut self,
+        key: &super::rollout_identity::CodexThreadKey,
+    ) -> io::Result<bool> {
+        let mut changed = false;
+        for operation in &mut self.tombstones.operations {
+            if operation.contains_thread_key(key) {
+                changed |= operation.record_thread_deleted_confirmation(&key.thread_id);
+            }
+        }
+        if changed {
+            self.tombstone_store.save(&self.tombstones)?;
+        } else if !self
+            .tombstones
+            .operations
+            .iter()
+            .any(|operation| operation.contains_thread_key(key))
+        {
+            self.pending_thread_deleted_confirmations
+                .insert(key.clone());
+        }
+        Ok(changed)
+    }
+
+    fn record_retired_source(&mut self, source: &WatchedSource) {
+        self.retired_source_files.insert(source.source_file.clone());
+        if let Some(owner) = source.adapter.thread_key.as_ref() {
+            if let Some(operation) = self
+                .tombstones
+                .operations
+                .iter_mut()
+                .find(|operation| operation.contains_thread_key(owner))
+            {
+                operation.record_retired_source_file(source.source_file.clone());
+            }
+        }
     }
 
     fn process_source(
@@ -594,6 +912,13 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
     ) {
         for path in paths {
             let key = path_key(&path);
+            if self
+                .retired_source_files
+                .iter()
+                .any(|source_file| path_key(Path::new(&source_file.normalized_path)) == key)
+            {
+                continue;
+            }
             self.pending_signal_times
                 .insert(key.clone(), observed_timestamp_ms);
             for source in self.sources.values_mut() {

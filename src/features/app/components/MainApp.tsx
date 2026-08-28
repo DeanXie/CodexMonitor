@@ -209,6 +209,7 @@ export default function MainApp() {
     threadCodexParamsVersion,
     getThreadCodexParams,
     patchThreadCodexParams,
+    deleteThreadsCodexParams,
     accessMode,
     setAccessMode,
     preferredModelId,
@@ -1371,6 +1372,7 @@ export default function MainApp() {
     deletedThreadIds: Set<string>,
   ) => {
     forgetThreads(workspaceId, deletedThreadIds);
+    deleteThreadsCodexParams(workspaceId, deletedThreadIds);
     deletedThreadIds.forEach((threadId) => {
       clearDraftForThread(threadId);
       removeImagesForThread(threadId);
@@ -1393,7 +1395,7 @@ export default function MainApp() {
     refreshLocalUsage();
   }, [
     activeThreadId, clearDraftForThread, clearDraftStateIfDifferentWorkspace,
-    exitDiffView, forgetThreads, listThreadsForWorkspace, removeImagesForThread,
+    deleteThreadsCodexParams, exitDiffView, forgetThreads, listThreadsForWorkspace, removeImagesForThread,
     refreshLocalUsage, resetPullRequestSelection, selectWorkspace, setActiveThreadId,
     workspacesById,
   ]);

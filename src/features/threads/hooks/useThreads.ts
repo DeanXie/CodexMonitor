@@ -144,6 +144,7 @@ export function useThreads({
     unpinThread,
     isThreadPinned,
     getPinTimestamp,
+    forgetThreadStorage,
   } = useThreadStorage();
 
   const activeWorkspaceId = activeWorkspace?.id ?? null;
@@ -281,7 +282,7 @@ export function useThreads({
     [],
   );
 
-  const { registerDetachedReviewChild, handleReviewExited } =
+  const { registerDetachedReviewChild, handleReviewExited, forgetDetachedReviewThreads } =
     useDetachedReviewTracking({
       activeThreadId,
       dispatch,
@@ -869,13 +870,15 @@ export function useThreads({
 
   const forgetThreads = useCallback(
     (workspaceId: string, threadIds: Iterable<string>) => {
-      for (const threadId of threadIds) {
-        unpinThread(workspaceId, threadId);
+      const ids = [...threadIds];
+      forgetThreadStorage(workspaceId, ids);
+      forgetDetachedReviewThreads(workspaceId, ids);
+      for (const threadId of ids) {
         dispatch({ type: "hideThread", workspaceId, threadId });
         dispatch({ type: "removeThread", workspaceId, threadId });
       }
     },
-    [dispatch, unpinThread],
+    [dispatch, forgetDetachedReviewThreads, forgetThreadStorage],
   );
 
   return {

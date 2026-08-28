@@ -8,6 +8,7 @@ import {
   loadPinnedThreads,
   loadThreadActivity,
   savePinnedThreads,
+  saveCustomNames,
   saveThreadActivity,
 } from "@threads/utils/threadStorage";
 import { useThreadStorage } from "./useThreadStorage";
@@ -24,6 +25,7 @@ vi.mock("@threads/utils/threadStorage", () => ({
   makePinKey: (workspaceId: string, threadId: string) =>
     `${workspaceId}:${threadId}`,
   savePinnedThreads: vi.fn(),
+  saveCustomNames: vi.fn(),
   saveThreadActivity: vi.fn(),
 }));
 
@@ -142,5 +144,47 @@ describe("useThreadStorage", () => {
       expect(result.current.pinnedThreadsVersion).toBe(versionBefore + 1);
     });
     expect(result.current.isThreadPinned("ws-1", "thread-2")).toBe(true);
+  });
+
+  it("forgets activity pins and custom names for exact descendants only", async () => {
+    vi.mocked(loadThreadActivity).mockReturnValue({
+      "ws-1": { root: 1, child: 2, keep: 3 },
+      "ws-2": { root: 4 },
+    });
+    vi.mocked(loadPinnedThreads).mockReturnValue({
+      "ws-1:root": 1,
+      "ws-1:child": 2,
+      "ws-1:keep": 3,
+      "ws-2:root": 4,
+    });
+    vi.mocked(loadCustomNames).mockReturnValue({
+      "ws-1:root": "Root",
+      "ws-1:child": "Child",
+      "ws-1:keep": "Keep",
+      "ws-2:root": "Other workspace",
+    });
+    const { result } = renderHook(() => useThreadStorage());
+    await waitFor(() => expect(result.current.getCustomName("ws-1", "root")).toBe("Root"));
+
+    act(() => result.current.forgetThreadStorage("ws-1", ["root", "child"]));
+
+    expect(result.current.threadActivityRef.current).toEqual({
+      "ws-1": { keep: 3 },
+      "ws-2": { root: 4 },
+    });
+    expect(result.current.pinnedThreadsRef.current).toEqual({
+      "ws-1:keep": 3,
+      "ws-2:root": 4,
+    });
+    expect(result.current.getCustomName("ws-1", "root")).toBeUndefined();
+    expect(result.current.getCustomName("ws-1", "keep")).toBe("Keep");
+    expect(saveThreadActivity).toHaveBeenLastCalledWith({
+      "ws-1": { keep: 3 },
+      "ws-2": { root: 4 },
+    });
+    expect(saveCustomNames).toHaveBeenLastCalledWith({
+      "ws-1:keep": "Keep",
+      "ws-2:root": "Other workspace",
+    });
   });
 });

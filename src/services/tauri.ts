@@ -1085,8 +1085,18 @@ export async function archiveThread(workspaceId: string, threadId: string) {
   return invoke<any>("archive_thread", { workspaceId, threadId });
 }
 
-export async function deleteThread(workspaceId: string, threadId: string) {
-  return invoke<any>("delete_thread", { workspaceId, threadId });
+export async function deleteThread(
+  workspaceId: string,
+  threadId: string,
+  descendantThreadIds: string[],
+  monitorDeleteOperationId: string,
+) {
+  return invoke<any>("delete_thread", {
+    workspaceId,
+    threadId,
+    descendantThreadIds,
+    monitorDeleteOperationId,
+  });
 }
 
 export async function getGlobalSourceSnapshot(): Promise<GlobalSourceSnapshot> {

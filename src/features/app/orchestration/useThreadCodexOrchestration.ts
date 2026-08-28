@@ -25,6 +25,7 @@ type ThreadCodexOrchestration = {
   threadCodexParamsVersion: number;
   getThreadCodexParams: ReturnType<typeof useThreadCodexParams>["getThreadCodexParams"];
   patchThreadCodexParams: ReturnType<typeof useThreadCodexParams>["patchThreadCodexParams"];
+  deleteThreadsCodexParams: ReturnType<typeof useThreadCodexParams>["deleteThreadsCodexParams"];
   persistThreadCodexParams: (patch: {
     modelId?: string | null;
     effort?: string | null;
@@ -48,6 +49,7 @@ export function useThreadCodexOrchestration({
     version: threadCodexParamsVersion,
     getThreadCodexParams,
     patchThreadCodexParams,
+    deleteThreadsCodexParams,
   } = useThreadCodexParams();
   const [accessMode, setAccessMode] = useState<AccessMode>("current");
   const [preferredModelId, setPreferredModelId] = useState<string | null>(null);
@@ -113,6 +115,7 @@ export function useThreadCodexOrchestration({
       threadCodexParamsVersion,
       getThreadCodexParams,
       patchThreadCodexParams,
+      deleteThreadsCodexParams,
       persistThreadCodexParams,
       activeThreadIdRef,
       pendingNewThreadSeedRef,
@@ -129,6 +132,7 @@ export function useThreadCodexOrchestration({
       setPreferredCodexArgsOverride,
       getThreadCodexParams,
       patchThreadCodexParams,
+      deleteThreadsCodexParams,
       persistThreadCodexParams,
     ],
   );

@@ -16,7 +16,12 @@ type UseDeleteThreadPromptArgs = {
   threadParentById: Record<string, string>;
   threadStatusById: Record<string, { isProcessing?: boolean } | undefined>;
   runtimeTurns: ReadonlyArray<{ threadId: string; status: string }>;
-  deleteThread: (workspaceId: string, threadId: string) => Promise<unknown>;
+  deleteThread: (
+    workspaceId: string,
+    threadId: string,
+    descendantThreadIds: string[],
+    monitorDeleteOperationId: string,
+  ) => Promise<unknown>;
   onDeleted: (workspaceId: string, deletedThreadIds: Set<string>) => void | Promise<void>;
 };
 
@@ -63,7 +68,16 @@ export function useDeleteThreadPrompt({
     }
     setPrompt((current) => current ? { ...current, busy: true, error: null } : current);
     try {
-      await deleteThread(prompt.workspaceId, prompt.threadId);
+      const descendantThreadIds = [...subtree]
+        .filter((threadId) => threadId !== prompt.threadId)
+        .sort();
+      const monitorDeleteOperationId = globalThis.crypto.randomUUID();
+      await deleteThread(
+        prompt.workspaceId,
+        prompt.threadId,
+        descendantThreadIds,
+        monitorDeleteOperationId,
+      );
       await onDeleted(prompt.workspaceId, subtree);
       setPrompt(null);
     } catch (error) {

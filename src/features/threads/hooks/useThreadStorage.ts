@@ -13,6 +13,7 @@ import {
   makeCustomNameKey,
   makePinKey,
   savePinnedThreads,
+  saveCustomNames,
   saveThreadActivity,
 } from "@threads/utils/threadStorage";
 
@@ -31,19 +32,19 @@ type UseThreadStorageResult = {
   unpinThread: (workspaceId: string, threadId: string) => void;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  forgetThreadStorage: (workspaceId: string, threadIds: Iterable<string>) => void;
 };
 
 export function useThreadStorage(): UseThreadStorageResult {
   const threadActivityRef = useRef<ThreadActivityMap>(loadThreadActivity());
   const pinnedThreadsRef = useRef<PinnedThreadsMap>(loadPinnedThreads());
   const [pinnedThreadsVersion, setPinnedThreadsVersion] = useState(0);
-  const customNamesRef = useRef<CustomNamesMap>({});
+  const customNamesRef = useRef<CustomNamesMap>(loadCustomNames());
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return undefined;
     }
-    customNamesRef.current = loadCustomNames();
     const handleStorage = (event: StorageEvent) => {
       if (event.key === STORAGE_KEY_CUSTOM_NAMES) {
         customNamesRef.current = loadCustomNames();
@@ -137,6 +138,39 @@ export function useThreadStorage(): UseThreadStorageResult {
     [],
   );
 
+  const forgetThreadStorage = useCallback(
+    (workspaceId: string, threadIds: Iterable<string>) => {
+      const ids = new Set(threadIds);
+      const currentWorkspaceActivity = threadActivityRef.current[workspaceId] ?? {};
+      const nextWorkspaceActivity = Object.fromEntries(
+        Object.entries(currentWorkspaceActivity).filter(([threadId]) => !ids.has(threadId)),
+      );
+      const nextActivity = { ...threadActivityRef.current };
+      if (Object.keys(nextWorkspaceActivity).length > 0) {
+        nextActivity[workspaceId] = nextWorkspaceActivity;
+      } else {
+        delete nextActivity[workspaceId];
+      }
+      threadActivityRef.current = nextActivity;
+      saveThreadActivity(nextActivity);
+
+      const removedKeys = new Set([...ids].map((threadId) => `${workspaceId}:${threadId}`));
+      const nextPinned = Object.fromEntries(
+        Object.entries(pinnedThreadsRef.current).filter(([key]) => !removedKeys.has(key)),
+      );
+      pinnedThreadsRef.current = nextPinned;
+      savePinnedThreads(nextPinned);
+      setPinnedThreadsVersion((version) => version + 1);
+
+      const nextCustomNames = Object.fromEntries(
+        Object.entries(customNamesRef.current).filter(([key]) => !removedKeys.has(key)),
+      );
+      customNamesRef.current = nextCustomNames;
+      saveCustomNames(nextCustomNames);
+    },
+    [],
+  );
+
   return {
     customNamesRef,
     pinnedThreadsRef,
@@ -148,5 +182,6 @@ export function useThreadStorage(): UseThreadStorageResult {
     unpinThread,
     isThreadPinned,
     getPinTimestamp,
+    forgetThreadStorage,
   };
 }

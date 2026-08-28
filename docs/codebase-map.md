@@ -125,6 +125,7 @@ All cross-runtime domain behavior belongs in `src-tauri/src/shared/*`:
 - Git and GitHub logic: `src-tauri/src/shared/git_core.rs`, `src-tauri/src/shared/git_ui_core.rs`, `src-tauri/src/shared/git_ui_core/*`
 - Prompts CRUD/listing: `src-tauri/src/shared/prompts_core.rs`
 - Usage snapshot and aggregation: `src-tauri/src/shared/local_usage_core.rs`
+- External Codex source envelopes, rollout discovery/tailing, checkpoints, and source authority: `src-tauri/src/shared/global_sources_core.rs`, `src-tauri/src/shared/global_sources_core/*`
 - Process helpers: `src-tauri/src/shared/process_core.rs`
 
 ## Events Map (Backend -> Frontend)

@@ -25,6 +25,37 @@ Primary app-server event source of truth (methods + typed parsing helpers):
 Primary event router:
 - `src/features/app/hooks/useAppServerEvents.ts`
 
+Agent Monitor runtime normalization and state (wired to the Live UI):
+- `src/features/agent-monitor/runtime/eventNormalizer.ts`
+- `src/features/agent-monitor/runtime/hydration.ts`
+- `src/features/agent-monitor/runtime/runtimeState.ts`
+- `src/features/agent-monitor/runtime/types.ts`
+- `src/features/agent-monitor/hooks/useAgentRuntimeStore.ts`
+- `src/features/agent-monitor/hooks/useAgentRuntimeHydration.ts`
+- sanitized protocol inputs under `docs/fixtures/app-server/`
+
+The runtime normalizer consumes raw Debug Panel records so it can distinguish
+notifications, client request intent, and server responses. It currently confirms
+an observed model only from `thread/start` responses and
+`thread/settings/updated`; client `turn/start.model` remains requested-model
+evidence. Child links come from `item.type = "subAgentActivity"` with
+`kind = "started"`. `model/rerouted` remains deliberately unsupported until a
+real payload is captured.
+
+The Runtime Store is owned by `MainApp`, not by `AgentMonitorPage`, so it remains
+mounted while the user moves between Chat, Home, Git, and Agent Monitor. Raw
+app-server notifications, `thread/start` responses, and client `turn/start`
+requests enter the same normalizer while any page is visible.
+
+Runtime catch-up uses explicit `HYDRATION` provenance. It projects only currently
+processing threads (plus their known ancestors and descendants) from the app's
+current thread identity, parent, thread-status, and active-turn state. Those
+inputs are maintained by the existing `thread/list`, `thread/read`/resume, and
+runtime status paths. Hydration has no server timestamp and never imports a
+historical model or token value. Confirmed observed models still require
+`thread/start` response or `thread/settings/updated`; Thread Token still requires
+`thread/tokenUsage/updated`.
+
 Event handler composition:
 - `src/features/threads/hooks/useThreadEventHandlers.ts`
 
@@ -76,6 +107,7 @@ subscriptions.
 - `item/started`
 - `thread/archived`
 - `thread/closed`
+- `thread/deleted`
 - `thread/name/updated`
 - `thread/started`
 - `thread/status/changed`
@@ -147,6 +179,15 @@ events are currently not routed:
 ## Supported Requests (CodexMonitor -> App-Server, v2)
 
 These are v2 request methods CodexMonitor currently sends to Codex app-server:
+
+- `thread/delete` permanently removes the selected thread. Codex app-server
+  also deletes its spawned descendants. Current upstream integration coverage
+  emits `thread/deleted` child-first for every deleted thread and then observes
+  an empty `thread/loaded/list`. CodexMonitor does not depend on that per-child
+  notification granularity: after a successful delete it performs an
+  authoritative `thread/list` reconciliation with anchor preservation disabled.
+  Sanitized protocol evidence lives in
+  `docs/fixtures/app-server/thread-delete-cascade.protocol.json`.
 
 - `thread/start`
 - `thread/resume`

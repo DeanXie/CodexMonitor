@@ -383,6 +383,18 @@ Freshness: 1.8s ago
 - stale unresolved Running / Waiting 只在 `All` 中展示，不污染默认 `Active / Fresh`。
 - Summary 语义随 Activity Filter 变化：`Active / Fresh` 显示 fresh `ACTIVE`，`All` 显示带说明的 `RECORDED ACTIVE`，`Settled` 不显示活动统计卡。
 
+### Phase 2.4.2 — Cross-View Deletion Reconciliation
+
+**PASS / COMPLETE**
+
+- 官方 `thread/delete` 成功后先持久化 deletion tombstone，再清退 Registry、Watcher/source、checkpoint 与 Monitor-owned cache；删除失败不创建 tombstone。
+- tombstone 是 crash recovery 的持久依据；未完成 reconciliation 在启动时恢复并幂等重试。
+- Registry 与 Watcher 双层拒绝 tombstoned Thread 的 LIVE / NEAR LIVE / HISTORICAL 再 ingest，旧 checkpoint、旧 filesystem event 与 historical discovery 均不得使其复活。
+- Main 与 confirmed descendants 按 canonical Thread key 级联清退；无关 Thread 保持不变。
+- checkpoint 不再保留 deleted rollout path，retired path 不再新增对应 `os error 2`。
+- 清理 Monitor-owned activity、pin、custom name、thread params 与 detached-review 缓存。
+- Desktop sidebar 仍只是 consumer view；不得修改 `session_index.jsonl`、`.codex-global-state.json`、`state_5.sqlite` 或 Desktop 私有 cache。
+
 ### 自动验证
 
 - 聚焦测试：28/28 PASS。
@@ -865,6 +877,8 @@ Phase 2 — Global Sources
 │  PASS ✅
 ├─ 2.4.1b Global Source Historical Reconciliation Fix
 │  PASS ✅
+├─ 2.4.2 Cross-View Deletion Reconciliation
+│  PASS / COMPLETE ✅
 ├─ 2.5 Desktop Near-Live
 │  FORENSICS COMPLETED / ADMISSION GO / ADAPTER NOT STARTED / NEXT FORMAL TDD ←
 └─ 2.6 Historical Unified View

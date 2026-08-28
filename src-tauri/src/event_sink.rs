@@ -1,3 +1,5 @@
+#[cfg(desktop)]
+use tauri::Manager;
 use tauri::{AppHandle, Emitter};
 
 use crate::backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
@@ -15,6 +17,15 @@ impl TauriEventSink {
 
 impl EventSink for TauriEventSink {
     fn emit_app_server_event(&self, event: AppServerEvent) {
+        #[cfg(desktop)]
+        {
+            let state = self.app.state::<crate::state::AppState>();
+            let _ = state.global_rollout_runtime.ingest_app_server_event(
+                &event.workspace_id,
+                &event.message,
+                chrono::Utc::now().timestamp_millis(),
+            );
+        }
         let _ = self.app.emit("app-server-event", event);
     }
 

@@ -50,7 +50,12 @@ pub(crate) async fn local_usage_snapshot_core(
         resolve_sessions_roots(&workspaces, workspace_path.as_deref())
     };
     let snapshot = tokio::task::spawn_blocking(move || {
-        scan_local_usage(days, workspace_path.as_deref(), session_id.as_deref(), &sessions_roots)
+        scan_local_usage(
+            days,
+            workspace_path.as_deref(),
+            session_id.as_deref(),
+            &sessions_roots,
+        )
     })
     .await
     .map_err(|err| err.to_string())??;
@@ -76,7 +81,13 @@ fn scan_local_usage(
     let mut model_totals: HashMap<String, i64> = HashMap::new();
 
     if sessions_roots.is_empty() {
-        return Ok(build_snapshot(updated_at, day_keys, daily, HashMap::new(), session_id.map(|_| false)));
+        return Ok(build_snapshot(
+            updated_at,
+            day_keys,
+            daily,
+            HashMap::new(),
+            session_id.map(|_| false),
+        ));
     }
     let mut session_linked = false;
 
@@ -95,12 +106,24 @@ fn scan_local_usage(
                 if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
                     continue;
                 }
-                session_linked |= scan_file(&path, &mut daily, &mut model_totals, workspace_path, session_id)?;
+                session_linked |= scan_file(
+                    &path,
+                    &mut daily,
+                    &mut model_totals,
+                    workspace_path,
+                    session_id,
+                )?;
             }
         }
     }
 
-    Ok(build_snapshot(updated_at, day_keys, daily, model_totals, session_id.map(|_| session_linked)))
+    Ok(build_snapshot(
+        updated_at,
+        day_keys,
+        daily,
+        model_totals,
+        session_id.map(|_| session_linked),
+    ))
 }
 
 fn build_snapshot(
@@ -802,12 +825,14 @@ mod tests {
             &[
                 r#"{"type":"session_meta","payload":{"id":"thread-a"}}"#.to_string(),
                 r#"{"type":"turn_context","payload":{"model":"gpt-5.6-terra"}}"#.to_string(),
-                format!(r#"{{"timestamp":{timestamp_ms},"type":"event_msg","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":100,"cached_input_tokens":40,"output_tokens":30}}}}}}}}"#),
+                format!(
+                    r#"{{"timestamp":{timestamp_ms},"type":"event_msg","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":100,"cached_input_tokens":40,"output_tokens":30}}}}}}}}"#
+                ),
             ],
         );
 
-        let snapshot = scan_local_usage(2, None, Some("thread-a"), &[root])
-            .expect("scan selected session");
+        let snapshot =
+            scan_local_usage(2, None, Some("thread-a"), &[root]).expect("scan selected session");
 
         assert_eq!(snapshot.totals.last30_days_tokens, 130);
         assert_eq!(snapshot.top_models[0].model, "gpt-5.6-terra");

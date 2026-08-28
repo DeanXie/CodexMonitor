@@ -41,6 +41,8 @@ pub(crate) struct AppState {
     pub(crate) dictation: Mutex<DictationState>,
     pub(crate) codex_login_cancels: Mutex<HashMap<String, CodexLoginCancelState>>,
     pub(crate) tcp_daemon: Mutex<TcpDaemonRuntime>,
+    #[cfg(desktop)]
+    pub(crate) global_rollout_runtime: crate::global_sources::runtime::GlobalRolloutRuntime,
 }
 
 impl AppState {
@@ -64,6 +66,8 @@ impl AppState {
             dictation: Mutex::new(DictationState::default()),
             codex_login_cancels: Mutex::new(HashMap::new()),
             tcp_daemon: Mutex::new(TcpDaemonRuntime::default()),
+            #[cfg(desktop)]
+            global_rollout_runtime: crate::global_sources::runtime::GlobalRolloutRuntime::default(),
         }
     }
 }

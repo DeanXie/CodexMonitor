@@ -1,10 +1,12 @@
+#![allow(dead_code)]
+
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::state::AppState;
 
 const DEFAULT_MODEL_ID: &str = "base";
-const UNSUPPORTED_MESSAGE: &str = "Dictation is not available on mobile builds.";
+const UNSUPPORTED_MESSAGE: &str = "Dictation is disabled in this build.";
 
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]

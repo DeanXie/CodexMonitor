@@ -8,6 +8,8 @@ pub(crate) mod files_core;
 pub(crate) mod git_core;
 pub(crate) mod git_rpc;
 pub(crate) mod git_ui_core;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) mod global_sources_core;
 pub(crate) mod local_usage_core;
 pub(crate) mod process_core;
 pub(crate) mod prompts_core;

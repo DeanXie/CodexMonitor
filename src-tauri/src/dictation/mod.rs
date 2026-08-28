@@ -1,5 +1,6 @@
-#[cfg_attr(any(target_os = "ios", target_os = "android"), path = "stub.rs")]
-#[cfg_attr(not(any(target_os = "ios", target_os = "android")), path = "real.rs")]
+// Dictation is intentionally disabled for this build. Keeping the stub preserves
+// the IPC contract without pulling native Whisper/audio dependencies into Cargo.
+#[path = "stub.rs"]
 mod imp;
 
 pub(crate) use imp::*;

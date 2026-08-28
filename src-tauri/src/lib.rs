@@ -14,6 +14,8 @@ mod event_sink;
 mod files;
 mod git;
 mod git_utils;
+#[cfg(desktop)]
+mod global_sources;
 mod local_usage;
 #[cfg(desktop)]
 mod menu;
@@ -57,6 +59,7 @@ fn keep_daemon_running_after_close(app_handle: &tauri::AppHandle) -> bool {
 
 #[cfg(desktop)]
 async fn stop_managed_daemons_for_exit(app_handle: tauri::AppHandle) {
+    global_sources::shutdown(&app_handle).await;
     let state = app_handle.state::<state::AppState>();
     let _ = tailscale::tailscale_daemon_stop(state).await;
 }
@@ -116,6 +119,10 @@ pub fn run() {
         .setup(|app| {
             let state = state::AppState::load(&app.handle());
             app.manage(state);
+            #[cfg(desktop)]
+            {
+                global_sources::start(&app.handle())?;
+            }
             #[cfg(target_os = "macos")]
             {
                 let tray_state = app.state::<tray::TrayState>();
@@ -226,6 +233,7 @@ pub fn run() {
             codex::list_threads,
             codex::list_mcp_server_status,
             codex::archive_thread,
+            codex::delete_thread,
             codex::compact_thread,
             codex::set_thread_name,
             codex::collaboration_mode_list,
@@ -296,6 +304,8 @@ pub fn run() {
             dictation::dictation_stop,
             dictation::dictation_cancel,
             local_usage::local_usage_snapshot,
+            #[cfg(desktop)]
+            global_sources::snapshot::global_source_snapshot,
             notifications::is_macos_debug_build,
             notifications::app_build_type,
             notifications::send_notification_fallback,

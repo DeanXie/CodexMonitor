@@ -412,8 +412,10 @@ Freshness: 1.8s ago
 
 - Desktop forensics：**COMPLETED**
 - admission：**GO**
-- Desktop Adapter implementation：**NOT STARTED**
-- Next：**Formal TDD**
+- Desktop Near-Live overall：**IN PROGRESS**
+- Slice 1 — File Owner / Replay Guard / Child Execution Boundary：**PASS**
+- Slice 2 — Desktop Metadata + Producer Surface Classifier：**GO / NOT STARTED**
+- Next：**Slice 2 Formal TDD**
 
 ### 目标
 
@@ -453,13 +455,31 @@ Freshness: 1.8s ago
 - Desktop Main 的 `source=vscode` 与 Desktop project/thread metadata 可组成强来源证据；`originator` 仍只作弱证据，单独 `source=vscode` 仍可能与 IDE 混淆。
 - 长/compacted Thread 的 child rollout 会重放 parent `session_meta`；当前 adapter 会因此覆盖 file owner 并把 child observations 错归 parent。
 
-正式编码第一门槛：先用 `docs/fixtures/desktop-rollout/desktop-subagent-compacted-prefix.jsonl` 修复 file-owner/replay 归因，再实现 Desktop metadata/source classifier。直接 UI 接入在此门槛通过前保持阻塞。
+### Desktop Projection / Thread Authority Amendment
+
+```text
+canonical Thread existence
+!= Desktop local_thread_catalog membership
+!= Desktop sidebar visibility
+```
+
+- `local_thread_catalog`、`.codex-global-state.json`、project membership、sidebar/WebView 状态仅是 Desktop-owned supplemental projection metadata，不得单独创建 canonical Thread、Registry lane、Agent Runtime 或 Agent Monitor node。
+- 权威优先级固定为：`Monitor deletion tombstone > confirmed rollout identity > authoritative app-server/persisted Thread state > Desktop projection metadata`。
+- `session_index.jsonl` 存在与否都不是 Thread existence 的必要条件。
+- 同一 `CodexThreadKey` 已有 Monitor deletion tombstone 时，后续 Desktop catalog/sidebar 观察不得使其复活；同标题但不同 full thread id 是独立 Thread。
+- `DESKTOP_STALE_ORPHAN` 仅表示 Desktop projection 仍引用完整 fullThreadId、但 canonical Thread 已不存在。它不进入 `LIVE` / `NEAR_LIVE` / canonical `HISTORICAL`，不创建 Agent Runtime 或 Monitor node，只保留诊断观察。
+- 无 tombstone 时，stale orphan 必须同时满足：精确 fullThreadId 仍在 catalog/sidebar、rollout 不存在、authoritative persisted Thread 不存在、`thread/read` 明确 nonexistent/not-found。证据不足或冲突时保持 `AMBIGUOUS`，不得猜测 ingest。
+- Phase 2.5 禁止写入 `codex-dev.db`、`local_thread_catalog`、`state_5.sqlite`、`.codex-global-state.json` 和 Desktop WebView/cache。
+- 正式 TDD gate 必须覆盖 stale catalog 完整证据、stale row + tombstone、合法 catalog + valid rollout、catalog-only ambiguous、同标题不同 fullThreadId 五类 fixture。
+- 第一 Formal TDD 切片 `Desktop Compacted Child Rollout -> File Owner -> Replay Guard -> Child Execution Boundary` 已 PASS。stale-orphan gate 仍属于后续 Desktop projection/metadata 准入。
+
+`docs/fixtures/desktop-rollout/desktop-subagent-compacted-prefix.jsonl` 的 file-owner/replay gate 已通过。当前正式编码入口是 Desktop metadata/source classifier；直接 UI 接入仍保持阻塞。
 
 ### 当前开发纪律
 
 - Phase 1 Runtime 核心保持冻结，除明确回归外不修改其语义。
 - Desktop 复用现有 rollout watcher、Global Source Core、Source Authority Registry 和 canonical view，不新增第二套 watcher。
-- 先按 TDD 完成 `Desktop Compacted Child Rollout — File Owner / Replay Guard`，再处理 Desktop metadata 与 Producer Surface classifier。
+- Slice 1 保持冻结 PASS；下一步按 TDD 处理 Desktop metadata 与 Producer Surface classifier，stale-orphan admission gate 留在对应 projection/metadata 阶段。
 - 不提前进入 Phase 3。
 
 ---
@@ -899,12 +919,12 @@ RESERVED
 
 下一任务：
 
-**Phase 2.5 — Desktop Compacted Child Rollout — File Owner / Replay Guard（Formal TDD）**
+**Phase 2.5 Slice 2 — Desktop Metadata + Producer Surface Classifier（Formal TDD）**
 
 核心验收：
 
-> 以已保存的真实 compacted child rollout fixture 为协议输入，固定第一条完整 `session_meta` 所确认的 file owner，隔离 parent history replay，确保重放历史不污染 child model、Token 或 lifecycle。
+> Slice 1 已 PASS：每个 generation 的第一条完整 `session_meta` 固定 file owner，parent replay 在 child execution boundary 前不进入 authoritative runtime lane，checkpoint 持久化 replay-guard 状态。下一步按设计实现只读 Desktop metadata 与 Producer Surface classifier。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 
-Desktop 真实取证已完成；不得重新执行 Phase 2.1–2.4，也不得把 Desktop forensics 当作待办。完成 file-owner/replay guard 后，下一切片才是 Desktop metadata + Producer Surface classifier；在此之前不接 UI。
+Desktop 真实取证已完成，Slice 1 已 PASS；不得重新执行 Phase 2.1–2.4 或重做 Slice 1。Slice 2 准入为 GO，但尚未开始；在其正式 TDD 前不接 UI，也不实现 stale-orphan gate。

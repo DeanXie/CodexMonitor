@@ -1,7 +1,12 @@
 # Codex Desktop Near-Live Forensics
 
-Status: **REAL FORENSICS COMPLETE — FORMAL ADAPTER NOT IMPLEMENTED**  
+Status: **DESKTOP NEAR-LIVE IN PROGRESS — SLICE 1 PASS — SLICE 2 GO**
 Captured: 2026-08-27 (Asia/Shanghai)
+Design amendment: 2026-08-29 — Desktop projection authority and stale-orphan admission
+
+Implementation status: Desktop forensics **COMPLETED**; File Owner / Replay
+Guard / Child Execution Boundary **PASS**; Desktop Metadata + Producer Surface
+Classifier **GO / NOT STARTED**.
 
 This report contains protocol and metadata facts only. Raw prompts, reasoning,
 agent messages, credentials, and unrestricted diagnostics are excluded.
@@ -19,6 +24,10 @@ spawned from the long/compacted Desktop Thread contained a file-owner child
 `session_meta`. The current adapter accepted the replayed metadata as a new
 owner and subsequently attributed the child's lifecycle, model, and tokens to
 the parent. This is a strict coding gate for Desktop UI integration.
+
+Desktop sidebar visibility and `local_thread_catalog` membership are not
+canonical Thread-existence evidence. They are supplemental projection metadata
+only.
 
 ## Evidence set
 
@@ -203,6 +212,10 @@ Evidence sources and authority:
    at Thread creation, so it is title/history metadata, not a live workspace or
    lifecycle source.
 
+Presence in, or absence from, `session_index.jsonl` is not a necessary
+condition for canonical Thread existence. Valid Threads may be absent from that
+index, so it remains supplemental evidence only.
+
 Recommended mapping:
 
 - primary: normalized rollout cwd to configured workspace roots;
@@ -239,7 +252,60 @@ coding therefore needs an explicit contract decision: add
 surface classification to canonical snapshots. Continuing to label confirmed
 Desktop data as `codex-cli-rollout` would be misleading.
 
-## 9. Canonical deduplication and authority
+## 9. Canonical existence, deduplication, and authority
+
+The adapter must keep these concepts separate:
+
+```text
+canonical Thread existence
+!= Desktop local_thread_catalog membership
+!= Desktop sidebar visibility
+```
+
+`local_thread_catalog`, `.codex-global-state.json`, project membership, Desktop
+sidebar state, and Desktop WebView/cache data are Desktop-owned supplemental
+projection metadata. None may independently create a canonical Thread, a
+Registry lane, an Agent Runtime, or an Agent Monitor node.
+
+The evidence hierarchy is:
+
+```text
+Monitor deletion tombstone
+>
+confirmed rollout identity
+>
+authoritative app-server/persisted Thread state
+>
+Desktop projection metadata
+```
+
+A Monitor deletion tombstone is final for the same `CodexThreadKey`: later
+Desktop catalog/sidebar observations must not resurrect it. Title equality is
+not identity; a different full thread id remains an independent Thread.
+
+### `DESKTOP_STALE_ORPHAN`
+
+`DESKTOP_STALE_ORPHAN` means Desktop catalog/sidebar projection still references
+a complete full thread id while the canonical Thread no longer exists. It is a
+diagnostic/Desktop-projection observation only:
+
+- it does not enter `LIVE`;
+- it does not enter `NEAR_LIVE`;
+- it does not enter the canonical `HISTORICAL` Registry;
+- it does not create an Agent Runtime or Agent Monitor node.
+
+If a Monitor deletion tombstone exists for the same `CodexThreadKey`, canonical
+ingest is rejected immediately and a matching Desktop projection is stale.
+Without a tombstone, `DESKTOP_STALE_ORPHAN` requires all of the following:
+
+- Desktop catalog/sidebar contains the exact full thread id;
+- no confirmed rollout identity exists;
+- authoritative persisted Thread state is absent;
+- `thread/read` explicitly reports nonexistent or an equivalent not-found result.
+
+Absence from `session_index.jsonl` is not part of this test. Incomplete or
+contradictory evidence remains `AMBIGUOUS`; the adapter must not guess canonical
+existence or ingest it.
 
 All observations of the same
 `(codexHome.identity, fullThreadId)` share one canonical Thread with separate
@@ -291,13 +357,23 @@ Minimal formal implementation slices:
    fixture. It must pin the first `session_meta` and suppress inherited prefix
    state from the child lane until a child execution boundary is confirmed.
 2. Read-only Desktop metadata adapter for `.codex-global-state.json` and,
-   optionally, `state_5.sqlite`, isolated from Source Core protocol parsing.
+   optionally, `state_5.sqlite` or `codex-dev.db` / `local_thread_catalog`,
+   isolated from Source Core protocol parsing.
 3. Source-surface classifier with evidence/confidence/provenance and an explicit
    unknown/ambiguous outcome.
 4. Contract/snapshot representation for Desktop versus ambiguous rollout
    source, requiring approval because the current `SourceKind` enum is closed.
 5. TDD fixtures for Desktop root, compacted child, source ambiguity, metadata
    absence/schema drift, workspace matching, dedup, and authority isolation.
+6. Desktop stale-orphan admission fixtures:
+
+   | Fixture | Expected result |
+   |---|---|
+   | `local_thread_catalog` contains full id; rollout absent; authoritative Thread absent; `thread/read = nonexistent` | `DESKTOP_STALE_ORPHAN`; canonical ingest rejected; Agent Monitor node not created |
+   | stale catalog row plus matching Monitor deletion tombstone | tombstone wins; canonical ingest rejected |
+   | legitimate Desktop Thread plus catalog row plus valid confirmed rollout | eligible for normal canonical classification; not stale orphan |
+   | catalog-only evidence with insufficient authority evidence | `AMBIGUOUS`; no guessed canonical ingest |
+   | same title but different full thread id | independent Thread; unrelated tombstone has no effect |
 
 ## 12. Coding gate
 
@@ -307,8 +383,9 @@ represented without mislabeling.**
 
 Recommended first coding order:
 
-1. compacted-child parser/adapter regression tests and fix;
-2. Desktop metadata reader and workspace mapping tests;
+1. `Desktop Compacted Child Rollout -> File Owner -> Replay Guard -> Child Execution Boundary`;
+2. Desktop metadata/workspace tests, stale-orphan admission gate, and read-only
+   adapter;
 3. source-surface contract decision and classifier;
 4. canonical registry integration;
 5. real A/B Desktop E2E;
@@ -324,3 +401,8 @@ Recommended first coding order:
 - Natural partial-line, truncate, and rotation behavior did not occur in this
   probe; existing defensive watcher tests remain the evidence for those cases.
 - Desktop metadata cannot drive Running/Waiting/Completed by itself.
+- Do not modify `codex-dev.db`, `local_thread_catalog`, `state_5.sqlite`,
+  `.codex-global-state.json`, or Desktop WebView/cache data. Phase 2.5 observes,
+  classifies, and diagnoses only.
+- This amendment does not expand the first implementation slice. Stale-orphan
+  admission belongs to the later Desktop projection/metadata slice.

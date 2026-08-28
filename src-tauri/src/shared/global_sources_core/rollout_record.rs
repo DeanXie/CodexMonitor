@@ -65,12 +65,18 @@ pub(crate) struct WaitRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ChildBoundaryMarkerRecord {
+    pub record_timestamp_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ParsedRolloutRecord {
     SessionMeta(SessionMetaRecord),
     TaskStarted(TaskStartedRecord),
     TurnContext(TurnContextRecord),
     TokenCount(TokenCountRecord),
     TaskComplete(TaskCompleteRecord),
+    ChildBoundaryMarker(ChildBoundaryMarkerRecord),
     WaitStarted(WaitRecord),
     WaitResumed(WaitRecord),
 }
@@ -99,6 +105,7 @@ impl ParsedRolloutRecord {
             Self::TurnContext(value) => value.record_timestamp_ms,
             Self::TokenCount(value) => value.record_timestamp_ms,
             Self::TaskComplete(value) => value.record_timestamp_ms,
+            Self::ChildBoundaryMarker(value) => value.record_timestamp_ms,
             Self::WaitStarted(value) | Self::WaitResumed(value) => value.record_timestamp_ms,
         }
     }
@@ -201,6 +208,11 @@ impl RolloutRecordParser {
                     started_at_seconds: payload.get("started_at").and_then(Value::as_i64),
                     completed_at_seconds: integer(payload, "completed_at")?,
                     duration_ms: unsigned(payload, "duration_ms")?,
+                },
+            ))),
+            "thread_settings_applied" => Ok(Some(ParsedRolloutRecord::ChildBoundaryMarker(
+                ChildBoundaryMarkerRecord {
+                    record_timestamp_ms,
                 },
             ))),
             "token_count" => {

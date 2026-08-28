@@ -3,10 +3,32 @@ use super::rollout_tail::RolloutCheckpoint;
 use super::source_envelope::SourceFileIdentity;
 use super::source_registry::{ExternalLifecycle, TokenSnapshot};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub(crate) enum RolloutReplayGuardState {
+    #[default]
+    Uninitialized,
+    Unrestricted,
+    AwaitingReplayEvidence {
+        replay_parent_thread_id: String,
+    },
+    AwaitingChildBoundary {
+        replay_parent_thread_id: String,
+        #[serde(default)]
+        replay_parent_identity_seen: bool,
+        #[serde(default)]
+        boundary_marker_seen: bool,
+        #[serde(default)]
+        replay_turn_ids: BTreeSet<String>,
+    },
+    ChildActive,
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +44,35 @@ pub(crate) struct RolloutAdapterCheckpoint {
     pub source_timestamp_ms: Option<i64>,
     pub producer_version: Option<String>,
     pub completed: bool,
+    #[serde(default)]
+    pub replay_guard: RolloutReplayGuardState,
+}
+
+impl RolloutAdapterCheckpoint {
+    pub(crate) fn normalize_restored_replay_guard(&mut self) {
+        if self.replay_guard != RolloutReplayGuardState::Uninitialized {
+            return;
+        }
+        if self.thread_key.is_none() {
+            return;
+        }
+        self.replay_guard = match self.parent_thread_key.as_ref() {
+            Some(parent) => {
+                self.active_turn_id = None;
+                self.lifecycle = None;
+                self.observed_model = None;
+                self.token_snapshot = None;
+                self.completed = false;
+                RolloutReplayGuardState::AwaitingChildBoundary {
+                    replay_parent_thread_id: parent.thread_id.clone(),
+                    replay_parent_identity_seen: false,
+                    boundary_marker_seen: false,
+                    replay_turn_ids: BTreeSet::new(),
+                }
+            }
+            None => RolloutReplayGuardState::Unrestricted,
+        };
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

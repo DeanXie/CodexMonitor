@@ -3,8 +3,8 @@ use super::deletion_tombstone::{
     DeletionTombstoneStore, DesktopReconciliationState,
 };
 use super::rollout_checkpoint::{
-    RolloutAdapterCheckpoint, RolloutCheckpointStore, RolloutSourceCheckpoint,
-    RolloutWatcherCheckpoint,
+    RolloutAdapterCheckpoint, RolloutCheckpointStore, RolloutReplayGuardState,
+    RolloutSourceCheckpoint, RolloutWatcherCheckpoint,
 };
 use super::rollout_discovery::{discover_rollout_sources, CodexHomeSource};
 use super::rollout_identity::{identity_from_session_meta, CodexTurnKey};
@@ -304,32 +304,35 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
                 checkpoint.source_file.filesystem_id == source.file_identity.filesystem_id
             });
             let watched = match restored {
-                Some(checkpoint) => WatchedSource {
-                    codex_home: source.codex_home,
-                    path: source.path.clone(),
-                    source_file: checkpoint.source_file,
-                    tail: RolloutTailState::from_checkpoint(checkpoint.tail),
-                    parser: RolloutRecordParser::default(),
-                    adapter: checkpoint.adapter.clone(),
-                    health: SourceHealth {
-                        source_path: source.path,
-                        last_complete_record_observed_at_ms: checkpoint
-                            .last_complete_record_observed_at_ms,
-                        last_successful_read_at_ms: checkpoint.last_successful_read_at_ms,
-                        last_filesystem_signal_at_ms: checkpoint.last_filesystem_signal_at_ms,
-                        latest_source_timestamp_ms: checkpoint.adapter.source_timestamp_ms,
-                        lag_ms: None,
-                        consecutive_read_failures: 0,
-                        last_error: None,
-                        freshness: FreshnessEvidence {
-                            state: FreshnessState::Unknown,
+                Some(mut checkpoint) => {
+                    checkpoint.adapter.normalize_restored_replay_guard();
+                    WatchedSource {
+                        codex_home: source.codex_home,
+                        path: source.path.clone(),
+                        source_file: checkpoint.source_file,
+                        tail: RolloutTailState::from_checkpoint(checkpoint.tail),
+                        parser: RolloutRecordParser::default(),
+                        adapter: checkpoint.adapter.clone(),
+                        health: SourceHealth {
+                            source_path: source.path,
                             last_complete_record_observed_at_ms: checkpoint
                                 .last_complete_record_observed_at_ms,
-                            reason: "restored checkpoint awaiting reconciliation".to_string(),
+                            last_successful_read_at_ms: checkpoint.last_successful_read_at_ms,
+                            last_filesystem_signal_at_ms: checkpoint.last_filesystem_signal_at_ms,
+                            latest_source_timestamp_ms: checkpoint.adapter.source_timestamp_ms,
+                            lag_ms: None,
+                            consecutive_read_failures: 0,
+                            last_error: None,
+                            freshness: FreshnessEvidence {
+                                state: FreshnessState::Unknown,
+                                last_complete_record_observed_at_ms: checkpoint
+                                    .last_complete_record_observed_at_ms,
+                                reason: "restored checkpoint awaiting reconciliation".to_string(),
+                            },
                         },
-                    },
-                    published_freshness: None,
-                },
+                        published_freshness: None,
+                    }
+                }
                 None => WatchedSource {
                     codex_home: source.codex_home,
                     path: source.path.clone(),
@@ -704,6 +707,9 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
                 &record.line_hash,
             );
             let field_update = apply_record(source, &parsed);
+            if matches!(parsed, ParsedRolloutRecord::ChildBoundaryMarker(_)) {
+                continue;
+            }
             let freshness = source_freshness(
                 Some(source_timestamp_ms),
                 observed_timestamp_ms,
@@ -1009,6 +1015,100 @@ fn apply_record(
     source: &mut WatchedSource,
     record: &ParsedRolloutRecord,
 ) -> Option<RecordFieldUpdate> {
+    if let ParsedRolloutRecord::SessionMeta(meta) = record {
+        if source.adapter.thread_key.is_some() {
+            match &mut source.adapter.replay_guard {
+                RolloutReplayGuardState::AwaitingReplayEvidence {
+                    replay_parent_thread_id,
+                } => {
+                    source.adapter.replay_guard = RolloutReplayGuardState::AwaitingChildBoundary {
+                        replay_parent_identity_seen: meta.id == *replay_parent_thread_id,
+                        replay_parent_thread_id: replay_parent_thread_id.clone(),
+                        boundary_marker_seen: false,
+                        replay_turn_ids: Default::default(),
+                    };
+                }
+                RolloutReplayGuardState::AwaitingChildBoundary {
+                    replay_parent_thread_id,
+                    replay_parent_identity_seen,
+                    ..
+                } => {
+                    if meta.id == *replay_parent_thread_id {
+                        *replay_parent_identity_seen = true;
+                    }
+                }
+                RolloutReplayGuardState::Uninitialized
+                | RolloutReplayGuardState::Unrestricted
+                | RolloutReplayGuardState::ChildActive => {}
+            }
+            return None;
+        }
+    }
+
+    if let RolloutReplayGuardState::AwaitingReplayEvidence {
+        replay_parent_thread_id,
+    } = &source.adapter.replay_guard
+    {
+        match record {
+            ParsedRolloutRecord::TaskStarted(_) => {
+                source.adapter.replay_guard = RolloutReplayGuardState::ChildActive;
+            }
+            ParsedRolloutRecord::ChildBoundaryMarker(_) => {
+                source.adapter.replay_guard = RolloutReplayGuardState::AwaitingChildBoundary {
+                    replay_parent_thread_id: replay_parent_thread_id.clone(),
+                    replay_parent_identity_seen: false,
+                    boundary_marker_seen: true,
+                    replay_turn_ids: Default::default(),
+                };
+                return None;
+            }
+            ParsedRolloutRecord::TurnContext(_)
+            | ParsedRolloutRecord::TokenCount(_)
+            | ParsedRolloutRecord::TaskComplete(_)
+            | ParsedRolloutRecord::WaitStarted(_)
+            | ParsedRolloutRecord::WaitResumed(_) => return None,
+            ParsedRolloutRecord::SessionMeta(_) => unreachable!("handled above"),
+        }
+    }
+
+    if let RolloutReplayGuardState::AwaitingChildBoundary {
+        replay_parent_identity_seen,
+        boundary_marker_seen,
+        replay_turn_ids,
+        ..
+    } = &mut source.adapter.replay_guard
+    {
+        match record {
+            ParsedRolloutRecord::ChildBoundaryMarker(_) => {
+                *boundary_marker_seen = true;
+                return None;
+            }
+            ParsedRolloutRecord::TaskStarted(value)
+                if *replay_parent_identity_seen
+                    && *boundary_marker_seen
+                    && !replay_turn_ids.contains(&value.turn_id) =>
+            {
+                source.adapter.replay_guard = RolloutReplayGuardState::ChildActive;
+            }
+            ParsedRolloutRecord::TaskStarted(value) => {
+                replay_turn_ids.insert(value.turn_id.clone());
+                return None;
+            }
+            ParsedRolloutRecord::TurnContext(value) => {
+                replay_turn_ids.insert(value.turn_id.clone());
+                return None;
+            }
+            ParsedRolloutRecord::TaskComplete(value) => {
+                replay_turn_ids.insert(value.turn_id.clone());
+                return None;
+            }
+            ParsedRolloutRecord::TokenCount(_)
+            | ParsedRolloutRecord::WaitStarted(_)
+            | ParsedRolloutRecord::WaitResumed(_) => return None,
+            ParsedRolloutRecord::SessionMeta(_) => unreachable!("handled above"),
+        }
+    }
+
     let (lifecycle, observed_model, token_snapshot) = match record {
         ParsedRolloutRecord::SessionMeta(meta) => {
             let identity = identity_from_session_meta(&source.codex_home, meta);
@@ -1019,6 +1119,12 @@ fn apply_record(
             source.adapter.agent_path = identity.agent_path;
             source.adapter.producer_version = meta.cli_version.clone();
             source.adapter.completed = false;
+            source.adapter.replay_guard = match meta.subagent_spawn.as_ref() {
+                Some(spawn) => RolloutReplayGuardState::AwaitingReplayEvidence {
+                    replay_parent_thread_id: spawn.parent_thread_id.clone(),
+                },
+                None => RolloutReplayGuardState::Unrestricted,
+            };
             (None, None, None)
         }
         ParsedRolloutRecord::TaskStarted(value) => {
@@ -1058,6 +1164,7 @@ fn apply_record(
             source.adapter.completed = true;
             (Some(ExternalLifecycle::Completed), None, None)
         }
+        ParsedRolloutRecord::ChildBoundaryMarker(_) => unreachable!("handled as internal evidence"),
     };
     let thread_key = source.adapter.thread_key.clone()?;
     let turn_key = source

@@ -2,7 +2,9 @@ use super::deletion_tombstone::{
     DeletionReconciliationState, DeletionTombstone, DeletionTombstoneDocument,
     DeletionTombstoneStore,
 };
-use super::rollout_checkpoint::{RolloutSourceCheckpoint, RolloutWatcherCheckpoint};
+use super::rollout_checkpoint::{
+    RolloutReplayGuardState, RolloutSourceCheckpoint, RolloutWatcherCheckpoint,
+};
 use super::rollout_discovery::{discover_rollout_sources, CodexHomeSource};
 use super::rollout_identity::CodexThreadKey;
 use super::rollout_tail::{read_rollout_delta, RolloutDelta, RolloutTailState};
@@ -29,6 +31,21 @@ fn legacy_completed_fixture() -> serde_json::Value {
         .join("cli-rollout")
         .join("legacy-completed-sessions.json");
     serde_json::from_slice(&fs::read(path).expect("legacy fixture")).expect("valid fixture")
+}
+
+fn desktop_compacted_child_fixture_lines() -> Vec<String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("repository root")
+        .join("docs")
+        .join("fixtures")
+        .join("desktop-rollout")
+        .join("desktop-subagent-compacted-prefix.jsonl");
+    fs::read_to_string(path)
+        .expect("desktop compacted child fixture")
+        .lines()
+        .map(str::to_string)
+        .collect()
 }
 
 fn temp_dir() -> PathBuf {
@@ -181,6 +198,261 @@ fn config(root: &Path, identity: &str, checkpoint: &Path) -> RolloutWatcherConfi
         settled_after_ms: 10_000,
         reconciliation_interval_ms: 1_000,
     }
+}
+
+#[test]
+fn desktop_compacted_child_pins_file_owner_and_publishes_only_child_execution() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "desktop-compacted-child");
+    write_lines(&path, &desktop_compacted_child_fixture_lines());
+    let mut watcher = RolloutTailWatcher::new(config(&root, "desktop-home", &checkpoint));
+
+    watcher
+        .reconcile(1_787_793_004_000)
+        .expect("reconcile fixture");
+
+    let snapshot = watcher.registry().snapshot();
+    assert_eq!(snapshot.threads.len(), 1);
+    let child = &snapshot.threads[0];
+    assert_eq!(child.key.thread_id, "thread-child-0001");
+    assert_eq!(
+        child
+            .parent_thread_key
+            .as_ref()
+            .map(|value| value.value.thread_id.as_str()),
+        Some("thread-main-0001")
+    );
+    assert_eq!(
+        child.agent_path.as_ref().map(|value| value.value.as_str()),
+        Some("/root/desktop_probe")
+    );
+    assert_eq!(
+        child
+            .current_turn
+            .as_ref()
+            .map(|turn| turn.key.turn_id.as_str()),
+        Some("turn-child-0001")
+    );
+    assert_eq!(
+        child.lifecycle.as_ref().map(|value| value.value),
+        Some(ExternalLifecycle::Completed)
+    );
+    assert_eq!(
+        child
+            .observed_model
+            .as_ref()
+            .map(|value| value.value.as_str()),
+        Some("gpt-observed-child")
+    );
+    assert_eq!(
+        child
+            .token_snapshot
+            .as_ref()
+            .map(|value| value.value.total_tokens),
+        Some(1_680)
+    );
+    assert_eq!(
+        watcher
+            .source_file_for_path(&path)
+            .and_then(|source| source.session_meta_id.as_deref()),
+        Some("thread-child-0001")
+    );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn desktop_compacted_child_replay_prefix_stays_non_authoritative_while_pending() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "desktop-compacted-prefix");
+    let lines = desktop_compacted_child_fixture_lines();
+    write_lines(&path, &lines[..6]);
+    let mut watcher = RolloutTailWatcher::new(config(&root, "desktop-home", &checkpoint));
+
+    watcher
+        .reconcile(1_787_793_001_000)
+        .expect("reconcile prefix");
+
+    let snapshot = watcher.registry().snapshot();
+    assert_eq!(snapshot.threads.len(), 1);
+    let child = &snapshot.threads[0];
+    assert_eq!(child.key.thread_id, "thread-child-0001");
+    assert_eq!(
+        child
+            .parent_thread_key
+            .as_ref()
+            .map(|value| value.value.thread_id.as_str()),
+        Some("thread-main-0001")
+    );
+    assert_eq!(
+        child.agent_path.as_ref().map(|value| value.value.as_str()),
+        Some("/root/desktop_probe")
+    );
+    assert!(child.current_turn.is_none());
+    assert!(child.lifecycle.is_none());
+    assert!(child.observed_model.is_none());
+    assert!(child.token_snapshot.is_none());
+    assert_eq!(
+        watcher
+            .source_file_for_path(&path)
+            .and_then(|source| source.session_meta_id.as_deref()),
+        Some("thread-child-0001")
+    );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn desktop_compacted_child_requires_complete_boundary_evidence() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "desktop-ambiguous-boundary");
+    let lines = desktop_compacted_child_fixture_lines();
+    let without_marker = lines
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, line)| (index != 5).then_some(line))
+        .collect::<Vec<_>>();
+    write_lines(&path, &without_marker);
+    let mut watcher = RolloutTailWatcher::new(config(&root, "desktop-home", &checkpoint));
+
+    watcher
+        .reconcile(1_787_793_004_000)
+        .expect("reconcile ambiguous fixture");
+
+    let snapshot = watcher.registry().snapshot();
+    assert_eq!(snapshot.threads.len(), 1);
+    let child = &snapshot.threads[0];
+    assert_eq!(child.key.thread_id, "thread-child-0001");
+    assert!(child.current_turn.is_none());
+    assert!(child.lifecycle.is_none());
+    assert!(child.observed_model.is_none());
+    assert!(child.token_snapshot.is_none());
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn desktop_compacted_child_checkpoint_restores_pending_guard_before_boundary() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "desktop-checkpoint-boundary");
+    let lines = desktop_compacted_child_fixture_lines();
+    write_lines(&path, &lines[..6]);
+    let watcher_config = config(&root, "desktop-home", &checkpoint);
+    let mut initial = RolloutTailWatcher::new(watcher_config.clone());
+    initial.reconcile(1_787_793_001_000).expect("prefix");
+    drop(initial);
+
+    let saved: RolloutWatcherCheckpoint =
+        serde_json::from_slice(&fs::read(&checkpoint).expect("checkpoint"))
+            .expect("valid checkpoint");
+    assert!(matches!(
+        &saved.sources[0].adapter.replay_guard,
+        RolloutReplayGuardState::AwaitingChildBoundary {
+            replay_parent_thread_id,
+            replay_parent_identity_seen: true,
+            boundary_marker_seen: true,
+            replay_turn_ids,
+        } if replay_parent_thread_id == "thread-main-0001"
+            && replay_turn_ids.contains("turn-parent-inherited")
+    ));
+
+    append_lines(&path, &lines[6..]);
+    let mut restarted = RolloutTailWatcher::new(watcher_config);
+    restarted
+        .reconcile(1_787_793_004_000)
+        .expect("resume after boundary");
+    let snapshot = restarted.registry().snapshot();
+    assert_eq!(snapshot.threads.len(), 1);
+    let child = &snapshot.threads[0];
+    assert_eq!(child.key.thread_id, "thread-child-0001");
+    assert_eq!(
+        child.lifecycle.as_ref().map(|value| value.value),
+        Some(ExternalLifecycle::Completed)
+    );
+    assert_eq!(
+        child
+            .observed_model
+            .as_ref()
+            .map(|value| value.value.as_str()),
+        Some("gpt-observed-child")
+    );
+    assert_eq!(
+        child
+            .token_snapshot
+            .as_ref()
+            .map(|value| value.value.total_tokens),
+        Some(1_680)
+    );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn desktop_compacted_child_duplicate_replay_prefix_is_idempotent() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "desktop-duplicate-prefix");
+    let lines = desktop_compacted_child_fixture_lines();
+    let mut duplicated = lines[..4].to_vec();
+    duplicated.extend_from_slice(&lines[1..4]);
+    duplicated.extend_from_slice(&lines[4..]);
+    write_lines(&path, &duplicated);
+    let mut watcher = RolloutTailWatcher::new(config(&root, "desktop-home", &checkpoint));
+
+    watcher
+        .reconcile(1_787_793_004_000)
+        .expect("reconcile duplicate prefix");
+
+    let snapshot = watcher.registry().snapshot();
+    assert_eq!(snapshot.threads.len(), 1);
+    let child = &snapshot.threads[0];
+    assert_eq!(child.key.thread_id, "thread-child-0001");
+    assert_eq!(
+        child
+            .current_turn
+            .as_ref()
+            .map(|turn| turn.key.turn_id.as_str()),
+        Some("turn-child-0001")
+    );
+    assert_eq!(
+        child
+            .token_snapshot
+            .as_ref()
+            .map(|value| value.value.total_tokens),
+        Some(1_680)
+    );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn desktop_compacted_child_generation_reset_accepts_a_new_file_owner() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "desktop-generation-reset");
+    write_lines(&path, &desktop_compacted_child_fixture_lines());
+    let mut watcher = RolloutTailWatcher::new(config(&root, "desktop-home", &checkpoint));
+    watcher.reconcile(1_787_793_004_000).expect("initial child");
+    let old_generation = watcher
+        .source_file_for_path(&path)
+        .expect("source")
+        .generation
+        .clone();
+
+    write_lines(&path, &[session_meta("thread-new-owner", "C:\\fixture")]);
+    watcher
+        .reconcile(1_787_793_005_000)
+        .expect("generation reset");
+
+    let source = watcher.source_file_for_path(&path).expect("reset source");
+    assert_ne!(source.generation, old_generation);
+    assert_eq!(source.session_meta_id.as_deref(), Some("thread-new-owner"));
+    assert!(watcher
+        .registry()
+        .snapshot()
+        .threads
+        .iter()
+        .any(|thread| thread.key.thread_id == "thread-new-owner"));
+    fs::remove_dir_all(root).ok();
 }
 
 #[test]

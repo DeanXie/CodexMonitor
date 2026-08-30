@@ -1,3 +1,7 @@
+use super::desktop_projection::{
+    classify_producer_surface, ProducerSurface, ProducerSurfaceClassification,
+    ProducerSurfaceInput, WorkspaceAssignment,
+};
 use super::rollout_identity::{CodexThreadKey, CodexTurnKey};
 use super::source_envelope::{FreshnessEvidence, FreshnessState, SourceKind, SourceTemporalClass};
 use serde::{Deserialize, Serialize};
@@ -90,6 +94,8 @@ pub(crate) struct CanonicalSourceThread {
     pub lifecycle: Option<ResolvedValue<ExternalLifecycle>>,
     pub observed_model: Option<ResolvedValue<String>>,
     pub token_snapshot: Option<ResolvedValue<TokenSnapshot>>,
+    pub producer_surface: ProducerSurfaceClassification,
+    pub workspace_assignment: Option<WorkspaceAssignment>,
     pub authority_provenance: Option<FieldProvenance>,
     pub live_lane_count: usize,
     pub near_live_lane_count: usize,
@@ -130,6 +136,8 @@ pub(crate) struct ThreadSourceLanes {
     agent_path: Option<ResolvedValue<String>>,
     current_turn_key: Option<ResolvedValue<CodexTurnKey>>,
     turns: HashMap<CodexTurnKey, CanonicalTurnEvidence>,
+    producer_surface: ProducerSurfaceClassification,
+    workspace_assignment: Option<WorkspaceAssignment>,
 }
 
 impl ThreadSourceLanes {
@@ -192,6 +200,10 @@ impl SourceAuthorityRegistry {
         }
         let provenance = provenance_from_update(update);
         let thread = self.threads.entry(update.thread_key.clone()).or_default();
+        if update.source_kind == SourceKind::MonitorAppServer {
+            thread.producer_surface =
+                classify_producer_surface(&ProducerSurfaceInput::monitor_live());
+        }
         update_field(
             &mut thread.parent_thread_key,
             parent_thread_key,
@@ -222,6 +234,10 @@ impl SourceAuthorityRegistry {
             update.source_instance_id, update.source_generation
         );
         let thread = self.threads.entry(update.thread_key.clone()).or_default();
+        if update.source_kind == SourceKind::MonitorAppServer {
+            thread.producer_surface =
+                classify_producer_surface(&ProducerSurfaceInput::monitor_live());
+        }
         let lanes = match update.temporal_class {
             SourceTemporalClass::Live => &mut thread.live,
             SourceTemporalClass::NearLive => &mut thread.near_live,
@@ -278,12 +294,62 @@ impl SourceAuthorityRegistry {
         self.tombstoned_thread_keys.contains(key)
     }
 
+    pub(crate) fn supplement_desktop_projection(
+        &mut self,
+        key: &CodexThreadKey,
+        producer_surface: ProducerSurfaceClassification,
+        workspace_assignment: Option<WorkspaceAssignment>,
+    ) -> bool {
+        if self.tombstoned_thread_keys.contains(key) {
+            return false;
+        }
+        let Some(thread) = self.threads.get_mut(key) else {
+            return false;
+        };
+        thread.producer_surface =
+            merge_producer_surface(thread.producer_surface.clone(), producer_surface);
+        if let Some(workspace_assignment) = workspace_assignment {
+            thread.workspace_assignment = Some(workspace_assignment);
+        }
+        true
+    }
+
+    pub(crate) fn reset_rollout_supplemental_evidence(&mut self) {
+        for thread in self.threads.values_mut() {
+            if thread.producer_surface.surface != ProducerSurface::Monitor {
+                thread.producer_surface = ProducerSurfaceClassification::default();
+                thread.workspace_assignment = None;
+            }
+        }
+    }
+
     pub(crate) fn thread_count(&self) -> usize {
         self.threads.len()
     }
 
     pub(crate) fn lanes(&self, key: &CodexThreadKey) -> Option<&ThreadSourceLanes> {
         self.threads.get(key)
+    }
+
+    pub(crate) fn has_confirmed_rollout_identity(&self, key: &CodexThreadKey) -> bool {
+        self.threads
+            .get(key)
+            .is_some_and(|thread| !thread.near_live.is_empty())
+    }
+
+    pub(crate) fn producer_surface(&self, key: &CodexThreadKey) -> Option<ProducerSurface> {
+        self.threads
+            .get(key)
+            .map(|thread| thread.producer_surface.surface)
+    }
+
+    pub(crate) fn workspace_assignment(
+        &self,
+        key: &CodexThreadKey,
+    ) -> Option<&WorkspaceAssignment> {
+        self.threads
+            .get(key)
+            .and_then(|thread| thread.workspace_assignment.as_ref())
     }
 
     pub(crate) fn resolve(&self, key: &CodexThreadKey) -> Option<AuthoritativeThreadView> {
@@ -338,6 +404,8 @@ impl SourceAuthorityRegistry {
                     lifecycle: resolved.lifecycle,
                     observed_model: resolved.observed_model,
                     token_snapshot: resolved.token_snapshot,
+                    producer_surface: lanes.producer_surface.clone(),
+                    workspace_assignment: lanes.workspace_assignment.clone(),
                     authority_provenance,
                     live_lane_count: lanes.live_count(),
                     near_live_lane_count: lanes.near_live_count(),
@@ -382,6 +450,61 @@ impl SourceAuthorityRegistry {
             }
         }
         expired
+    }
+}
+
+fn merge_producer_surface(
+    current: ProducerSurfaceClassification,
+    incoming: ProducerSurfaceClassification,
+) -> ProducerSurfaceClassification {
+    if current.surface == ProducerSurface::Monitor {
+        return current;
+    }
+    if current.surface == ProducerSurface::Unknown {
+        return incoming;
+    }
+    if incoming.surface == ProducerSurface::Unknown {
+        return current;
+    }
+    if current.surface == incoming.surface {
+        let mut merged = current;
+        for value in incoming.evidence {
+            if !merged.evidence.contains(&value) {
+                merged.evidence.push(value);
+            }
+        }
+        for value in incoming.provenance {
+            if !merged.provenance.contains(&value) {
+                merged.provenance.push(value);
+            }
+        }
+        if confidence_rank(incoming.confidence) > confidence_rank(merged.confidence) {
+            merged.confidence = incoming.confidence;
+        }
+        return merged;
+    }
+    ProducerSurfaceClassification {
+        surface: ProducerSurface::Ambiguous,
+        confidence: super::source_envelope::EvidenceConfidence::Inferred,
+        evidence: current
+            .evidence
+            .into_iter()
+            .chain(incoming.evidence)
+            .chain(["conflicting producer surface evidence".to_string()])
+            .collect(),
+        provenance: current
+            .provenance
+            .into_iter()
+            .chain(incoming.provenance)
+            .collect(),
+    }
+}
+
+fn confidence_rank(value: super::source_envelope::EvidenceConfidence) -> u8 {
+    match value {
+        super::source_envelope::EvidenceConfidence::Confirmed => 2,
+        super::source_envelope::EvidenceConfidence::Inferred => 1,
+        super::source_envelope::EvidenceConfidence::Unknown => 0,
     }
 }
 

@@ -43,6 +43,12 @@ pub(crate) struct RolloutAdapterCheckpoint {
     pub token_snapshot: Option<TokenSnapshot>,
     pub source_timestamp_ms: Option<i64>,
     pub producer_version: Option<String>,
+    #[serde(default)]
+    pub owner_cwd: Option<String>,
+    #[serde(default)]
+    pub owner_source_name: Option<String>,
+    #[serde(default)]
+    pub owner_originator: Option<String>,
     pub completed: bool,
     #[serde(default)]
     pub replay_guard: RolloutReplayGuardState,

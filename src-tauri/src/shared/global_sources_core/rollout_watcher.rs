@@ -2,6 +2,15 @@ use super::deletion_tombstone::{
     DeletionReconciliationState, DeletionTombstone, DeletionTombstoneDocument,
     DeletionTombstoneStore, DesktopReconciliationState,
 };
+use super::desktop_metadata::{
+    DesktopMetadataDiagnostic, DesktopMetadataPaths, DesktopMetadataReader, DesktopMetadataSnapshot,
+};
+use super::desktop_projection::{
+    assess_desktop_projection, classify_producer_surface, resolve_workspace_assignment,
+    AuthorityPresence, DesktopProjectionAssessment, DesktopProjectionEvidence,
+    ProducerSurfaceInput, ThreadReadStatus, WorkspaceAssignmentState, WorkspaceMappingInput,
+    WorkspaceRoot,
+};
 use super::rollout_checkpoint::{
     RolloutAdapterCheckpoint, RolloutCheckpointStore, RolloutReplayGuardState,
     RolloutSourceCheckpoint, RolloutWatcherCheckpoint,
@@ -100,6 +109,14 @@ pub(crate) struct ReconcileReport {
     pub discovered_sources: usize,
     pub processed_sources: usize,
     pub read_failures: Vec<SourceReadFailure>,
+    pub desktop_metadata_diagnostics: Vec<DesktopMetadataDiagnostic>,
+    pub desktop_projection_observations: Vec<DesktopProjectionObservation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DesktopProjectionObservation {
+    pub thread_key: super::rollout_identity::CodexThreadKey,
+    pub assessment: DesktopProjectionAssessment,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -169,6 +186,16 @@ pub(crate) struct RolloutTailWatcher<R = FsRolloutDeltaReader> {
     pending_signal_times: HashMap<String, i64>,
     pending_thread_deleted_confirmations: HashSet<super::rollout_identity::CodexThreadKey>,
     registry: SourceAuthorityRegistry,
+    desktop_metadata: HashMap<String, DesktopMetadataSnapshot>,
+    desktop_metadata_last_read_ms: Option<i64>,
+    desktop_thread_read_status: HashMap<super::rollout_identity::CodexThreadKey, ThreadReadStatus>,
+    desktop_projection_dirty: bool,
+    published_desktop_projection_states: HashMap<
+        super::rollout_identity::CodexThreadKey,
+        super::desktop_projection::DesktopProjectionState,
+    >,
+    published_desktop_metadata_diagnostics: HashSet<(String, String, String)>,
+    workspace_roots: Vec<WorkspaceRoot>,
     reader: R,
     startup_error: Option<(io::ErrorKind, String)>,
     startup_checkpoint_dirty: bool,
@@ -263,6 +290,13 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
             pending_signal_times: HashMap::new(),
             pending_thread_deleted_confirmations: HashSet::new(),
             registry,
+            desktop_metadata: HashMap::new(),
+            desktop_metadata_last_read_ms: None,
+            desktop_thread_read_status: HashMap::new(),
+            desktop_projection_dirty: false,
+            published_desktop_projection_states: HashMap::new(),
+            published_desktop_metadata_diagnostics: HashSet::new(),
+            workspace_roots: Vec::new(),
             reader,
             startup_error: tombstone_error.or(checkpoint_error),
             startup_checkpoint_dirty,
@@ -273,6 +307,23 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
 
     pub(crate) fn reconcile(&mut self, observed_timestamp_ms: i64) -> io::Result<ReconcileReport> {
         self.reconcile_internal(observed_timestamp_ms, false)
+    }
+
+    pub(crate) fn with_workspace_roots(
+        mut self,
+        workspace_roots: impl IntoIterator<Item = WorkspaceRoot>,
+    ) -> Self {
+        self.workspace_roots = workspace_roots.into_iter().collect();
+        self
+    }
+
+    pub(crate) fn record_desktop_thread_read(
+        &mut self,
+        key: super::rollout_identity::CodexThreadKey,
+        status: ThreadReadStatus,
+    ) {
+        self.desktop_thread_read_status.insert(key, status);
+        self.desktop_projection_dirty = true;
     }
 
     pub(crate) fn reconcile_now(&mut self) -> io::Result<ReconcileReport> {
@@ -287,6 +338,7 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
         if let Some((kind, message)) = &self.startup_error {
             return Err(io::Error::new(*kind, message.clone()));
         }
+        let desktop_metadata_refreshed = self.refresh_desktop_metadata(observed_timestamp_ms);
         let discovered = discover_rollout_sources(&self.config.homes)?;
         let mut report = ReconcileReport::default();
         for source in discovered {
@@ -409,6 +461,13 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
             self.sources.insert(key, source);
         }
 
+        self.apply_desktop_supplements();
+        if desktop_metadata_refreshed || self.desktop_projection_dirty {
+            report.desktop_metadata_diagnostics = self.desktop_metadata_diagnostic_changes();
+            report.desktop_projection_observations = self.assess_desktop_catalog_changes();
+            self.desktop_projection_dirty = false;
+        }
+
         if checkpoint_dirty {
             self.save_checkpoint()?;
             self.startup_checkpoint_dirty = false;
@@ -438,6 +497,196 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
             }
         }
         Ok(report)
+    }
+
+    fn refresh_desktop_metadata(&mut self, observed_timestamp_ms: i64) -> bool {
+        if self
+            .desktop_metadata_last_read_ms
+            .is_some_and(|last| observed_timestamp_ms.saturating_sub(last) < 2_000)
+        {
+            return false;
+        }
+        self.desktop_metadata = self
+            .config
+            .homes
+            .iter()
+            .map(|home| {
+                let paths = DesktopMetadataPaths::for_codex_home(
+                    home.codex_home.identity.clone(),
+                    &home.root,
+                );
+                (
+                    home.codex_home.identity.clone(),
+                    DesktopMetadataReader::read(&paths),
+                )
+            })
+            .collect();
+        self.desktop_metadata_last_read_ms = Some(observed_timestamp_ms);
+        true
+    }
+
+    fn apply_desktop_supplements(&mut self) {
+        let mut owners = self
+            .sources
+            .values()
+            .filter_map(|source| {
+                Some((
+                    source.adapter.thread_key.clone()?,
+                    source.adapter.parent_thread_key.clone(),
+                    source.adapter.owner_source_name.clone(),
+                    source.adapter.owner_originator.clone(),
+                    source.adapter.owner_cwd.clone(),
+                    source.codex_home.identity.clone(),
+                    source.source_file.normalized_path.clone(),
+                ))
+            })
+            .collect::<Vec<_>>();
+        owners.sort_by(|left, right| {
+            left.0
+                .codex_home_identity
+                .cmp(&right.0.codex_home_identity)
+                .then_with(|| left.0.thread_id.cmp(&right.0.thread_id))
+                .then_with(|| left.6.cmp(&right.6))
+        });
+        self.registry.reset_rollout_supplemental_evidence();
+        for _ in 0..owners.len().max(1) {
+            for (key, parent, source_name, originator, cwd, home_identity, _) in &owners {
+                let metadata = self.desktop_metadata.get(home_identity);
+                let catalog_membership = metadata
+                    .is_some_and(|metadata| metadata.contains_catalog_thread(&key.thread_id));
+                let parent_surface = parent
+                    .as_ref()
+                    .and_then(|parent| self.registry.producer_surface(parent));
+                let producer = classify_producer_surface(&ProducerSurfaceInput::rollout(
+                    source_name.as_deref(),
+                    originator.as_deref(),
+                    catalog_membership,
+                    parent_surface,
+                ));
+                let parent_workspace = if cwd.is_none() {
+                    parent.as_ref().and_then(|parent| {
+                        self.registry
+                            .workspace_assignment(parent)
+                            .filter(|assignment| {
+                                assignment.state == WorkspaceAssignmentState::Assigned
+                            })
+                            .and_then(|assignment| assignment.workspace_id.as_deref())
+                    })
+                } else {
+                    None
+                };
+                let project_roots = metadata
+                    .map(|metadata| metadata.project_roots_for_thread(&key.thread_id))
+                    .unwrap_or_default();
+                let workspace = resolve_workspace_assignment(&WorkspaceMappingInput {
+                    rollout_cwd: cwd.as_deref(),
+                    configured_roots: &self.workspace_roots,
+                    desktop_project_roots: &project_roots,
+                    confirmed_parent_workspace_id: parent_workspace,
+                });
+                let workspace =
+                    (workspace.state != WorkspaceAssignmentState::Unassigned).then_some(workspace);
+                let _ = self
+                    .registry
+                    .supplement_desktop_projection(key, producer, workspace);
+            }
+        }
+    }
+
+    fn assess_desktop_catalog_changes(&mut self) -> Vec<DesktopProjectionObservation> {
+        let mut observations = self
+            .desktop_metadata
+            .values()
+            .flat_map(|metadata| {
+                metadata.catalog_entries.iter().map(|entry| {
+                    let key = super::rollout_identity::CodexThreadKey::new(
+                        metadata.codex_home_identity.clone(),
+                        entry.thread_id.clone(),
+                    );
+                    let persisted = if !metadata.persisted_state_available {
+                        AuthorityPresence::Unknown
+                    } else if metadata.persisted_threads.contains_key(&entry.thread_id) {
+                        AuthorityPresence::Present
+                    } else {
+                        AuthorityPresence::Absent
+                    };
+                    let assessment = assess_desktop_projection(&DesktopProjectionEvidence {
+                        exact_catalog_match: true,
+                        monitor_tombstone: self.registry.is_tombstoned(&key),
+                        confirmed_rollout_identity: self
+                            .registry
+                            .has_confirmed_rollout_identity(&key),
+                        authoritative_persisted_thread: persisted,
+                        thread_read: self
+                            .desktop_thread_read_status
+                            .get(&key)
+                            .copied()
+                            .unwrap_or(ThreadReadStatus::Unavailable),
+                    });
+                    DesktopProjectionObservation {
+                        thread_key: key,
+                        assessment,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        observations.sort_by(|left, right| {
+            left.thread_key
+                .codex_home_identity
+                .cmp(&right.thread_key.codex_home_identity)
+                .then_with(|| left.thread_key.thread_id.cmp(&right.thread_key.thread_id))
+        });
+        let observed_keys = observations
+            .iter()
+            .map(|observation| observation.thread_key.clone())
+            .collect::<HashSet<_>>();
+        self.published_desktop_projection_states
+            .retain(|key, _| observed_keys.contains(key));
+        observations
+            .into_iter()
+            .filter(|observation| {
+                let state = observation.assessment.state;
+                let changed = self
+                    .published_desktop_projection_states
+                    .get(&observation.thread_key)
+                    .is_none_or(|published| *published != state);
+                if changed {
+                    self.published_desktop_projection_states
+                        .insert(observation.thread_key.clone(), state);
+                }
+                changed
+            })
+            .collect()
+    }
+
+    fn desktop_metadata_diagnostic_changes(&mut self) -> Vec<DesktopMetadataDiagnostic> {
+        let diagnostics = self
+            .desktop_metadata
+            .values()
+            .flat_map(|metadata| metadata.diagnostics.clone())
+            .collect::<Vec<_>>();
+        let current = diagnostics
+            .iter()
+            .map(|diagnostic| {
+                (
+                    diagnostic.source.clone(),
+                    diagnostic.code.clone(),
+                    diagnostic.message.clone(),
+                )
+            })
+            .collect::<HashSet<_>>();
+        let changed = diagnostics
+            .into_iter()
+            .filter(|diagnostic| {
+                !self.published_desktop_metadata_diagnostics.contains(&(
+                    diagnostic.source.clone(),
+                    diagnostic.code.clone(),
+                    diagnostic.message.clone(),
+                ))
+            })
+            .collect();
+        self.published_desktop_metadata_diagnostics = current;
+        changed
     }
 
     pub(crate) fn reconcile_deletion(
@@ -1118,6 +1367,9 @@ fn apply_record(
             source.adapter.parent_thread_key = identity.parent_thread_key;
             source.adapter.agent_path = identity.agent_path;
             source.adapter.producer_version = meta.cli_version.clone();
+            source.adapter.owner_cwd = meta.cwd.clone();
+            source.adapter.owner_source_name = meta.source_name.clone();
+            source.adapter.owner_originator = meta.originator.clone();
             source.adapter.completed = false;
             source.adapter.replay_guard = match meta.subagent_spawn.as_ref() {
                 Some(spawn) => RolloutReplayGuardState::AwaitingReplayEvidence {

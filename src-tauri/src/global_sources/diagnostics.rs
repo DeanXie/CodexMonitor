@@ -47,6 +47,26 @@ impl DiagnosticJournal {
                         "observedTimestampMs": chrono::Utc::now().timestamp_millis(),
                     }))?;
                 }
+                for diagnostic in &report.desktop_metadata_diagnostics {
+                    self.append(&json!({
+                        "eventKind": "desktopMetadataDiagnostic",
+                        "source": diagnostic.source,
+                        "code": diagnostic.code,
+                        "message": diagnostic.message,
+                        "observedTimestampMs": chrono::Utc::now().timestamp_millis(),
+                    }))?;
+                }
+                for observation in &report.desktop_projection_observations {
+                    self.append(&json!({
+                        "eventKind": "desktopProjectionObservation",
+                        "codexHomeIdentity": observation.thread_key.codex_home_identity,
+                        "threadId": observation.thread_key.thread_id,
+                        "state": observation.assessment.state,
+                        "canonicalIngestAllowed": observation.assessment.canonical_ingest_allowed,
+                        "evidence": observation.assessment.evidence,
+                        "observedTimestampMs": chrono::Utc::now().timestamp_millis(),
+                    }))?;
+                }
             }
             RolloutWatchEvent::LiveIngested { update, accepted } => {
                 self.append(&diagnostic_from_live(update, *accepted, registry))?;
@@ -411,6 +431,7 @@ mod tests {
                     discovered_sources: 1,
                     processed_sources: 1,
                     read_failures: vec![],
+                    ..ReconcileReport::default()
                 }),
                 &registry,
             )
@@ -445,6 +466,44 @@ mod tests {
         assert!(!written.contains("\"state\":\"first\""));
         assert!(written.contains("\"state\":\"second\""));
         assert!(fs::metadata(&path).expect("metadata").len() < 256);
+        fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn diagnostic_journal_records_desktop_stale_orphan_without_creating_authority() {
+        use crate::shared::global_sources_core::desktop_projection::{
+            DesktopProjectionAssessment, DesktopProjectionState,
+        };
+        use crate::shared::global_sources_core::rollout_watcher::DesktopProjectionObservation;
+
+        let path = std::env::temp_dir().join(format!(
+            "codex-monitor-desktop-projection-{}.jsonl",
+            uuid::Uuid::new_v4()
+        ));
+        let journal = DiagnosticJournal::new(path.clone());
+        let registry = SourceAuthorityRegistry::default();
+        journal
+            .record_watch_event(
+                &RolloutWatchEvent::Reconciled(ReconcileReport {
+                    desktop_projection_observations: vec![DesktopProjectionObservation {
+                        thread_key: CodexThreadKey::new("codex-home:fixture", "thread-stale"),
+                        assessment: DesktopProjectionAssessment {
+                            state: DesktopProjectionState::DesktopStaleOrphan,
+                            canonical_ingest_allowed: false,
+                            evidence: vec!["fixture not-found".to_string()],
+                        },
+                    }],
+                    ..ReconcileReport::default()
+                }),
+                &registry,
+            )
+            .expect("write Desktop projection diagnostic");
+
+        let written = fs::read_to_string(&path).expect("journal");
+        assert!(written.contains("desktopProjectionObservation"));
+        assert!(written.contains("DESKTOP_STALE_ORPHAN"));
+        assert!(written.contains("thread-stale"));
+        assert_eq!(registry.thread_count(), 0);
         fs::remove_file(path).ok();
     }
 

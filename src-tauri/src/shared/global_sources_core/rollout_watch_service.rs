@@ -14,6 +14,10 @@ pub(crate) enum RolloutWatchCommand {
         response: tokio::sync::oneshot::Sender<Result<DeletionReconciliationReport, String>>,
     },
     ConfirmThreadDeleted(super::rollout_identity::CodexThreadKey),
+    ObserveDesktopThreadRead {
+        key: super::rollout_identity::CodexThreadKey,
+        status: super::desktop_projection::ThreadReadStatus,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -112,6 +116,11 @@ impl<R: RolloutDeltaReader + Send + 'static> RolloutWatchService<R> {
                         }
                         RolloutWatchCommand::ConfirmThreadDeleted(key) => {
                             let _ = self.core.record_thread_deleted_confirmation(&key);
+                        }
+                        RolloutWatchCommand::ObserveDesktopThreadRead { key, status } => {
+                            self.core.record_desktop_thread_read(key, status);
+                            let report = self.core.reconcile_now()?;
+                            on_event(RolloutWatchEvent::Reconciled(report), self.core.registry());
                         }
                     }
                 }

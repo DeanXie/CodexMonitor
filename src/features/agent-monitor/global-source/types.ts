@@ -38,6 +38,29 @@ export type GlobalSourceTurnKey = {
 };
 
 export type GlobalSourceLifecycle = "running" | "waiting" | "completed";
+export type GlobalSourceProducerSurface =
+  | "MONITOR"
+  | "DESKTOP"
+  | "CLI"
+  | "IDE"
+  | "AMBIGUOUS"
+  | "UNKNOWN";
+export type GlobalSourceEvidenceConfidence = "confirmed" | "inferred" | "unknown";
+
+export type GlobalSourceProducerClassification = {
+  surface: GlobalSourceProducerSurface;
+  confidence: GlobalSourceEvidenceConfidence;
+  evidence: string[];
+  provenance: string[];
+};
+
+export type GlobalSourceWorkspaceAssignment = {
+  state: "ASSIGNED" | "AMBIGUOUS" | "UNASSIGNED";
+  workspaceId: string | null;
+  provenance: string;
+  matchedPath: string | null;
+  candidateWorkspaceIds: string[];
+};
 
 export type GlobalSourceTokenSnapshot = {
   inputTokens: number;
@@ -63,6 +86,8 @@ export type GlobalSourceThread = {
   lifecycle: GlobalSourceResolvedValue<GlobalSourceLifecycle> | null;
   observedModel: GlobalSourceResolvedValue<string> | null;
   tokenSnapshot: GlobalSourceResolvedValue<GlobalSourceTokenSnapshot> | null;
+  producerSurface?: GlobalSourceProducerClassification;
+  workspaceAssignment?: GlobalSourceWorkspaceAssignment | null;
   authorityProvenance: GlobalSourceProvenance | null;
   liveLaneCount: number;
   nearLiveLaneCount: number;

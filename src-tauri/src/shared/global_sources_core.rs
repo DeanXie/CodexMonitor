@@ -1,4 +1,6 @@
 pub(crate) mod deletion_tombstone;
+pub(crate) mod desktop_metadata;
+pub(crate) mod desktop_projection;
 pub(crate) mod rollout_checkpoint;
 pub(crate) mod rollout_discovery;
 pub(crate) mod rollout_identity;
@@ -21,3 +23,7 @@ mod watcher_tests;
 #[cfg(test)]
 #[path = "global_sources_core/deletion_tests.rs"]
 mod deletion_tests;
+
+#[cfg(test)]
+#[path = "global_sources_core/desktop_projection_tests.rs"]
+mod desktop_projection_tests;

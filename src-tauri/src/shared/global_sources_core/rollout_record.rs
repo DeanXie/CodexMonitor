@@ -22,6 +22,7 @@ pub(crate) struct SessionMetaRecord {
     pub cwd: Option<String>,
     pub cli_version: Option<String>,
     pub source_name: Option<String>,
+    pub originator: Option<String>,
     pub thread_source: Option<String>,
     pub model_provider: Option<String>,
     pub subagent_spawn: Option<SubAgentSpawn>,
@@ -171,6 +172,7 @@ impl RolloutRecordParser {
                 .get("source")
                 .and_then(Value::as_str)
                 .map(str::to_string),
+            originator: optional_string(payload, "originator"),
             thread_source: optional_string(payload, "thread_source"),
             model_provider: optional_string(payload, "model_provider"),
             subagent_spawn,

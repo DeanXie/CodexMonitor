@@ -5,6 +5,7 @@ use std::sync::{Mutex, RwLock};
 use crate::global_sources::app_server_live::normalize_app_server_live;
 use crate::global_sources::snapshot::GlobalSourceSnapshot;
 use crate::shared::global_sources_core::deletion_tombstone::DeletionTombstone;
+use crate::shared::global_sources_core::desktop_projection::ThreadReadStatus;
 use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
 use crate::shared::global_sources_core::rollout_watch_service::RolloutWatchCommand;
 use crate::shared::global_sources_core::rollout_watcher::DeletionReconciliationReport;
@@ -230,6 +231,33 @@ impl GlobalRolloutRuntime {
         self.ingest_live(update)
     }
 
+    pub(crate) fn observe_desktop_thread_read(
+        &self,
+        workspace_id: &str,
+        thread_id: &str,
+        status: ThreadReadStatus,
+    ) -> bool {
+        let config = self
+            .live_sources
+            .read()
+            .expect("global live source config lock");
+        let Some(home) = config.workspace_homes.get(workspace_id) else {
+            return false;
+        };
+        let key = CodexThreadKey::new(&home.identity, thread_id);
+        drop(config);
+        self.worker
+            .lock()
+            .expect("global rollout runtime lock")
+            .as_ref()
+            .is_some_and(|worker| {
+                worker
+                    .commands
+                    .send(RolloutWatchCommand::ObserveDesktopThreadRead { key, status })
+                    .is_ok()
+            })
+    }
+
     pub(crate) async fn shutdown(&self) {
         let worker = self
             .worker
@@ -391,6 +419,42 @@ mod tests {
             received_rx.await.expect("confirmation identity"),
             CodexThreadKey::new("codex-home:fixture", "thread-child")
         );
+        runtime.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn desktop_thread_read_observation_routes_exact_identity_without_creating_a_lane() {
+        let runtime = GlobalRolloutRuntime::default();
+        let (received_tx, received_rx) = tokio::sync::oneshot::channel();
+        assert!(runtime.start(move |_, mut commands| async move {
+            let command = commands.recv().await.expect("Desktop read observation");
+            let RolloutWatchCommand::ObserveDesktopThreadRead { key, status } = command else {
+                panic!("expected Desktop thread/read observation");
+            };
+            let _ = received_tx.send((key, status));
+        }));
+        runtime.configure_live_sources(
+            "monitor-process-1",
+            [(
+                "workspace-1".to_string(),
+                CodexHomeIdentity {
+                    normalized_path: "C:\\fixture\\codex-home".to_string(),
+                    identity: "codex-home:fixture".to_string(),
+                },
+            )],
+        );
+
+        assert!(runtime.observe_desktop_thread_read(
+            "workspace-1",
+            "thread-stale",
+            ThreadReadStatus::NotFound,
+        ));
+        let (key, status) = received_rx.await.expect("Desktop read evidence");
+        assert_eq!(
+            key,
+            CodexThreadKey::new("codex-home:fixture", "thread-stale")
+        );
+        assert_eq!(status, ThreadReadStatus::NotFound);
         runtime.shutdown().await;
     }
 

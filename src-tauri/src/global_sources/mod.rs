@@ -4,6 +4,7 @@ pub(crate) mod runtime;
 pub(crate) mod snapshot;
 
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
+use crate::shared::global_sources_core::desktop_projection::WorkspaceRoot;
 use crate::shared::global_sources_core::rollout_watch_service::RolloutWatchService;
 use crate::shared::global_sources_core::rollout_watcher::{
     RolloutTailWatcher, RolloutWatcherConfig, WatcherRetryPolicy,
@@ -24,6 +25,10 @@ pub(crate) fn start(app: &AppHandle) -> Result<(), String> {
     let default_home = resolve_default_codex_home();
     let mut workspace_paths = Vec::new();
     let mut workspace_path_by_id = HashMap::new();
+    let workspace_roots = workspaces
+        .iter()
+        .map(|(workspace_id, entry)| WorkspaceRoot::new(workspace_id.clone(), entry.path.clone()))
+        .collect::<Vec<_>>();
     for (workspace_id, entry) in &workspaces {
         let parent = entry
             .parent_id
@@ -77,7 +82,7 @@ pub(crate) fn start(app: &AppHandle) -> Result<(), String> {
         settled_after_ms: 2_000,
         reconciliation_interval_ms: 500,
     };
-    let watcher = RolloutTailWatcher::new(config);
+    let watcher = RolloutTailWatcher::new(config).with_workspace_roots(workspace_roots);
     let service = RolloutWatchService::new(watcher).map_err(|error| error.to_string())?;
     let source_instance_id = format!("monitor-app-server:{}", uuid::Uuid::new_v4());
     state

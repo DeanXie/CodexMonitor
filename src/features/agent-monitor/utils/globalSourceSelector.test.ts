@@ -34,6 +34,18 @@ const freshLive: GlobalSourceProvenance = {
   sourceInstanceId: "app-server:workspace",
 };
 
+const historical: GlobalSourceProvenance = {
+  ...nearLive,
+  sourceKind: "historical-rollout-scan",
+  temporalClass: "HISTORICAL",
+  sourceInstanceId: "historical-scan:home-1",
+  freshness: {
+    state: "settled",
+    lastCompleteRecordObservedAtMs: 9_400,
+    reason: "historical scan",
+  },
+};
+
 const staleNearLive: GlobalSourceProvenance = {
   ...nearLive,
   observedTimestampMs: 8_000,
@@ -264,6 +276,51 @@ describe("selectUnifiedAgentMonitorView", () => {
         sourceKind: "codex-cli-rollout",
         temporalClass: "NEAR_LIVE",
       },
+    });
+  });
+
+  it("does not project a historical model into a paired LIVE Runtime thread", () => {
+    const completedPair = sourceThread("paired", {
+      lifecycle: { value: "completed", provenance: freshLive },
+      observedModel: { value: "gpt-history", provenance: historical },
+      authorityProvenance: freshLive,
+      liveLaneCount: 1,
+      nearLiveLaneCount: 0,
+      historicalLaneCount: 1,
+    });
+
+    const view = selectUnifiedAgentMonitorView(
+      liveRuntime(),
+      snapshot([completedPair]),
+      10_000,
+    );
+
+    expect(view.threads).toHaveLength(1);
+    expect(view.threads[0]).toMatchObject({
+      threadId: "paired",
+      modelId: null,
+      modelSource: null,
+      source: { temporalClass: "LIVE" },
+    });
+  });
+
+  it("does not project a historical model into a NEAR LIVE source thread", () => {
+    const nearLiveThread = sourceThread("cli-history", {
+      observedModel: { value: "gpt-history", provenance: historical },
+      historicalLaneCount: 1,
+    });
+
+    const view = selectUnifiedAgentMonitorView(
+      createRuntimeState(),
+      snapshot([nearLiveThread]),
+      10_000,
+    );
+
+    expect(view.threads[0]).toMatchObject({
+      threadId: "cli-history",
+      modelId: null,
+      modelSource: null,
+      source: { temporalClass: "NEAR_LIVE" },
     });
   });
 

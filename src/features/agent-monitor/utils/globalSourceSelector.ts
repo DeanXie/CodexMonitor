@@ -116,6 +116,12 @@ function externalRuntimeMs(thread: GlobalSourceThread, now: number) {
     : null;
 }
 
+function nonHistoricalObservedModel(thread: GlobalSourceThread) {
+  return thread.observedModel?.provenance.temporalClass === "HISTORICAL"
+    ? null
+    : thread.observedModel;
+}
+
 function externalThread(thread: GlobalSourceThread, now: number): AgentMonitorRuntimeThread {
   const parentThreadId = thread.parentThreadKey?.value.codexHomeIdentity
     === thread.key.codexHomeIdentity
@@ -124,6 +130,7 @@ function externalThread(thread: GlobalSourceThread, now: number): AgentMonitorRu
   const isSubagent = parentThreadId !== null;
   const tokens = thread.tokenSnapshot?.value ?? null;
   const lifecycle = thread.lifecycle?.value ?? thread.currentTurn?.lifecycle?.value ?? null;
+  const observedModel = nonHistoricalObservedModel(thread);
   return {
     threadId: thread.key.threadId,
     codexHomeIdentity: thread.key.codexHomeIdentity,
@@ -132,7 +139,7 @@ function externalThread(thread: GlobalSourceThread, now: number): AgentMonitorRu
     createdAtMs: evidenceTime(thread.currentTurn?.startedAt),
     isCurrentEligible: false,
     name: externalName(thread, isSubagent),
-    modelId: thread.observedModel?.value ?? null,
+    modelId: observedModel?.value ?? null,
     effort: null,
     role: thread.agentPath?.value ?? null,
     isSubagent,
@@ -149,8 +156,8 @@ function externalThread(thread: GlobalSourceThread, now: number): AgentMonitorRu
         }
       : null,
     source: sourceInfo(thread, now),
-    modelSource: thread.observedModel
-      ? provenanceSourceInfo(thread.observedModel.provenance, now)
+    modelSource: observedModel
+      ? provenanceSourceInfo(observedModel.provenance, now)
       : null,
   };
 }
@@ -279,7 +286,7 @@ export function selectUnifiedAgentMonitorView(
     const authorityIsNearLive = paired.authorityProvenance?.temporalClass === "NEAR_LIVE"
       && paired.nearLiveLaneCount > 0;
     if (!authorityIsNearLive) {
-      const supplementalModel = paired.observedModel;
+      const supplementalModel = nonHistoricalObservedModel(paired);
       return {
         ...runtimeThread,
         modelId: runtimeThread.modelId ?? supplementalModel?.value ?? null,

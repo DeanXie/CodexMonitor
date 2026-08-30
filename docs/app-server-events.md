@@ -56,6 +56,12 @@ historical model or token value. Confirmed observed models still require
 `thread/start` response or `thread/settings/updated`; Thread Token still requires
 `thread/tokenUsage/updated`.
 
+The unified Agent Monitor selector may supplement Runtime rows with confirmed
+Global Source model evidence from `LIVE` or `NEAR_LIVE` lanes. It must reject an
+`observedModel` whose field provenance is `HISTORICAL`, even when the same Thread
+has a separate Live or Near Live lifecycle lane; historical model values remain
+available only in the separately labelled usage history view.
+
 Event handler composition:
 - `src/features/threads/hooks/useThreadEventHandlers.ts`
 

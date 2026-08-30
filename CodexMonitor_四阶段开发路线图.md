@@ -414,8 +414,9 @@ Freshness: 1.8s ago
 - admission：**GO**
 - Desktop Near-Live overall：**IN PROGRESS**
 - Slice 1 — File Owner / Replay Guard / Child Execution Boundary：**PASS**
-- Slice 2 — Desktop Metadata + Producer Surface Classifier：**GO / NOT STARTED**
-- Next：**Slice 2 Formal TDD**
+- Slice 2 — Desktop Metadata + Producer Surface Classifier：**PASS**
+- Desktop Near-Live Real E2E：**GO**
+- Next：**Desktop Near-Live Real E2E**
 
 ### 目标
 
@@ -453,7 +454,7 @@ Freshness: 1.8s ago
 - Main 多 Turn / resume 继续追加同一 rollout；Sub-Agent 各有独立 rollout、confirmed parent、model、Token 与 lifecycle。
 - Watcher 实测完整记录 lag 为 8–1334 ms，保持 `NEAR_LIVE`。
 - Desktop Main 的 `source=vscode` 与 Desktop project/thread metadata 可组成强来源证据；`originator` 仍只作弱证据，单独 `source=vscode` 仍可能与 IDE 混淆。
-- 长/compacted Thread 的 child rollout 会重放 parent `session_meta`；当前 adapter 会因此覆盖 file owner 并把 child observations 错归 parent。
+- 长/compacted Thread 的 child rollout 会重放 parent `session_meta`；Slice 1 已固定 generation file owner 并隔离 boundary 前的 parent replay。
 
 ### Desktop Projection / Thread Authority Amendment
 
@@ -471,15 +472,16 @@ canonical Thread existence
 - 无 tombstone 时，stale orphan 必须同时满足：精确 fullThreadId 仍在 catalog/sidebar、rollout 不存在、authoritative persisted Thread 不存在、`thread/read` 明确 nonexistent/not-found。证据不足或冲突时保持 `AMBIGUOUS`，不得猜测 ingest。
 - Phase 2.5 禁止写入 `codex-dev.db`、`local_thread_catalog`、`state_5.sqlite`、`.codex-global-state.json` 和 Desktop WebView/cache。
 - 正式 TDD gate 必须覆盖 stale catalog 完整证据、stale row + tombstone、合法 catalog + valid rollout、catalog-only ambiguous、同标题不同 fullThreadId 五类 fixture。
-- 第一 Formal TDD 切片 `Desktop Compacted Child Rollout -> File Owner -> Replay Guard -> Child Execution Boundary` 已 PASS。stale-orphan gate 仍属于后续 Desktop projection/metadata 准入。
+- 第一 Formal TDD 切片 `Desktop Compacted Child Rollout -> File Owner -> Replay Guard -> Child Execution Boundary` 已 PASS。
+- 第二 Formal TDD 切片已实现只读 Desktop metadata reader、Producer Surface classifier、workspace/project mapping 与 `DESKTOP_STALE_ORPHAN` admission gate；Desktop 私有数据仍保持只读。
 
-`docs/fixtures/desktop-rollout/desktop-subagent-compacted-prefix.jsonl` 的 file-owner/replay gate 已通过。当前正式编码入口是 Desktop metadata/source classifier；直接 UI 接入仍保持阻塞。
+`docs/fixtures/desktop-rollout/desktop-subagent-compacted-prefix.jsonl` 的 file-owner/replay gate 与 Desktop projection/metadata fixtures 均已通过。当前正式入口是 Desktop Near-Live Real E2E；UI 接入仍需等待 backend real-E2E 证据。
 
 ### 当前开发纪律
 
 - Phase 1 Runtime 核心保持冻结，除明确回归外不修改其语义。
 - Desktop 复用现有 rollout watcher、Global Source Core、Source Authority Registry 和 canonical view，不新增第二套 watcher。
-- Slice 1 保持冻结 PASS；下一步按 TDD 处理 Desktop metadata 与 Producer Surface classifier，stale-orphan admission gate 留在对应 projection/metadata 阶段。
+- Slice 1 与 Slice 2 保持冻结 PASS；下一步只执行 Desktop Near-Live Real E2E。
 - 不提前进入 Phase 3。
 
 ---
@@ -919,12 +921,12 @@ RESERVED
 
 下一任务：
 
-**Phase 2.5 Slice 2 — Desktop Metadata + Producer Surface Classifier（Formal TDD）**
+**Phase 2.5 — Desktop Near-Live Real E2E**
 
 核心验收：
 
-> Slice 1 已 PASS：每个 generation 的第一条完整 `session_meta` 固定 file owner，parent replay 在 child execution boundary 前不进入 authoritative runtime lane，checkpoint 持久化 replay-guard 状态。下一步按设计实现只读 Desktop metadata 与 Producer Surface classifier。
+> Slice 1 与 Slice 2 均已 PASS。下一步使用真实 Desktop Thread 验证 rollout Near-Live、read-only metadata、Producer Surface、workspace mapping、stale-orphan authority 与 canonical Registry 投影的端到端行为。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 
-Desktop 真实取证已完成，Slice 1 已 PASS；不得重新执行 Phase 2.1–2.4 或重做 Slice 1。Slice 2 准入为 GO，但尚未开始；在其正式 TDD 前不接 UI，也不实现 stale-orphan gate。
+Desktop 真实取证、Slice 1 与 Slice 2 均已完成并 PASS；不得重新执行 Phase 2.1–2.4 或重做已冻结切片。Desktop Near-Live Real E2E 准入为 GO，但尚未开始；Real E2E 通过前不接 UI。

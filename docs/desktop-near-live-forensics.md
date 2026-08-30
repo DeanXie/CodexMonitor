@@ -1,12 +1,12 @@
 # Codex Desktop Near-Live Forensics
 
-Status: **DESKTOP NEAR-LIVE IN PROGRESS — SLICE 1 PASS — SLICE 2 GO**
+Status: **DESKTOP NEAR-LIVE IN PROGRESS — SLICE 1 PASS — SLICE 2 PASS — REAL E2E GO**
 Captured: 2026-08-27 (Asia/Shanghai)
 Design amendment: 2026-08-29 — Desktop projection authority and stale-orphan admission
 
 Implementation status: Desktop forensics **COMPLETED**; File Owner / Replay
 Guard / Child Execution Boundary **PASS**; Desktop Metadata + Producer Surface
-Classifier **GO / NOT STARTED**.
+Classifier **PASS**; Desktop Near-Live Real E2E **GO / NOT STARTED**.
 
 This report contains protocol and metadata facts only. Raw prompts, reasoning,
 agent messages, credentials, and unrestricted diagnostics are excluded.
@@ -18,12 +18,13 @@ Codex Desktop writes its Main and Sub-Agent sessions into the same default
 Core. The standard identity, parent relation, model, token, lifecycle, cursor,
 checkpoint, and authority machinery is reusable.
 
-Direct reuse is not yet safe for every Desktop Sub-Agent rollout. A real child
+Direct reuse originally was not safe for every Desktop Sub-Agent rollout. A real child
 spawned from the long/compacted Desktop Thread contained a file-owner child
 `session_meta`, followed by replayed parent history containing a second parent
-`session_meta`. The current adapter accepted the replayed metadata as a new
-owner and subsequently attributed the child's lifecycle, model, and tokens to
-the parent. This is a strict coding gate for Desktop UI integration.
+`session_meta`. Slice 1 now fixes the first valid generation owner and guards the
+replayed prefix until a child execution boundary is confirmed. Slice 2 adds the
+read-only Desktop metadata, Producer Surface, workspace mapping, and stale-orphan
+authority gates required before Real E2E.
 
 Desktop sidebar visibility and `local_thread_catalog` membership are not
 canonical Thread-existence evidence. They are supplemental projection metadata
@@ -377,11 +378,10 @@ Minimal formal implementation slices:
 
 ## 12. Coding gate
 
-**Phase 2.5 formal TDD may start, but direct Desktop UI integration is blocked
-until the compacted-child owner/replay bug is fixed and source classification is
-represented without mislabeling.**
+**Formal TDD Slice 1 and Slice 2 are PASS. Desktop Near-Live Real E2E is GO;
+direct Desktop UI integration remains blocked until Real E2E passes.**
 
-Recommended first coding order:
+Current implementation order:
 
 1. `Desktop Compacted Child Rollout -> File Owner -> Replay Guard -> Child Execution Boundary`;
 2. Desktop metadata/workspace tests, stale-orphan admission gate, and read-only
@@ -404,5 +404,5 @@ Recommended first coding order:
 - Do not modify `codex-dev.db`, `local_thread_catalog`, `state_5.sqlite`,
   `.codex-global-state.json`, or Desktop WebView/cache data. Phase 2.5 observes,
   classifies, and diagnoses only.
-- This amendment does not expand the first implementation slice. Stale-orphan
-  admission belongs to the later Desktop projection/metadata slice.
+- Stale-orphan admission is implemented in Slice 2 as a diagnostic projection
+  gate and cannot create a canonical Registry node.

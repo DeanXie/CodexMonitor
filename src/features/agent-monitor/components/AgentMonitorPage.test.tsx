@@ -111,6 +111,90 @@ function runtimeWithRootThreads(threadIds: string[]) {
 }
 
 describe("AgentMonitorPage", () => {
+  it("shows Desktop producer labels and filters Producer independently from Source and Activity", () => {
+    const desktopProvenance = {
+      sourceKind: "codex-cli-rollout" as const,
+      temporalClass: "NEAR_LIVE" as const,
+      sourceInstanceId: "tail:home-1",
+      sourceGeneration: "rollout:desktop",
+      sourceTimestampMs: 9_000,
+      observedTimestampMs: 9_400,
+      freshness: {
+        state: "fresh" as const,
+        lastCompleteRecordObservedAtMs: 9_400,
+        reason: "complete record",
+      },
+    };
+    const globalSourceSnapshot: GlobalSourceSnapshot = {
+      revision: 1,
+      generatedAtMs: 9_500,
+      workspaceCodexHomeIdentities: {},
+      threads: [{
+        key: { codexHomeIdentity: "home-1", threadId: "desktop-main" },
+        parentThreadKey: null,
+        agentPath: null,
+        currentTurn: null,
+        lifecycle: { value: "running", provenance: desktopProvenance },
+        observedModel: { value: "gpt-desktop", provenance: desktopProvenance },
+        tokenSnapshot: {
+          value: {
+            inputTokens: 100,
+            cachedInputTokens: 40,
+            cacheWriteInputTokens: 0,
+            outputTokens: 25,
+            reasoningOutputTokens: 5,
+            totalTokens: 125,
+          },
+          provenance: desktopProvenance,
+        },
+        producerSurface: {
+          surface: "DESKTOP",
+          confidence: "confirmed",
+          evidence: ["exact Desktop catalog membership"],
+          provenance: ["desktop.local_thread_catalog"],
+        },
+        workspaceAssignment: null,
+        authorityProvenance: desktopProvenance,
+        liveLaneCount: 0,
+        nearLiveLaneCount: 1,
+        historicalLaneCount: 0,
+      }],
+    };
+
+    render(
+      <AgentMonitorPage
+        runtimeState={createRuntimeState()}
+        globalSourceSnapshot={globalSourceSnapshot}
+        localUsageSnapshot={historicalSnapshot}
+        currentThreadId="desktop-main"
+        now={10_000}
+      />,
+    );
+
+    expect(within(screen.getByLabelText("Producer")).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "All Producers",
+      "Monitor",
+      "Desktop",
+      "CLI",
+      "IDE",
+    ]);
+    expect(screen.getByText("Desktop — Main Agent")).toBeTruthy();
+    expect(screen.getByText("DESKTOP")).toBeTruthy();
+    expect(screen.getByText("NEAR LIVE · 1s")).toBeTruthy();
+    expect(screen.getByText("Current session not observed yet")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Producer"), { target: { value: "cli" } });
+    expect(screen.getByText("No agent threads are available yet.")).toBeTruthy();
+    expect((screen.getByLabelText("Source") as HTMLSelectElement).value).toBe("all");
+    expect((screen.getByLabelText("Activity") as HTMLSelectElement).value).toBe("active-fresh");
+
+    fireEvent.change(screen.getByLabelText("Producer"), { target: { value: "desktop" } });
+    fireEvent.change(screen.getByLabelText("Source"), { target: { value: "monitor-live" } });
+    expect(screen.getByText("No agent threads are available yet.")).toBeTruthy();
+    expect((screen.getByLabelText("Producer") as HTMLSelectElement).value).toBe("desktop");
+    expect((screen.getByLabelText("Activity") as HTMLSelectElement).value).toBe("active-fresh");
+  });
+
   it("shows an external CLI session as NEAR LIVE and filters it independently from Monitor LIVE", () => {
     const globalSourceSnapshot: GlobalSourceSnapshot = {
       revision: 1,
@@ -124,6 +208,13 @@ describe("AgentMonitorPage", () => {
         lifecycle: null,
         observedModel: null,
         tokenSnapshot: null,
+        producerSurface: {
+          surface: "CLI",
+          confidence: "confirmed",
+          evidence: ["rollout source=cli"],
+          provenance: ["rollout.file-owner.session_meta.source"],
+        },
+        workspaceAssignment: null,
         authorityProvenance: {
           sourceKind: "codex-cli-rollout",
           temporalClass: "NEAR_LIVE",

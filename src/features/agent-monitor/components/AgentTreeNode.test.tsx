@@ -7,6 +7,12 @@ import { AgentTreeNode } from "./AgentTreeNode";
 const node: AgentMonitorNode = {
   threadId: "thread-main",
   name: "A very long main agent name",
+  producer: {
+    surface: "CLI",
+    confidence: "confirmed",
+    evidence: ["fixture"],
+    provenance: ["fixture"],
+  },
   role: null,
   isSubagent: false,
   modelId: "gpt-5.6-terra",

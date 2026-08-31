@@ -227,6 +227,12 @@ export function selectAgentMonitorRuntimeView(
       createdAtMs: thread.createdAt?.valueMs ?? null,
       isCurrentEligible: true,
       name: displayName(thread.threadId, assignment, isSubagent),
+      producer: {
+        surface: "MONITOR",
+        confidence: "confirmed",
+        evidence: ["Monitor app-server Runtime observation"],
+        provenance: ["monitor-app-server"],
+      },
       modelId: thread.observedModel?.value ?? null,
       effort: null,
       role: assignment?.agentPath ?? null,

@@ -1,4 +1,5 @@
 import type { ThreadSummary, ThreadTokenUsage, TokenUsageBreakdown } from "@/types";
+import type { GlobalSourceProducerClassification } from "./global-source/types";
 
 export type AgentMonitorStatus =
   | "active"
@@ -43,6 +44,7 @@ export type AgentMonitorSourceInfo = {
 export type AgentMonitorNode = {
   threadId: string;
   name: string;
+  producer: GlobalSourceProducerClassification;
   modelId: string | null;
   effort: string | null;
   role: string | null;

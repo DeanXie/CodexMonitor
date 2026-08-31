@@ -12,6 +12,7 @@ import type { AgentMonitorActivityFilter } from "../utils/agentMonitorActivity";
 import { selectAgentMonitorSessionOptions } from "../utils/agentRuntimeSelector";
 import {
   selectUnifiedAgentMonitorView,
+  type AgentMonitorProducerFilter,
   type AgentMonitorSourceFilter,
 } from "../utils/globalSourceSelector";
 import { AgentCallTree } from "./AgentCallTree";
@@ -55,6 +56,7 @@ export function AgentMonitorPage({
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<AgentMonitorSourceFilter>("all");
+  const [producerFilter, setProducerFilter] = useState<AgentMonitorProducerFilter>("all");
   const [activityFilter, setActivityFilter] = useState<AgentMonitorActivityFilter>("active-fresh");
   const [historyWorkspaceId, setHistoryWorkspaceId] = useState<string | null>(null);
   const [historySessionId, setHistorySessionId] = useState<string | null>(null);
@@ -70,10 +72,11 @@ export function AgentMonitorPage({
     () => selectUnifiedAgentMonitorView(runtimeState, globalSourceSnapshot, now, {
       excludedThreadIds,
       sourceFilter,
+      producerFilter,
       activityFilter,
       currentThreadId,
     }),
-    [activityFilter, currentThreadId, excludedThreadIds, globalSourceSnapshot, now, runtimeState, sourceFilter],
+    [activityFilter, currentThreadId, excludedThreadIds, globalSourceSnapshot, now, producerFilter, runtimeState, sourceFilter],
   );
   const historicalWorkspace = useMemo(
     () => workspaceOptions.find((workspace) => workspace.id === historyWorkspaceId) ?? null,
@@ -130,9 +133,9 @@ export function AgentMonitorPage({
       runtimeState,
       globalSourceSnapshot,
       now,
-      { workspaceId, sessionId, excludedThreadIds, sourceFilter, activityFilter, currentThreadId },
+      { workspaceId, sessionId, excludedThreadIds, sourceFilter, producerFilter, activityFilter, currentThreadId },
     ).roots,
-    [activityFilter, currentThreadId, excludedThreadIds, globalSourceSnapshot, now, runtimeState, sessionId, sourceFilter, workspaceId],
+    [activityFilter, currentThreadId, excludedThreadIds, globalSourceSnapshot, now, producerFilter, runtimeState, sessionId, sourceFilter, workspaceId],
   );
   const summary = useMemo(() => buildAgentMonitorSummary(forest, activityFilter), [activityFilter, forest]);
   const filteredModels = useMemo(
@@ -161,7 +164,8 @@ export function AgentMonitorPage({
   return <main className={`agent-monitor-page${variant === "split" ? " is-split" : ""}`}>
     <header><p>Live workspace activity</p><h1>Agent Monitor</h1><span>Main Agent and Sub Agent hierarchy from observed Runtime events.</span><div className="agent-monitor-header-actions">{onClearLiveRuntime ? <button type="button" onClick={handleClearLiveRuntime} disabled={!canClearLiveRuntime} title={canClearLiveRuntime ? "Clears Monitor LIVE state only. CLI/rollout sources are preserved." : `${clearBlockedTitle} Clears Monitor LIVE state only; CLI/rollout sources are preserved.`}>Clear Live Runtime</button> : null}{variant === "split" && onClose ? <button type="button" onClick={onClose} aria-label="Close Agent Monitor">Close</button> : onBack ? <button type="button" onClick={onBack} aria-label="Home">← Home</button> : null}</div></header>
     <section className="agent-monitor-filters" aria-label="Agent monitor filters">
-      <label>Source<select aria-label="Source" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value as AgentMonitorSourceFilter); setSessionId(null); setHistorySessionId(null); manualSessionSelectionRef.current = true; }}><option value="all">All Sources</option><option value="monitor-live">Monitor LIVE</option><option value="cli-near-live">CLI NEAR LIVE</option></select></label>
+      <label>Source<select aria-label="Source" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value as AgentMonitorSourceFilter); setSessionId(null); setHistorySessionId(null); manualSessionSelectionRef.current = true; }}><option value="all">All Sources</option><option value="monitor-live">Monitor LIVE</option><option value="cli-near-live">Rollout NEAR LIVE</option></select></label>
+      <label>Producer<select aria-label="Producer" value={producerFilter} onChange={(event) => { setProducerFilter(event.target.value as AgentMonitorProducerFilter); setSessionId(null); setHistorySessionId(null); manualSessionSelectionRef.current = true; }}><option value="all">All Producers</option><option value="monitor">Monitor</option><option value="desktop">Desktop</option><option value="cli">CLI</option><option value="ide">IDE</option></select></label>
       <label>Activity<select aria-label="Activity" value={activityFilter} onChange={(event) => { setActivityFilter(event.target.value as AgentMonitorActivityFilter); setSessionId(null); setHistorySessionId(null); manualSessionSelectionRef.current = true; }}><option value="active-fresh">Active / Fresh</option><option value="all">All</option><option value="settled">Settled</option></select></label>
       <label>Workspace<select aria-label="Workspace" value={workspaceId ?? ""} onChange={(event) => { const nextWorkspaceId = event.target.value || null; setWorkspaceId(nextWorkspaceId); setHistoryWorkspaceId(nextWorkspaceId); setSessionId(null); setHistorySessionId(null); manualSessionSelectionRef.current = true; }}><option value="">All Workspaces</option>{workspaceOptions.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.label}</option>)}</select></label>
       <label>Session<select aria-label="Session" value={sessionId ?? ""} onChange={(event) => { const nextSessionId = event.target.value || null; setSessionId(nextSessionId); setHistorySessionId(nextSessionId); manualSessionSelectionRef.current = true; }}><option value="">All Sessions</option>{sessionOptions.map((option) => <option key={option.threadId} value={option.threadId}>{option.label}</option>)}</select></label>

@@ -41,6 +41,12 @@ export function buildAgentMonitorForest({
     nodesById.set(thread.id, {
       threadId: thread.id,
       name: thread.name,
+      producer: {
+        surface: "MONITOR",
+        confidence: "confirmed",
+        evidence: ["Monitor thread projection"],
+        provenance: ["monitor-app-server"],
+      },
       modelId: thread.modelId ?? null,
       effort: thread.effort ?? null,
       role: thread.subagentRole ?? null,

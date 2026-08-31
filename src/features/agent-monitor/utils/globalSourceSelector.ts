@@ -7,6 +7,8 @@ import type {
 } from "../types";
 import type { AgentRuntimeStore } from "../runtime";
 import type {
+  GlobalSourceProducerClassification,
+  GlobalSourceProducerSurface,
   GlobalSourceProvenance,
   GlobalSourceSnapshot,
   GlobalSourceThread,
@@ -19,12 +21,14 @@ import {
 } from "./agentMonitorActivity";
 
 export type AgentMonitorSourceFilter = "all" | "monitor-live" | "cli-near-live";
+export type AgentMonitorProducerFilter = "all" | "monitor" | "desktop" | "cli" | "ide";
 
 type UnifiedViewFilter = {
   workspaceId?: string | null;
   sessionId?: string | null;
   excludedThreadIds?: ReadonlySet<string>;
   sourceFilter?: AgentMonitorSourceFilter;
+  producerFilter?: AgentMonitorProducerFilter;
   activityFilter?: AgentMonitorActivityFilter;
   currentThreadId?: string | null;
 };
@@ -95,6 +99,24 @@ function sourceInfo(thread: GlobalSourceThread, now: number) {
   } as AgentMonitorSourceInfo;
 }
 
+function producerInfo(thread: GlobalSourceThread): GlobalSourceProducerClassification {
+  return thread.producerSurface ?? {
+    surface: "UNKNOWN",
+    confidence: "unknown",
+    evidence: ["producer classification unavailable"],
+    provenance: [],
+  };
+}
+
+function producerName(surface: GlobalSourceProducerSurface) {
+  if (surface === "DESKTOP") return "Desktop";
+  if (surface === "CLI") return "CLI";
+  if (surface === "IDE") return "IDE";
+  if (surface === "MONITOR") return "Monitor";
+  if (surface === "AMBIGUOUS") return "Ambiguous Producer";
+  return "Unknown Producer";
+}
+
 function externalName(thread: GlobalSourceThread, isSubagent: boolean) {
   const path = thread.agentPath?.value;
   if (path) {
@@ -102,7 +124,9 @@ function externalName(thread: GlobalSourceThread, isSubagent: boolean) {
     const leaf = segments[segments.length - 1];
     if (leaf) return leaf;
   }
-  return isSubagent ? `Sub Agent · ${shortId(thread.key.threadId)}` : "CLI — Main Agent";
+  return isSubagent
+    ? `Sub Agent · ${shortId(thread.key.threadId)}`
+    : `${producerName(producerInfo(thread).surface)} — Main Agent`;
 }
 
 function externalRuntimeMs(thread: GlobalSourceThread, now: number) {
@@ -134,11 +158,14 @@ function externalThread(thread: GlobalSourceThread, now: number): AgentMonitorRu
   return {
     threadId: thread.key.threadId,
     codexHomeIdentity: thread.key.codexHomeIdentity,
-    workspaceId: null,
+    workspaceId: thread.workspaceAssignment?.state === "ASSIGNED"
+      ? thread.workspaceAssignment.workspaceId
+      : null,
     parentThreadId,
     createdAtMs: evidenceTime(thread.currentTurn?.startedAt),
     isCurrentEligible: false,
     name: externalName(thread, isSubagent),
+    producer: producerInfo(thread),
     modelId: observedModel?.value ?? null,
     effort: null,
     role: thread.agentPath?.value ?? null,
@@ -206,6 +233,14 @@ function matchesSourceFilter(
     && thread.source.sourceKind === "codex-cli-rollout";
 }
 
+function matchesProducerFilter(
+  thread: AgentMonitorRuntimeThread,
+  producerFilter: AgentMonitorProducerFilter,
+) {
+  if (producerFilter === "all") return true;
+  return thread.producer.surface === producerFilter.toUpperCase();
+}
+
 function buildView(
   threads: AgentMonitorRuntimeThread[],
   filter: UnifiedViewFilter,
@@ -231,7 +266,8 @@ function buildView(
     if (filter.excludedThreadIds?.has(thread.threadId)) return false;
     if (filter.workspaceId && thread.workspaceId !== filter.workspaceId) return false;
     if (filter.sessionId && !sessionIds.has(thread.threadId)) return false;
-    return matchesSourceFilter(thread, filter.sourceFilter ?? "all");
+    return matchesSourceFilter(thread, filter.sourceFilter ?? "all")
+      && matchesProducerFilter(thread, filter.producerFilter ?? "all");
   });
   const selectedIds = new Set(selected.map((thread) => thread.threadId));
   const nodes = new Map<string, AgentMonitorNode>();
@@ -299,7 +335,7 @@ export function selectUnifiedAgentMonitorView(
     const fallback = externalThread(paired, now);
     return {
       ...fallback,
-      workspaceId: runtimeThread.workspaceId,
+      workspaceId: runtimeThread.workspaceId ?? fallback.workspaceId,
       isCurrentEligible: runtimeThread.isCurrentEligible,
       name: runtimeThread.name,
       parentThreadId: runtimeThread.parentThreadId ?? fallback.parentThreadId,
@@ -314,8 +350,12 @@ export function selectUnifiedAgentMonitorView(
     )))
     .map((thread) => externalThread(thread, now));
 
+  const dimensionThreads = [...authoritativeRuntimeThreads, ...globalThreads].filter(
+    (thread) => matchesSourceFilter(thread, filter.sourceFilter ?? "all")
+      && matchesProducerFilter(thread, filter.producerFilter ?? "all"),
+  );
   const activityThreads = filterAndSortSessions(
-    [...authoritativeRuntimeThreads, ...globalThreads],
+    dimensionThreads,
     filter.activityFilter ?? "active-fresh",
     filter.currentThreadId ?? null,
   );

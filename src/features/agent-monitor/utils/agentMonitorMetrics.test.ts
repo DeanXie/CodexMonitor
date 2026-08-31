@@ -8,6 +8,7 @@ describe("buildAgentMonitorSummary", () => {
       {
         threadId: "main",
         name: "Main",
+        producer: { surface: "MONITOR", confidence: "confirmed", evidence: [], provenance: [] },
         modelId: "gpt-5.4",
         effort: null,
         role: null,
@@ -21,6 +22,7 @@ describe("buildAgentMonitorSummary", () => {
           {
             threadId: "child",
             name: "Child",
+            producer: { surface: "MONITOR", confidence: "confirmed", evidence: [], provenance: [] },
             modelId: "gpt-5.3-mini",
             effort: null,
             role: "explorer",
@@ -51,6 +53,7 @@ describe("buildAgentMonitorSummary", () => {
   it("excludes stale recorded lifecycle from Active Fresh but keeps reviewing when fresh", () => {
     const base = {
       name: "Agent",
+      producer: { surface: "MONITOR" as const, confidence: "confirmed" as const, evidence: [], provenance: [] },
       modelId: null,
       effort: null,
       role: null,
@@ -86,6 +89,7 @@ describe("buildAgentMonitorSummary", () => {
     const summary = buildAgentMonitorSummary([{
       threadId: "stale-waiting",
       name: "Agent",
+      producer: { surface: "CLI", confidence: "confirmed", evidence: [], provenance: [] },
       modelId: null,
       effort: null,
       role: null,
@@ -115,6 +119,7 @@ describe("buildAgentMonitorSummary", () => {
     const root = {
       threadId: "root-a",
       name: "Main",
+      producer: { surface: "CLI" as const, confidence: "confirmed" as const, evidence: [], provenance: [] },
       modelId: null,
       effort: null,
       role: null,

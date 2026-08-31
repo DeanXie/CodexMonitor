@@ -47,6 +47,16 @@ function formatProvenance(source: AgentMonitorNode["source"]) {
   ].join("; ");
 }
 
+function formatProducer(node: AgentMonitorNode) {
+  const producer = node.producer;
+  return [
+    `producer: ${producer.surface}`,
+    `confidence: ${producer.confidence}`,
+    `evidence: ${producer.evidence.join(", ") || "unavailable"}`,
+    `provenance: ${producer.provenance.join(", ") || "unavailable"}`,
+  ].join("; ");
+}
+
 export function AgentTreeNode({ node, depth = 0 }: { node: AgentMonitorNode; depth?: number }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
@@ -62,6 +72,7 @@ export function AgentTreeNode({ node, depth = 0 }: { node: AgentMonitorNode; dep
         <div className="agent-monitor-agent-identity">
           <strong title={node.name}>{node.name}</strong>
           <span>{node.isSubagent ? node.role ?? "Sub Agent" : "Main Agent"}</span>
+          <span className={`agent-monitor-producer-badge is-${node.producer.surface.toLowerCase()}`} title={formatProducer(node)}>{node.producer.surface}</span>
           <span className={`agent-monitor-source-badge is-${node.source.temporalClass.toLowerCase()}`} title={formatProvenance(node.source)}>{formatSource(node.source)}</span>
         </div>
         <div className="agent-monitor-agent-overview">

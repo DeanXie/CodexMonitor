@@ -7,6 +7,8 @@ import {
   type RuntimeProtocolRecord,
 } from "../runtime";
 import type {
+  GlobalSourceEvidenceConfidence,
+  GlobalSourceProducerSurface,
   GlobalSourceProvenance,
   GlobalSourceSnapshot,
   GlobalSourceThread,
@@ -66,6 +68,18 @@ const settledNearLive: GlobalSourceProvenance = {
   },
 };
 
+function producerSurface(
+  surface: GlobalSourceProducerSurface,
+  confidence: GlobalSourceEvidenceConfidence = "confirmed",
+) {
+  return {
+    surface,
+    confidence,
+    evidence: [`fixture:${surface}`],
+    provenance: ["fixture"],
+  };
+}
+
 function sourceThread(
   threadId: string,
   overrides: Partial<GlobalSourceThread> = {},
@@ -96,6 +110,8 @@ function sourceThread(
       },
       provenance: nearLive,
     },
+    producerSurface: producerSurface("CLI"),
+    workspaceAssignment: null,
     authorityProvenance: nearLive,
     liveLaneCount: 0,
     nearLiveLaneCount: 1,
@@ -148,6 +164,137 @@ function liveRuntime(threadId = "paired") {
 }
 
 describe("selectUnifiedAgentMonitorView", () => {
+  it("projects Desktop Main/Sub-Agent hierarchy with producer, workspace, model, lifecycle, Runtime, Token, and latest activity", () => {
+    const main = sourceThread("desktop-main", {
+      producerSurface: producerSurface("DESKTOP"),
+      workspaceAssignment: {
+        state: "ASSIGNED",
+        workspaceId: "desktop-workspace",
+        provenance: "desktop-project-assignment",
+        matchedPath: "f:/ai/codexmonitor",
+        candidateWorkspaceIds: ["desktop-workspace"],
+      },
+    });
+    const child = sourceThread("desktop-child", {
+      parentThreadKey: { value: main.key, provenance: nearLive },
+      agentPath: { value: "/root/desktop_reader", provenance: nearLive },
+      producerSurface: producerSurface("DESKTOP", "inferred"),
+      workspaceAssignment: {
+        state: "ASSIGNED",
+        workspaceId: "desktop-workspace",
+        provenance: "confirmed-parent-edge",
+        matchedPath: null,
+        candidateWorkspaceIds: ["desktop-workspace"],
+      },
+    });
+
+    const view = selectUnifiedAgentMonitorView(
+      createRuntimeState(),
+      snapshot([main, child]),
+      10_000,
+      { workspaceId: "desktop-workspace" },
+    );
+
+    expect(view.threads).toHaveLength(2);
+    expect(view.threads[0]).toMatchObject({
+      threadId: "desktop-main",
+      workspaceId: "desktop-workspace",
+      isCurrentEligible: false,
+      name: "Desktop — Main Agent",
+      producer: { surface: "DESKTOP", confidence: "confirmed" },
+      modelId: "gpt-cli",
+      status: "running",
+      runtimeMs: 2_000,
+      totalTokens: 125,
+      source: { temporalClass: "NEAR_LIVE", sourceTimestampMs: 9_000 },
+    });
+    expect(view.roots[0]?.children[0]).toMatchObject({
+      threadId: "desktop-child",
+      name: "desktop_reader",
+      role: "/root/desktop_reader",
+      producer: { surface: "DESKTOP", confidence: "inferred" },
+    });
+  });
+
+  it("keeps Producer filtering orthogonal to Source and Activity when Desktop and CLI coexist", () => {
+    const desktop = sourceThread("desktop", {
+      producerSurface: producerSurface("DESKTOP"),
+    });
+    const cli = sourceThread("cli", {
+      producerSurface: producerSurface("CLI"),
+    });
+    const sources = snapshot([desktop, cli]);
+
+    expect(selectUnifiedAgentMonitorView(
+      createRuntimeState(), sources, 10_000,
+      { sourceFilter: "cli-near-live", producerFilter: "desktop", activityFilter: "active-fresh" },
+    ).threads.map((thread) => thread.threadId)).toEqual(["desktop"]);
+    expect(selectUnifiedAgentMonitorView(
+      createRuntimeState(), sources, 10_000,
+      { sourceFilter: "cli-near-live", producerFilter: "cli", activityFilter: "active-fresh" },
+    ).threads.map((thread) => thread.threadId)).toEqual(["cli"]);
+    expect(selectUnifiedAgentMonitorView(
+      createRuntimeState(), sources, 10_000,
+      { sourceFilter: "monitor-live", producerFilter: "desktop", activityFilter: "all" },
+    ).threads).toEqual([]);
+
+    const settledDesktop = sourceThread("settled-desktop", {
+      producerSurface: producerSurface("DESKTOP"),
+      lifecycle: { value: "completed", provenance: settledNearLive },
+      authorityProvenance: settledNearLive,
+    });
+    const activeCliChild = sourceThread("active-cli-child", {
+      parentThreadKey: { value: settledDesktop.key, provenance: nearLive },
+      producerSurface: producerSurface("CLI"),
+    });
+    const mixedSession = snapshot([settledDesktop, activeCliChild]);
+    expect(selectUnifiedAgentMonitorView(
+      createRuntimeState(), mixedSession, 10_000,
+      { producerFilter: "desktop", activityFilter: "active-fresh" },
+    ).threads).toEqual([]);
+    expect(selectUnifiedAgentMonitorView(
+      createRuntimeState(), mixedSession, 10_000,
+      { producerFilter: "desktop", activityFilter: "all" },
+    ).threads.map((thread) => thread.threadId)).toEqual(["settled-desktop"]);
+  });
+
+  it("keeps canonical AMBIGUOUS and UNKNOWN producers visible without disguising them, but excludes zero-lane stale orphans", () => {
+    const ambiguous = sourceThread("ambiguous", {
+      producerSurface: producerSurface("AMBIGUOUS", "inferred"),
+    });
+    const unknown = sourceThread("unknown", {
+      producerSurface: producerSurface("UNKNOWN", "unknown"),
+    });
+    const staleOrphan = sourceThread("stale-orphan", {
+      producerSurface: producerSurface("DESKTOP"),
+      liveLaneCount: 0,
+      nearLiveLaneCount: 0,
+      historicalLaneCount: 0,
+    });
+
+    const view = selectUnifiedAgentMonitorView(
+      createRuntimeState(),
+      snapshot([ambiguous, unknown, staleOrphan]),
+      10_000,
+      { activityFilter: "all" },
+    );
+
+    expect(view.threads.map((thread) => thread.threadId)).toEqual(["unknown", "ambiguous"]);
+    expect(view.threads.map((thread) => ({
+      name: thread.name,
+      producer: thread.producer.surface,
+    }))).toEqual([
+      { name: "Unknown Producer — Main Agent", producer: "UNKNOWN" },
+      { name: "Ambiguous Producer — Main Agent", producer: "AMBIGUOUS" },
+    ]);
+    expect(selectUnifiedAgentMonitorView(
+      createRuntimeState(),
+      snapshot([ambiguous, unknown]),
+      10_000,
+      { producerFilter: "desktop", activityFilter: "all" },
+    ).threads).toEqual([]);
+  });
+
   it("projects external CLI main and confirmed sub-agent as NEAR LIVE", () => {
     const main = sourceThread("cli-main");
     const child = sourceThread("cli-child", {

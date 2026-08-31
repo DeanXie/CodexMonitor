@@ -17,6 +17,7 @@ describe("selectAgentMonitorRuntimeView", () => {
       createdAtMs: null,
       isCurrentEligible: true,
       name: "Main Agent",
+      producer: { surface: "MONITOR" as const, confidence: "confirmed" as const, evidence: [], provenance: [] },
       modelId: null,
       effort: null,
       role: null,

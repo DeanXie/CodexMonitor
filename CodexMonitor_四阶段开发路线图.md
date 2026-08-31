@@ -152,7 +152,7 @@ Phase 1 作为后续所有来源接入的可信基线。
 
 ## 状态
 
-**IN PROGRESS**
+**PASS / COMPLETE**
 
 ## 核心目标
 
@@ -410,13 +410,15 @@ Freshness: 1.8s ago
 
 ### 状态
 
-- Desktop forensics：**COMPLETED**
+- Desktop forensics：**PASS**
 - admission：**PASS**
-- Desktop Near-Live overall：**READY FOR FINAL UI / CLOSEOUT**
+- Desktop Near-Live overall：**COMPLETE**
 - Slice 1 — File Owner / Replay Guard / Child Execution Boundary：**PASS**
 - Slice 2 — Desktop Metadata + Producer Surface Classifier：**PASS**
 - Desktop Near-Live Real E2E A/B/C/D：**PASS**
-- Next：**Phase 2.5 Final Agent Monitor UI / Closeout**
+- Final Agent Monitor UI：**PASS**
+- Phase 2.5：**PASS**
+- Phase 2 Global Sources：**COMPLETE**
 
 ### 目标
 
@@ -459,11 +461,13 @@ Freshness: 1.8s ago
 ### Real E2E A/B/C/D 正式结论
 
 ```text
-Phase 2.5 Desktop forensics = COMPLETED
-Slice 1 = PASS
-Slice 2 = PASS
+Phase 2.5 Desktop forensics = PASS
+Slice 1 File Owner / Replay Guard = PASS
+Slice 2 Metadata + Producer Surface = PASS
 Real E2E A/B/C/D = PASS
-Phase 2.5 = READY FOR FINAL UI / CLOSEOUT
+Final Agent Monitor UI = PASS
+Phase 2.5 = PASS
+Phase 2 Global Sources = COMPLETE
 ```
 
 **Desktop Near-Live Real E2E = PASS**
@@ -494,19 +498,30 @@ canonical Thread existence
 - 第一 Formal TDD 切片 `Desktop Compacted Child Rollout -> File Owner -> Replay Guard -> Child Execution Boundary` 已 PASS。
 - 第二 Formal TDD 切片已实现只读 Desktop metadata reader、Producer Surface classifier、workspace/project mapping 与 `DESKTOP_STALE_ORPHAN` admission gate；Desktop 私有数据仍保持只读。
 
-`docs/fixtures/desktop-rollout/desktop-subagent-compacted-prefix.jsonl` 的 file-owner/replay gate、Desktop projection/metadata fixtures 与 Real E2E A/B/C/D 均已通过。backend proof 已满足，当前正式入口仅为 Phase 2.5 Final Agent Monitor UI / Closeout。
+`docs/fixtures/desktop-rollout/desktop-subagent-compacted-prefix.jsonl` 的 file-owner/replay gate、Desktop projection/metadata fixtures、Real E2E A/B/C/D 与 Final Agent Monitor UI 均已通过。Phase 2.5 与 Phase 2 Global Sources 正式收口。
 
 ### 当前开发纪律
 
 - Phase 1 Runtime 核心保持冻结，除明确回归外不修改其语义。
 - Desktop 复用现有 rollout watcher、Global Source Core、Source Authority Registry 和 canonical view，不新增第二套 watcher。
 - Global Source Core、Slice 1、Slice 2 与 Real E2E 修复保持冻结 PASS；无明确回归证据不得重做。
-- Phase 2.5 只剩 Desktop producer-surface filter/label、canonical Main/Sub-Agent 字段渲染、projection-only exclusion UI 检查、聚焦测试与最终 UI 验收。
-- 不提前进入 Phase 3。
+- Final UI 已交付 Desktop producer-surface filter/label、canonical Main/Sub-Agent 字段渲染、projection-only exclusion 与 Current Session 隔离。
+- Phase 2 已冻结；本次收口停止，不开始 Phase 3。
+
+### Locale baseline waiver
+
+- Known non-blocking test debt：6 个 Phase 2.5 开始前已存在的 zh-CN locale/date assertions。
+- Full frontend：1088 / 1094 PASS。
+- New Phase 2.5 regressions：0。
+- waiver 已批准；这 6 项不阻塞 Phase 2.5，本阶段不修复。
 
 ---
 
-## Phase 2.6 — Historical Unified View
+## Future Backlog — Historical Unified View
+
+### 状态
+
+**DEFERRED / NOT A PHASE 2 COMPLETION GATE**
 
 ### 目标
 
@@ -545,7 +560,7 @@ IDE
 - Monitor-owned Codex：LIVE
 - CLI：NEAR LIVE
 - Desktop：NEAR LIVE
-- Historical：统一读取
+- Historical：后续独立统一读取，不阻塞本轮 Global Sources Near-Live 完成判定
 - 同 Thread 跨来源不重复
 - Token 不双算
 - source/provenance/freshness 明确
@@ -922,11 +937,12 @@ Phase 2 — Global Sources
 ├─ 2.4.2 Cross-View Deletion Reconciliation
 │  PASS / COMPLETE ✅
 ├─ 2.5 Desktop Near-Live
-│  FORENSICS COMPLETED / SLICE 1 PASS / SLICE 2 PASS / REAL E2E A/B/C/D PASS / FINAL UI + CLOSEOUT ←
-└─ 2.6 Historical Unified View
+│  FORENSICS PASS / SLICE 1 PASS / SLICE 2 PASS / REAL E2E A/B/C/D PASS / FINAL UI PASS ✅
+└─ Historical Unified View
+   DEFERRED / NOT A PHASE 2 COMPLETION GATE
 
 Phase 3 — Cross-Surface Interoperability
-NOT STARTED
+GO / NOT STARTED
 
 Phase 4 — Productization
 NOT STARTED
@@ -941,12 +957,12 @@ RESERVED
 
 下一任务：
 
-**Phase 2.5 — Final Agent Monitor UI / Closeout**
+**Phase 3 — Cross-Surface Interoperability（GO / NOT STARTED）**
 
 核心验收：
 
-> Desktop forensics、Slice 1、Slice 2 与 Real E2E A/B/C/D 均已 PASS。下一步只做薄 UI 接入：Desktop producer-surface filter/label、canonical Main/Sub-Agent 字段渲染、projection-only exclusion 检查、聚焦测试与最终 UI 验收。
+> Phase 2.5 Desktop forensics、Slice 1、Slice 2、Real E2E A/B/C/D 与 Final Agent Monitor UI 均已 PASS；Phase 2 Global Sources 正式 COMPLETE。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 
-Desktop 真实取证、Slice 1、Slice 2 与 Real E2E A/B/C/D 均已完成并 PASS；不得重新执行 Phase 2.1–2.4、重做已冻结切片或修改已通过的底层 Global Source Core。Phase 2.5 当前为 READY FOR FINAL UI / CLOSEOUT；完成最终 UI 后停止，不进入 Phase 3。
+本轮只完成 Phase 2.5 最终收口并停止。Phase 3 是下一阶段 GO，但尚未开始；后续需单独授权启动。

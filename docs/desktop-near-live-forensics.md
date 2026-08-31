@@ -1,14 +1,14 @@
 # Codex Desktop Near-Live Forensics
 
-Status: **DESKTOP FORENSICS COMPLETED — SLICE 1 PASS — SLICE 2 PASS — REAL E2E A/B/C/D PASS — READY FOR FINAL UI / CLOSEOUT**
+Status: **DESKTOP FORENSICS PASS — SLICE 1 PASS — SLICE 2 PASS — REAL E2E A/B/C/D PASS — FINAL UI PASS — PHASE 2.5 PASS**
 Captured: 2026-08-27 (Asia/Shanghai)
 Design amendment: 2026-08-29 — Desktop projection authority and stale-orphan admission
 Real E2E closeout: 2026-08-31 — Gates A/B/C/D PASS
 
-Implementation status: Desktop forensics **COMPLETED**; File Owner / Replay
+Implementation status: Desktop forensics **PASS**; File Owner / Replay
 Guard / Child Execution Boundary **PASS**; Desktop Metadata + Producer Surface
-Classifier **PASS**; Desktop Near-Live Real E2E **PASS**; Phase 2.5 **READY
-FOR FINAL UI / CLOSEOUT**.
+Classifier **PASS**; Desktop Near-Live Real E2E **PASS**; Final Agent Monitor UI
+**PASS**; Phase 2.5 **PASS**; Phase 2 Global Sources **COMPLETE**.
 
 This report contains protocol and metadata facts only. Raw prompts, reasoning,
 agent messages, credentials, and unrestricted diagnostics are excluded.
@@ -386,7 +386,8 @@ Minimal formal implementation slices:
 ## 12. Coding gate
 
 **Formal TDD Slice 1 and Slice 2 are PASS. Desktop Near-Live Real E2E Gates
-A/B/C/D are PASS. Phase 2.5 is READY FOR FINAL UI / CLOSEOUT.**
+A/B/C/D and Final Agent Monitor UI are PASS. Phase 2.5 is PASS and Phase 2
+Global Sources is COMPLETE.**
 
 Completed backend order:
 
@@ -397,10 +398,10 @@ Completed backend order:
 4. canonical registry integration;
 5. real A/B/C/D Desktop E2E.
 
-Remaining Phase 2.5 work is the thin Agent Monitor UI integration: Desktop
-producer-surface filter/label presentation, canonical Main/Sub-Agent fields,
-projection-only exclusion checks, focused UI tests, and final UI acceptance.
-This does not authorize Phase 3.
+Final Agent Monitor UI delivers the Desktop producer-surface filter/label,
+canonical Main/Sub-Agent hierarchy and fields, projection-only exclusion,
+focused UI coverage, and Current Session isolation. This closeout does not
+start Phase 3.
 
 ## 13. Remaining boundaries
 

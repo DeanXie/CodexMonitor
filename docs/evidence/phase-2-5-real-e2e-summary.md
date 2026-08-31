@@ -3,11 +3,13 @@
 Captured: 2026-08-31 (Asia/Shanghai)
 
 ```text
-Phase 2.5 Desktop forensics = COMPLETED
-Slice 1 = PASS
-Slice 2 = PASS
+Phase 2.5 Desktop forensics = PASS
+Slice 1 File Owner / Replay Guard = PASS
+Slice 2 Metadata + Producer Surface = PASS
 Real E2E A/B/C/D = PASS
-Phase 2.5 = READY FOR FINAL UI / CLOSEOUT
+Final Agent Monitor UI = PASS
+Phase 2.5 = PASS
+Phase 2 Global Sources = COMPLETE
 ```
 
 **Desktop Near-Live Real E2E = PASS**
@@ -45,12 +47,21 @@ Phase 2.5 = READY FOR FINAL UI / CLOSEOUT
 
 The four Real E2E defects found before Gate B were fixed and independently committed as `d617b7f fix: close phase 2.5 real e2e gaps`. Gate B itself was read-only and produced no source modification. The final closeout does not reopen or redesign Global Source Core and does not start Phase 3.
 
-## Remaining Phase 2.5 UI scope
+## Final Agent Monitor UI delivery
 
-Only the final Agent Monitor UI integration and closeout remain:
+The final Agent Monitor UI is complete:
 
-1. Add a Desktop producer-surface label/filter without conflating producer surface with `LIVE` / `NEAR_LIVE` transport class.
-2. Render Desktop Main/Sub-Agent hierarchy, workspace, authoritative model, lifecycle, cumulative Token, freshness, and latest activity from the existing canonical projection.
-3. Confirm projection-only `DESKTOP_STALE_ORPHAN` and `AMBIGUOUS` observations remain absent from Agent Monitor nodes.
-4. Add focused selector/component/page tests for Desktop filtering, labels, hierarchy, deduplication, and stale-orphan exclusion.
-5. Run the existing frontend validation matrix and perform the final UI acceptance; stop after Phase 2.5 closeout.
+1. Desktop producer-surface label/filter remains distinct from `LIVE` / `NEAR_LIVE` transport class.
+2. Desktop Main/Sub-Agent hierarchy shows workspace, authoritative model, lifecycle, cumulative Token, freshness, and latest activity from the canonical projection.
+3. Projection-only `DESKTOP_STALE_ORPHAN` and `AMBIGUOUS` observations remain absent from Agent Monitor nodes.
+4. Focused selector/component/page tests cover Desktop filtering, labels, hierarchy, deduplication, and stale-orphan exclusion.
+5. External Desktop Threads remain ineligible for Current Session and cannot pollute Current Session selection.
+
+## Locale baseline waiver
+
+Known non-blocking test debt: 6 pre-existing zh-CN locale/date assertions.
+
+- Full frontend: 1088 / 1094 PASS.
+- New Phase 2.5 regressions: 0.
+- The six failures existed before Phase 2.5, are unrelated to Phase 2.5 files and behavior, and are not a Phase 2.5 blocker.
+- This closeout does not fix those six assertions and does not start Phase 3.

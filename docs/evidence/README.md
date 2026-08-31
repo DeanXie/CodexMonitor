@@ -10,10 +10,16 @@ Create a summary from a reviewed JSON candidate with:
 node scripts/e2e-evidence-summary.mjs candidate.json docs/evidence/phase-x-y-scenario.json
 ```
 
-The writer accepts only the documented identity, hierarchy, source lane,
-observed model, cumulative Token, lifecycle, freshness, lag, cursor, and result
+The writer accepts only the documented identity, hierarchy, source file,
+producer classification, workspace assignment, source lane, observed model,
+cumulative Token, lifecycle, freshness, lag, cursor, result, and sanitized notes
 fields. Files are formatted as stable JSON and written through a temporary file
 before rename. Preserve the 16 MiB diagnostic journal rotation independently.
+
+The canonical Phase 2.5 Real E2E set is listed in
+`phase-2-5-real-e2e-summary.md`. Gate B startup, catch-up, continued-tail, and
+completion measurements are retained in the allow-listed `notes` field; they
+must not include prompt, reasoning, message, account, or raw diagnostic content.
 
 Do not reconstruct missing protocol evidence. If an earlier raw journal has
 already rotated out, retain the human acceptance result in project status docs

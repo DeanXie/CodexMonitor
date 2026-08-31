@@ -1,0 +1,70 @@
+{
+  "evidenceVersion": 1,
+  "phase": "2.5",
+  "scenario": "Gate B Desktop First - Desktop Main",
+  "timestamp": "2026-08-31T11:51:36.865Z",
+  "fullThreadId": "01a057a5-8e59-7ae2-8688-6a829779f4f3",
+  "parentThreadId": null,
+  "childThreadIds": [
+    "01a057a6-5aac-7b71-9a94-ce38dcd8e246"
+  ],
+  "sourceFileIdentity": "<CODEX_HOME>/sessions/2026/08/31/rollout-2026-08-31t19-47-42-01a057a5-8e59-7ae2-8688-6a829779f4f3.jsonl",
+  "producerSurface": "DESKTOP",
+  "classificationConfidence": "confirmed",
+  "classificationEvidence": [
+    "weak originator=Codex Desktop",
+    "rollout source=vscode",
+    "exact fullThreadId Desktop catalog membership"
+  ],
+  "classificationProvenance": [
+    "transport:CodexCliRollout",
+    "rollout.session_meta.originator",
+    "rollout.file-owner.session_meta.source",
+    "desktop.local_thread_catalog"
+  ],
+  "cwd": "F:/AI/CodexMonitor",
+  "workspaceAssignment": {
+    "state": "ASSIGNED",
+    "workspaceId": "cb31e463-fe8f-46cc-b6f7-7c0bd7820c74",
+    "provenance": "desktop-project-assignment",
+    "matchedPath": "f:/ai/codexmonitor"
+  },
+  "firstSeenMs": 1788176987421,
+  "latestSeenMs": 1788177096865,
+  "authoritativeLane": "NEAR_LIVE",
+  "sourceLanes": [
+    {
+      "sourceKind": "codex-cli-rollout",
+      "temporalClass": "NEAR_LIVE",
+      "generation": "file:f9fffb2c94a52ea6da6e7e0ebbb39869daec897b24bd64185399507bc2bca979"
+    }
+  ],
+  "observedModels": [
+    {
+      "threadId": "01a057a5-8e59-7ae2-8688-6a829779f4f3",
+      "model": "gpt-5.6-sol",
+      "provenance": "authoritative codex-cli-rollout NEAR_LIVE lane"
+    }
+  ],
+  "authoritativeTokens": [
+    {
+      "threadId": "01a057a5-8e59-7ae2-8688-6a829779f4f3",
+      "totalTokens": 303697,
+      "provenance": "authoritative cumulative rollout snapshot"
+    }
+  ],
+  "lifecycle": "completed",
+  "freshness": "cold-discovered while running, continued NEAR LIVE tail, then settled after completion",
+  "lagMs": {
+    "minimum": 5157,
+    "maximum": 121040,
+    "samples": 10
+  },
+  "cursor": {
+    "generation": "file:f9fffb2c94a52ea6da6e7e0ebbb39869daec897b24bd64185399507bc2bca979",
+    "committedByteOffset": 692818,
+    "recordOrdinal": 77
+  },
+  "result": "PASS",
+  "notes": "Monitor process started 2026-08-31T11:49:46.918Z and Global Source service started 2026-08-31T11:49:47.330Z. First canonical observation was 2026-08-31T11:49:47.421Z: 503 ms after process start and 91 ms after service start. Ten catch-up observations ranged from 5,157 to 121,040 ms and reconstructed Running, gpt-5.6-sol, and 170,391 cumulative tokens. Three post-start token appends were observed at 406 to 803 ms; task completion was observed at 293 ms. Final authority was Completed with 303,697 cumulative tokens. No prompt, reasoning, message content, account data, or raw diagnostic record retained."
+}

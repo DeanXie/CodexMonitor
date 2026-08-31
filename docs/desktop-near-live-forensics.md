@@ -1,12 +1,14 @@
 # Codex Desktop Near-Live Forensics
 
-Status: **DESKTOP NEAR-LIVE IN PROGRESS — SLICE 1 PASS — SLICE 2 PASS — REAL E2E GO**
+Status: **DESKTOP FORENSICS COMPLETED — SLICE 1 PASS — SLICE 2 PASS — REAL E2E A/B/C/D PASS — READY FOR FINAL UI / CLOSEOUT**
 Captured: 2026-08-27 (Asia/Shanghai)
 Design amendment: 2026-08-29 — Desktop projection authority and stale-orphan admission
+Real E2E closeout: 2026-08-31 — Gates A/B/C/D PASS
 
 Implementation status: Desktop forensics **COMPLETED**; File Owner / Replay
 Guard / Child Execution Boundary **PASS**; Desktop Metadata + Producer Surface
-Classifier **PASS**; Desktop Near-Live Real E2E **GO / NOT STARTED**.
+Classifier **PASS**; Desktop Near-Live Real E2E **PASS**; Phase 2.5 **READY
+FOR FINAL UI / CLOSEOUT**.
 
 This report contains protocol and metadata facts only. Raw prompts, reasoning,
 agent messages, credentials, and unrestricted diagnostics are excluded.
@@ -25,6 +27,11 @@ spawned from the long/compacted Desktop Thread contained a file-owner child
 replayed prefix until a child execution boundary is confirmed. Slice 2 adds the
 read-only Desktop metadata, Producer Surface, workspace mapping, and stale-orphan
 authority gates required before Real E2E.
+
+Real E2E then confirmed both lifecycle orders, stale-orphan isolation, and
+Desktop/CLI separation against real Desktop tasks, real rollouts, read-only
+Desktop metadata, and the current canonical projection. The durable accepted
+evidence is indexed by `docs/evidence/phase-2-5-real-e2e-summary.md`.
 
 Desktop sidebar visibility and `local_thread_catalog` membership are not
 canonical Thread-existence evidence. They are supplemental projection metadata
@@ -378,22 +385,28 @@ Minimal formal implementation slices:
 
 ## 12. Coding gate
 
-**Formal TDD Slice 1 and Slice 2 are PASS. Desktop Near-Live Real E2E is GO;
-direct Desktop UI integration remains blocked until Real E2E passes.**
+**Formal TDD Slice 1 and Slice 2 are PASS. Desktop Near-Live Real E2E Gates
+A/B/C/D are PASS. Phase 2.5 is READY FOR FINAL UI / CLOSEOUT.**
 
-Current implementation order:
+Completed backend order:
 
 1. `Desktop Compacted Child Rollout -> File Owner -> Replay Guard -> Child Execution Boundary`;
 2. Desktop metadata/workspace tests, stale-orphan admission gate, and read-only
    adapter;
 3. source-surface contract decision and classifier;
 4. canonical registry integration;
-5. real A/B Desktop E2E;
-6. thin Agent Monitor source filter/label integration only after backend proof.
+5. real A/B/C/D Desktop E2E.
+
+Remaining Phase 2.5 work is the thin Agent Monitor UI integration: Desktop
+producer-surface filter/label presentation, canonical Main/Sub-Agent fields,
+projection-only exclusion checks, focused UI tests, and final UI acceptance.
+This does not authorize Phase 3.
 
 ## 13. Remaining boundaries
 
-- Strict Desktop-active-before-Monitor lifecycle E2E was not completed here.
+- Gate B confirmed Desktop-active-before-Monitor cold discovery, catch-up,
+  continued Main tail, and completion observation. The Child completed before
+  Monitor start, so no Child continued-tail sample is claimed.
 - `thread_settings_applied` was observed as the child execution boundary but is
   not yet proven universal across versions and launch surfaces.
 - Desktop private JSON/SQLite schemas are not stable public protocol contracts.

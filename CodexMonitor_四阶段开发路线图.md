@@ -411,12 +411,12 @@ Freshness: 1.8s ago
 ### 状态
 
 - Desktop forensics：**COMPLETED**
-- admission：**GO**
-- Desktop Near-Live overall：**IN PROGRESS**
+- admission：**PASS**
+- Desktop Near-Live overall：**READY FOR FINAL UI / CLOSEOUT**
 - Slice 1 — File Owner / Replay Guard / Child Execution Boundary：**PASS**
 - Slice 2 — Desktop Metadata + Producer Surface Classifier：**PASS**
-- Desktop Near-Live Real E2E：**GO**
-- Next：**Desktop Near-Live Real E2E**
+- Desktop Near-Live Real E2E A/B/C/D：**PASS**
+- Next：**Phase 2.5 Final Agent Monitor UI / Closeout**
 
 ### 目标
 
@@ -456,6 +456,25 @@ Freshness: 1.8s ago
 - Desktop Main 的 `source=vscode` 与 Desktop project/thread metadata 可组成强来源证据；`originator` 仍只作弱证据，单独 `source=vscode` 仍可能与 IDE 混淆。
 - 长/compacted Thread 的 child rollout 会重放 parent `session_meta`；Slice 1 已固定 generation file owner 并隔离 boundary 前的 parent replay。
 
+### Real E2E A/B/C/D 正式结论
+
+```text
+Phase 2.5 Desktop forensics = COMPLETED
+Slice 1 = PASS
+Slice 2 = PASS
+Real E2E A/B/C/D = PASS
+Phase 2.5 = READY FOR FINAL UI / CLOSEOUT
+```
+
+**Desktop Near-Live Real E2E = PASS**
+
+- Gate A — Monitor First：真实 Desktop Main/Sub-Agent 以独立 canonical `NEAR_LIVE` Thread 进入 Registry；confirmed parent、DESKTOP、model、lifecycle、workspace、累计 Token 与实时 tail 均正确。
+- Gate B — Desktop First：Monitor 在 Main Running、Child 已完成时启动；503/648 ms 内完成首次 canonical observation，catch-up 重建状态，Main 后续 tail 为 406–803 ms，completion latency 为 293 ms。
+- Gate C — Stale Orphan：目标被判定为 `DESKTOP_STALE_ORPHAN`，canonical Registry / Agent Monitor node 均为 0，未写 Desktop 私有数据库。
+- Gate D — Surface Separation：Desktop 保持 `DESKTOP`；真实 external exec 即使携带弱 `originator=Codex Desktop` 仍保持 `CLI`。
+- 每个真实 Thread 只有一个 canonical lane；Main/Child 不折叠，无重复节点、无 Token double count、无 Desktop/CLI 误分类。
+- 脱敏 evidence 总索引：`docs/evidence/phase-2-5-real-e2e-summary.md`。
+
 ### Desktop Projection / Thread Authority Amendment
 
 ```text
@@ -475,13 +494,14 @@ canonical Thread existence
 - 第一 Formal TDD 切片 `Desktop Compacted Child Rollout -> File Owner -> Replay Guard -> Child Execution Boundary` 已 PASS。
 - 第二 Formal TDD 切片已实现只读 Desktop metadata reader、Producer Surface classifier、workspace/project mapping 与 `DESKTOP_STALE_ORPHAN` admission gate；Desktop 私有数据仍保持只读。
 
-`docs/fixtures/desktop-rollout/desktop-subagent-compacted-prefix.jsonl` 的 file-owner/replay gate 与 Desktop projection/metadata fixtures 均已通过。当前正式入口是 Desktop Near-Live Real E2E；UI 接入仍需等待 backend real-E2E 证据。
+`docs/fixtures/desktop-rollout/desktop-subagent-compacted-prefix.jsonl` 的 file-owner/replay gate、Desktop projection/metadata fixtures 与 Real E2E A/B/C/D 均已通过。backend proof 已满足，当前正式入口仅为 Phase 2.5 Final Agent Monitor UI / Closeout。
 
 ### 当前开发纪律
 
 - Phase 1 Runtime 核心保持冻结，除明确回归外不修改其语义。
 - Desktop 复用现有 rollout watcher、Global Source Core、Source Authority Registry 和 canonical view，不新增第二套 watcher。
-- Slice 1 与 Slice 2 保持冻结 PASS；下一步只执行 Desktop Near-Live Real E2E。
+- Global Source Core、Slice 1、Slice 2 与 Real E2E 修复保持冻结 PASS；无明确回归证据不得重做。
+- Phase 2.5 只剩 Desktop producer-surface filter/label、canonical Main/Sub-Agent 字段渲染、projection-only exclusion UI 检查、聚焦测试与最终 UI 验收。
 - 不提前进入 Phase 3。
 
 ---
@@ -902,7 +922,7 @@ Phase 2 — Global Sources
 ├─ 2.4.2 Cross-View Deletion Reconciliation
 │  PASS / COMPLETE ✅
 ├─ 2.5 Desktop Near-Live
-│  FORENSICS COMPLETED / ADMISSION GO / ADAPTER NOT STARTED / NEXT FORMAL TDD ←
+│  FORENSICS COMPLETED / SLICE 1 PASS / SLICE 2 PASS / REAL E2E A/B/C/D PASS / FINAL UI + CLOSEOUT ←
 └─ 2.6 Historical Unified View
 
 Phase 3 — Cross-Surface Interoperability
@@ -921,12 +941,12 @@ RESERVED
 
 下一任务：
 
-**Phase 2.5 — Desktop Near-Live Real E2E**
+**Phase 2.5 — Final Agent Monitor UI / Closeout**
 
 核心验收：
 
-> Slice 1 与 Slice 2 均已 PASS。下一步使用真实 Desktop Thread 验证 rollout Near-Live、read-only metadata、Producer Surface、workspace mapping、stale-orphan authority 与 canonical Registry 投影的端到端行为。
+> Desktop forensics、Slice 1、Slice 2 与 Real E2E A/B/C/D 均已 PASS。下一步只做薄 UI 接入：Desktop producer-surface filter/label、canonical Main/Sub-Agent 字段渲染、projection-only exclusion 检查、聚焦测试与最终 UI 验收。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 
-Desktop 真实取证、Slice 1 与 Slice 2 均已完成并 PASS；不得重新执行 Phase 2.1–2.4 或重做已冻结切片。Desktop Near-Live Real E2E 准入为 GO，但尚未开始；Real E2E 通过前不接 UI。
+Desktop 真实取证、Slice 1、Slice 2 与 Real E2E A/B/C/D 均已完成并 PASS；不得重新执行 Phase 2.1–2.4、重做已冻结切片或修改已通过的底层 Global Source Core。Phase 2.5 当前为 READY FOR FINAL UI / CLOSEOUT；完成最终 UI 后停止，不进入 Phase 3。

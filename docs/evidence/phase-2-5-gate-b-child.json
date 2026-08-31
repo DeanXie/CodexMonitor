@@ -1,0 +1,66 @@
+{
+  "evidenceVersion": 1,
+  "phase": "2.5",
+  "scenario": "Gate B Desktop First - Desktop Sub-Agent",
+  "timestamp": "2026-08-31T11:49:47.566Z",
+  "fullThreadId": "01a057a6-5aac-7b71-9a94-ce38dcd8e246",
+  "parentThreadId": "01a057a5-8e59-7ae2-8688-6a829779f4f3",
+  "childThreadIds": [],
+  "sourceFileIdentity": "<CODEX_HOME>/sessions/2026/08/31/rollout-2026-08-31t19-48-35-01a057a6-5aac-7b71-9a94-ce38dcd8e246.jsonl",
+  "producerSurface": "DESKTOP",
+  "classificationConfidence": "inferred",
+  "classificationEvidence": [
+    "weak originator=Codex Desktop",
+    "confirmed parent edge derives producer"
+  ],
+  "classificationProvenance": [
+    "transport:CodexCliRollout",
+    "rollout.session_meta.originator",
+    "rollout.session_meta.source.subagent.thread_spawn"
+  ],
+  "cwd": "F:/AI/CodexMonitor",
+  "workspaceAssignment": {
+    "state": "ASSIGNED",
+    "workspaceId": "cb31e463-fe8f-46cc-b6f7-7c0bd7820c74",
+    "provenance": "confirmed-parent-edge",
+    "matchedPath": null
+  },
+  "firstSeenMs": 1788176987566,
+  "latestSeenMs": 1788176987566,
+  "authoritativeLane": "NEAR_LIVE",
+  "sourceLanes": [
+    {
+      "sourceKind": "codex-cli-rollout",
+      "temporalClass": "NEAR_LIVE",
+      "generation": "file:2831a083266c8440825f146d5eff4e1931d6b8013906a28f9ff22b21ae49f7f8"
+    }
+  ],
+  "observedModels": [
+    {
+      "threadId": "01a057a6-5aac-7b71-9a94-ce38dcd8e246",
+      "model": "gpt-5.6-luna",
+      "provenance": "authoritative codex-cli-rollout NEAR_LIVE lane"
+    }
+  ],
+  "authoritativeTokens": [
+    {
+      "threadId": "01a057a6-5aac-7b71-9a94-ce38dcd8e246",
+      "totalTokens": 280015,
+      "provenance": "authoritative cumulative rollout snapshot"
+    }
+  ],
+  "lifecycle": "completed",
+  "freshness": "cold-discovered after child completion; canonical source settled",
+  "lagMs": {
+    "minimum": 5429,
+    "maximum": 72215,
+    "samples": 11
+  },
+  "cursor": {
+    "generation": "file:2831a083266c8440825f146d5eff4e1931d6b8013906a28f9ff22b21ae49f7f8",
+    "committedByteOffset": 1039746,
+    "recordOrdinal": 54
+  },
+  "result": "PASS",
+  "notes": "Monitor process started 2026-08-31T11:49:46.918Z and Global Source service started 2026-08-31T11:49:47.330Z. The child completed 4,781 ms before process start. First canonical observation was 2026-08-31T11:49:47.566Z: 648 ms after process start and 236 ms after service start. Eleven catch-up observations ranged from 5,429 to 72,215 ms and reconstructed the confirmed parent edge, gpt-5.6-luna, Completed lifecycle, and 280,015 cumulative tokens. No post-start child append existed, so continued-tail latency is not claimed for the child; its completion record was reconstructed during catch-up with 5,429 ms observation lag. No prompt, reasoning, message content, account data, or raw diagnostic record retained."
+}

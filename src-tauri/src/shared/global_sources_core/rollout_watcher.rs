@@ -563,18 +563,12 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
                     catalog_membership,
                     parent_surface,
                 ));
-                let parent_workspace = if cwd.is_none() {
-                    parent.as_ref().and_then(|parent| {
-                        self.registry
-                            .workspace_assignment(parent)
-                            .filter(|assignment| {
-                                assignment.state == WorkspaceAssignmentState::Assigned
-                            })
-                            .and_then(|assignment| assignment.workspace_id.as_deref())
-                    })
-                } else {
-                    None
-                };
+                let parent_workspace = parent.as_ref().and_then(|parent| {
+                    self.registry
+                        .workspace_assignment(parent)
+                        .filter(|assignment| assignment.state == WorkspaceAssignmentState::Assigned)
+                        .and_then(|assignment| assignment.workspace_id.as_deref())
+                });
                 let project_roots = metadata
                     .map(|metadata| metadata.project_roots_for_thread(&key.thread_id))
                     .unwrap_or_default();
@@ -1138,24 +1132,28 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
             .last_complete_record_observed_at_ms
             .unwrap_or(0);
         self.registry
-            .ingest(SourceLaneUpdate {
-                observation_id: format!(
-                    "health:{}:{state:?}:{last_complete}",
-                    source.source_file.generation
-                ),
-                thread_key,
-                turn_key,
-                source_kind: SourceKind::CodexCliRollout,
-                temporal_class: SourceTemporalClass::NearLive,
-                source_instance_id: source_instance_id(&source.codex_home.identity),
-                source_generation: source.source_file.generation.clone(),
-                source_timestamp_ms: source.adapter.source_timestamp_ms,
-                observed_timestamp_ms,
-                freshness: source.health.freshness.clone(),
-                lifecycle: source.adapter.lifecycle,
-                observed_model: source.adapter.observed_model.clone(),
-                token_snapshot: source.adapter.token_snapshot.clone(),
-            })
+            .ingest_batch(vec![SourceRegistryBatchItem {
+                update: SourceLaneUpdate {
+                    observation_id: format!(
+                        "health:{}:{state:?}:{last_complete}",
+                        source.source_file.generation
+                    ),
+                    thread_key,
+                    turn_key,
+                    source_kind: SourceKind::CodexCliRollout,
+                    temporal_class: SourceTemporalClass::NearLive,
+                    source_instance_id: source_instance_id(&source.codex_home.identity),
+                    source_generation: source.source_file.generation.clone(),
+                    source_timestamp_ms: source.adapter.source_timestamp_ms,
+                    observed_timestamp_ms,
+                    freshness: source.health.freshness.clone(),
+                    lifecycle: source.adapter.lifecycle,
+                    observed_model: source.adapter.observed_model.clone(),
+                    token_snapshot: source.adapter.token_snapshot.clone(),
+                },
+                parent_thread_key: source.adapter.parent_thread_key.clone(),
+                agent_path: source.adapter.agent_path.clone(),
+            }])
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
         Ok(())
     }
@@ -1356,6 +1354,10 @@ fn apply_record(
             | ParsedRolloutRecord::WaitResumed(_) => return None,
             ParsedRolloutRecord::SessionMeta(_) => unreachable!("handled above"),
         }
+    }
+
+    if matches!(record, ParsedRolloutRecord::ChildBoundaryMarker(_)) {
+        return None;
     }
 
     let (lifecycle, observed_model, token_snapshot) = match record {

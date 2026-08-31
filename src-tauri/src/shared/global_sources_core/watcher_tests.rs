@@ -114,6 +114,15 @@ fn task_started(turn_id: &str) -> String {
     task_started_at(turn_id, "2026-08-25T13:57:10.000Z", 1787666230)
 }
 
+fn thread_settings_applied() -> String {
+    serde_json::json!({
+        "timestamp": "2026-08-25T13:57:10.500Z",
+        "type": "event_msg",
+        "payload": {"type": "thread_settings_applied"}
+    })
+    .to_string()
+}
+
 fn task_started_at(turn_id: &str, timestamp: &str, started_at: i64) -> String {
     serde_json::json!({
         "timestamp": timestamp,
@@ -262,6 +271,52 @@ fn desktop_compacted_child_pins_file_owner_and_publishes_only_child_execution() 
 }
 
 #[test]
+fn main_rollout_treats_thread_settings_applied_as_internal_evidence() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "main-with-thread-settings");
+    write_lines(
+        &path,
+        &[
+            session_meta("thread-main-settings", r"C:\fixture"),
+            thread_settings_applied(),
+            task_started("turn-main-settings"),
+            turn_context("turn-main-settings", "gpt-main-settings"),
+            token_count(420),
+            task_complete("turn-main-settings"),
+        ],
+    );
+    let mut watcher = RolloutTailWatcher::new(config(&root, "desktop-home", &checkpoint));
+
+    watcher
+        .reconcile(1_787_793_004_000)
+        .expect("main rollout boundary marker must not panic");
+
+    let snapshot = watcher.registry().snapshot();
+    assert_eq!(snapshot.threads.len(), 1);
+    let main = &snapshot.threads[0];
+    assert_eq!(main.key.thread_id, "thread-main-settings");
+    assert!(main.parent_thread_key.is_none());
+    assert_eq!(
+        main.lifecycle.as_ref().map(|value| value.value),
+        Some(ExternalLifecycle::Completed)
+    );
+    assert_eq!(
+        main.observed_model
+            .as_ref()
+            .map(|value| value.value.as_str()),
+        Some("gpt-main-settings")
+    );
+    assert_eq!(
+        main.token_snapshot
+            .as_ref()
+            .map(|value| value.value.total_tokens),
+        Some(420)
+    );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn desktop_compacted_child_replay_prefix_stays_non_authoritative_while_pending() {
     let root = temp_dir();
     let checkpoint = root.join("checkpoint.json");
@@ -366,6 +421,60 @@ fn desktop_compacted_child_checkpoint_restores_pending_guard_before_boundary() {
     assert_eq!(snapshot.threads.len(), 1);
     let child = &snapshot.threads[0];
     assert_eq!(child.key.thread_id, "thread-child-0001");
+    assert_eq!(
+        child.lifecycle.as_ref().map(|value| value.value),
+        Some(ExternalLifecycle::Completed)
+    );
+    assert_eq!(
+        child
+            .observed_model
+            .as_ref()
+            .map(|value| value.value.as_str()),
+        Some("gpt-observed-child")
+    );
+    assert_eq!(
+        child
+            .token_snapshot
+            .as_ref()
+            .map(|value| value.value.total_tokens),
+        Some(1_680)
+    );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn desktop_compacted_child_checkpoint_restores_identity_without_new_records() {
+    let root = temp_dir();
+    let checkpoint = root.join("checkpoint.json");
+    let path = rollout_path(&root, "desktop-checkpoint-identity");
+    write_lines(&path, &desktop_compacted_child_fixture_lines());
+    let watcher_config = config(&root, "desktop-home", &checkpoint);
+    let mut initial = RolloutTailWatcher::new(watcher_config.clone());
+    initial
+        .reconcile(1_787_793_004_000)
+        .expect("initial child observation");
+    drop(initial);
+
+    let mut restarted = RolloutTailWatcher::new(watcher_config);
+    restarted
+        .reconcile(1_787_793_014_000)
+        .expect("checkpoint-only reconstruction");
+
+    let snapshot = restarted.registry().snapshot();
+    assert_eq!(snapshot.threads.len(), 1);
+    let child = &snapshot.threads[0];
+    assert_eq!(child.key.thread_id, "thread-child-0001");
+    assert_eq!(
+        child
+            .parent_thread_key
+            .as_ref()
+            .map(|value| value.value.thread_id.as_str()),
+        Some("thread-main-0001")
+    );
+    assert_eq!(
+        child.agent_path.as_ref().map(|value| value.value.as_str()),
+        Some("/root/desktop_probe")
+    );
     assert_eq!(
         child.lifecycle.as_ref().map(|value| value.value),
         Some(ExternalLifecycle::Completed)

@@ -1,0 +1,62 @@
+{
+  "evidenceVersion": 1,
+  "phase": "2.5",
+  "scenario": "Gate A Monitor First - Desktop Sub-Agent",
+  "timestamp": "2026-08-30T19:19:44.437Z",
+  "fullThreadId": "01a0541c-cf79-7c32-b00d-e73ed85fcd88",
+  "parentThreadId": "01a0541c-5a29-7690-bd4f-87647d91c40e",
+  "childThreadIds": [],
+  "sourceFileIdentity": "c:/users/deanx/.codex/sessions/2026/08/31/rollout-2026-08-31t03-19-29-01a0541c-cf79-7c32-b00d-e73ed85fcd88.jsonl",
+  "producerSurface": "DESKTOP",
+  "classificationConfidence": "inferred",
+  "classificationEvidence": [
+    "weak originator=Codex Desktop",
+    "confirmed parent edge derives producer"
+  ],
+  "classificationProvenance": [
+    "transport:CodexCliRollout",
+    "rollout.session_meta.originator",
+    "rollout.session_meta.source.subagent.thread_spawn"
+  ],
+  "cwd": "C:/Users/DeanX/.codex/worktrees/c5ce/CodexMonitor",
+  "workspaceAssignment": {
+    "state": "ASSIGNED",
+    "workspaceId": "cb31e463-fe8f-46cc-b6f7-7c0bd7820c74",
+    "provenance": "confirmed-parent-edge",
+    "matchedPath": null
+  },
+  "firstSeenMs": 1788117570270,
+  "latestSeenMs": 1788117584437,
+  "authoritativeLane": "NEAR_LIVE",
+  "sourceLanes": [
+    {
+      "sourceKind": "codex-cli-rollout",
+      "temporalClass": "NEAR_LIVE",
+      "generation": "file:bb1d108031d0620b60f8d0bfd87338e404321f76686c6bca0224efa4dc023fae"
+    }
+  ],
+  "observedModels": [
+    {
+      "threadId": "01a0541c-cf79-7c32-b00d-e73ed85fcd88",
+      "model": "gpt-5.6-luna",
+      "provenance": "authoritative codex-cli-rollout NEAR_LIVE lane"
+    }
+  ],
+  "authoritativeTokens": [
+    {
+      "threadId": "01a0541c-cf79-7c32-b00d-e73ed85fcd88",
+      "totalTokens": 57424,
+      "provenance": "authoritative cumulative rollout snapshot"
+    }
+  ],
+  "lifecycle": "completed",
+  "freshness": "observed NEAR LIVE; settled after completion",
+  "lagMs": {
+    "minimum": 106,
+    "maximum": 721,
+    "samples": 6
+  },
+  "cursor": null,
+  "result": "PASS",
+  "notes": "Child remained a distinct canonical node. Confirmed parent and agent path survived checkpoint reconstruction; replay parent evidence did not overwrite child identity. No prompt content retained."
+}

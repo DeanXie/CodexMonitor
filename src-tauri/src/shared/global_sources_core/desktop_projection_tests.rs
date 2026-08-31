@@ -595,7 +595,7 @@ fn desktop_projection_watcher_classifies_desktop_cli_ambiguous_and_child_without
         &["desktop-root", "desktop-child"],
         &["desktop-root", "desktop-child"],
     );
-    write_global_state(&root, &["desktop-root", "desktop-child"]);
+    write_global_state(&root, &["desktop-root"]);
     write_rollout(
         &root,
         "desktop-root",
@@ -618,7 +618,7 @@ fn desktop_projection_watcher_classifies_desktop_cli_ambiguous_and_child_without
                     "parent_thread_id": "desktop-root",
                     "agent_path": "/root/child"
                 }}}),
-                r"C:\Dev\Fixture",
+                r"C:\Users\fixture\.codex\worktrees\abcd\CodexMonitor",
             ),
             json!({
                 "timestamp": "2026-08-31T00:00:01.000Z",
@@ -681,6 +681,20 @@ fn desktop_projection_watcher_classifies_desktop_cli_ambiguous_and_child_without
             .value
             .thread_id,
         "desktop-root"
+    );
+    assert_eq!(
+        by_id["desktop-child"]
+            .workspace_assignment
+            .as_ref()
+            .and_then(|assignment| assignment.workspace_id.as_deref()),
+        Some("workspace-fixture")
+    );
+    assert_eq!(
+        by_id["desktop-child"]
+            .workspace_assignment
+            .as_ref()
+            .map(|assignment| assignment.provenance.as_str()),
+        Some("confirmed-parent-edge")
     );
     assert_eq!(
         by_id["desktop-child"]

@@ -10,6 +10,16 @@ const TOP_LEVEL_FIELDS = new Set([
   "fullThreadId",
   "parentThreadId",
   "childThreadIds",
+  "sourceFileIdentity",
+  "producerSurface",
+  "classificationConfidence",
+  "classificationEvidence",
+  "classificationProvenance",
+  "cwd",
+  "workspaceAssignment",
+  "firstSeenMs",
+  "latestSeenMs",
+  "authoritativeLane",
   "sourceLanes",
   "observedModels",
   "authoritativeTokens",
@@ -27,6 +37,7 @@ const NESTED_FIELDS = {
   authoritativeTokens: new Set(["threadId", "totalTokens", "provenance"]),
   lagMs: new Set(["minimum", "maximum", "samples"]),
   cursor: new Set(["generation", "committedByteOffset", "recordOrdinal"]),
+  workspaceAssignment: new Set(["state", "workspaceId", "provenance", "matchedPath"]),
 };
 const SOURCE_KINDS = new Set([
   "monitor-app-server",
@@ -34,6 +45,9 @@ const SOURCE_KINDS = new Set([
   "historical-rollout-scan",
 ]);
 const TEMPORAL_CLASSES = new Set(["LIVE", "NEAR_LIVE", "HISTORICAL"]);
+const PRODUCER_SURFACES = new Set(["DESKTOP", "CLI"]);
+const CLASSIFICATION_CONFIDENCE = new Set(["confirmed", "inferred"]);
+const AUTHORITATIVE_LANES = new Set(["LIVE", "NEAR_LIVE", "HISTORICAL", "NONE"]);
 
 function assertObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -68,6 +82,47 @@ export function validateEvidenceSummary(candidate) {
     if (!Array.isArray(candidate[field])) throw new TypeError(`${field} must be an array`);
   }
   candidate.childThreadIds.forEach((value, index) => assertString(value, `childThreadIds[${index}]`));
+  if (candidate.sourceFileIdentity !== undefined) {
+    assertString(candidate.sourceFileIdentity, "sourceFileIdentity");
+  }
+  if (candidate.producerSurface !== null && candidate.producerSurface !== undefined
+      && !PRODUCER_SURFACES.has(candidate.producerSurface)) {
+    throw new TypeError("producerSurface must be DESKTOP, CLI, or null");
+  }
+  if (candidate.classificationConfidence !== undefined
+      && !CLASSIFICATION_CONFIDENCE.has(candidate.classificationConfidence)) {
+    throw new TypeError("classificationConfidence is unsupported");
+  }
+  for (const field of ["classificationEvidence", "classificationProvenance"]) {
+    if (candidate[field] !== undefined) {
+      if (!Array.isArray(candidate[field])) throw new TypeError(`${field} must be an array`);
+      candidate[field].forEach((value, index) => assertString(value, `${field}[${index}]`));
+    }
+  }
+  if (candidate.cwd !== null && candidate.cwd !== undefined) assertString(candidate.cwd, "cwd");
+  if (candidate.workspaceAssignment !== null && candidate.workspaceAssignment !== undefined) {
+    assertAllowedFields(candidate.workspaceAssignment, NESTED_FIELDS.workspaceAssignment, "workspaceAssignment");
+    assertString(candidate.workspaceAssignment.state, "workspaceAssignment.state");
+    if (candidate.workspaceAssignment.workspaceId !== null
+        && candidate.workspaceAssignment.workspaceId !== undefined) {
+      assertString(candidate.workspaceAssignment.workspaceId, "workspaceAssignment.workspaceId");
+    }
+    assertString(candidate.workspaceAssignment.provenance, "workspaceAssignment.provenance");
+    if (candidate.workspaceAssignment.matchedPath !== null
+        && candidate.workspaceAssignment.matchedPath !== undefined) {
+      assertString(candidate.workspaceAssignment.matchedPath, "workspaceAssignment.matchedPath");
+    }
+  }
+  for (const field of ["firstSeenMs", "latestSeenMs"]) {
+    if (candidate[field] !== undefined
+        && (!Number.isSafeInteger(candidate[field]) || candidate[field] < 0)) {
+      throw new TypeError(`${field} must be a non-negative safe integer`);
+    }
+  }
+  if (candidate.authoritativeLane !== undefined
+      && !AUTHORITATIVE_LANES.has(candidate.authoritativeLane)) {
+    throw new TypeError("authoritativeLane is unsupported");
+  }
   for (const field of ["sourceLanes", "observedModels", "authoritativeTokens"]) {
     candidate[field].forEach((value, index) => {
       assertAllowedFields(value, NESTED_FIELDS[field], `${field}[${index}]`);

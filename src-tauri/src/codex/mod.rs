@@ -117,17 +117,49 @@ pub(crate) async fn read_thread(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
-    if remote_backend::is_remote_mode(&*state).await {
-        return remote_backend::call_remote(
+    let response = if remote_backend::is_remote_mode(&*state).await {
+        remote_backend::call_remote(
             &*state,
             app,
             "read_thread",
-            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+            json!({ "workspaceId": workspace_id.clone(), "threadId": thread_id.clone() }),
         )
-        .await;
-    }
+        .await
+    } else {
+        codex_core::read_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone()).await
+    };
 
-    codex_core::read_thread_core(&state.sessions, workspace_id, thread_id).await
+    let status = classify_thread_read_response(&response);
+    state
+        .global_rollout_runtime
+        .observe_desktop_thread_read(&workspace_id, &thread_id, status);
+    response
+}
+
+fn classify_thread_read_response(
+    response: &Result<Value, String>,
+) -> crate::shared::global_sources_core::desktop_projection::ThreadReadStatus {
+    use crate::shared::global_sources_core::desktop_projection::ThreadReadStatus;
+
+    match response {
+        Ok(value) if value.get("error").is_none() => ThreadReadStatus::Exists,
+        Ok(value) => value
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .filter(|message| is_thread_not_found_message(message))
+            .map_or(ThreadReadStatus::Unavailable, |_| {
+                ThreadReadStatus::NotFound
+            }),
+        Err(error) if is_thread_not_found_message(error) => ThreadReadStatus::NotFound,
+        Err(_) => ThreadReadStatus::Unavailable,
+    }
+}
+
+fn is_thread_not_found_message(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    normalized.contains("thread not loaded")
+        || normalized.contains("thread not found")
+        || normalized.contains("no rollout found")
 }
 
 #[tauri::command]
@@ -1110,5 +1142,28 @@ mod deletion_tests {
         .await;
 
         assert_eq!(result, Ok(json!({ "ok": true })));
+    }
+}
+
+#[cfg(test)]
+mod thread_read_tests {
+    use super::classify_thread_read_response;
+    use crate::shared::global_sources_core::desktop_projection::ThreadReadStatus;
+    use serde_json::json;
+
+    #[test]
+    fn structured_thread_not_loaded_response_is_not_found_evidence() {
+        let response = Ok(json!({
+            "id": 9,
+            "error": {
+                "code": -32600,
+                "message": "thread not loaded: 01a02ff3-de17-7340-9844-5620eef3f19f"
+            }
+        }));
+
+        assert_eq!(
+            classify_thread_read_response(&response),
+            ThreadReadStatus::NotFound
+        );
     }
 }

@@ -15,6 +15,21 @@ function validSummary() {
     fullThreadId: "01a03e8f-aa9d-77c1-b787-c2a9bd89c8e9",
     parentThreadId: null,
     childThreadIds: ["child-confirmed"],
+    sourceFileIdentity: "sessions/2026/08/31/rollout-redacted.jsonl",
+    producerSurface: "DESKTOP",
+    classificationConfidence: "confirmed",
+    classificationEvidence: ["rollout source=vscode"],
+    classificationProvenance: ["rollout.file-owner.session_meta.source"],
+    cwd: "C:/workspace/project",
+    workspaceAssignment: {
+      state: "ASSIGNED",
+      workspaceId: "workspace-1",
+      provenance: "desktop-project-assignment",
+      matchedPath: "c:/workspace/project",
+    },
+    firstSeenMs: 1_788_117_541_026,
+    latestSeenMs: 1_788_117_590_387,
+    authoritativeLane: "NEAR_LIVE",
     sourceLanes: [
       { sourceKind: "monitor-app-server", temporalClass: "LIVE" },
       { sourceKind: "codex-cli-rollout", temporalClass: "NEAR_LIVE" },
@@ -39,6 +54,8 @@ describe("E2E evidence summary", () => {
     expect(written.fullThreadId).toBe("01a03e8f-aa9d-77c1-b787-c2a9bd89c8e9");
     expect(written.sourceLanes).toHaveLength(2);
     expect(written.authoritativeTokens[0].totalTokens).toBe(312_607);
+    expect(written.producerSurface).toBe("DESKTOP");
+    expect(written.workspaceAssignment.provenance).toBe("desktop-project-assignment");
   });
 
   it("rejects raw prompt, reasoning, and unknown content fields", () => {

@@ -1,0 +1,66 @@
+{
+  "evidenceVersion": 1,
+  "phase": "2.5",
+  "scenario": "Gate A Monitor First - Desktop Main",
+  "timestamp": "2026-08-30T19:19:50.387Z",
+  "fullThreadId": "01a0541c-5a29-7690-bd4f-87647d91c40e",
+  "parentThreadId": null,
+  "childThreadIds": [
+    "01a0541c-cf79-7c32-b00d-e73ed85fcd88"
+  ],
+  "sourceFileIdentity": "c:/users/deanx/.codex/sessions/2026/08/31/rollout-2026-08-31t03-18-59-01a0541c-5a29-7690-bd4f-87647d91c40e.jsonl",
+  "producerSurface": "DESKTOP",
+  "classificationConfidence": "confirmed",
+  "classificationEvidence": [
+    "weak originator=Codex Desktop",
+    "rollout source=vscode",
+    "exact fullThreadId Desktop catalog membership"
+  ],
+  "classificationProvenance": [
+    "transport:CodexCliRollout",
+    "rollout.session_meta.originator",
+    "rollout.file-owner.session_meta.source",
+    "desktop.local_thread_catalog"
+  ],
+  "cwd": "C:/Users/DeanX/.codex/worktrees/c5ce/CodexMonitor",
+  "workspaceAssignment": {
+    "state": "ASSIGNED",
+    "workspaceId": "cb31e463-fe8f-46cc-b6f7-7c0bd7820c74",
+    "provenance": "desktop-project-assignment",
+    "matchedPath": "f:/ai/codexmonitor"
+  },
+  "firstSeenMs": 1788117541026,
+  "latestSeenMs": 1788117590387,
+  "authoritativeLane": "NEAR_LIVE",
+  "sourceLanes": [
+    {
+      "sourceKind": "codex-cli-rollout",
+      "temporalClass": "NEAR_LIVE",
+      "generation": "file:02ef1694ff0678e3b38f3568a48a58e93bb31555b8e5a9c2e782ad77bb92a4b9"
+    }
+  ],
+  "observedModels": [
+    {
+      "threadId": "01a0541c-5a29-7690-bd4f-87647d91c40e",
+      "model": "gpt-5.6-sol",
+      "provenance": "authoritative codex-cli-rollout NEAR_LIVE lane"
+    }
+  ],
+  "authoritativeTokens": [
+    {
+      "threadId": "01a0541c-5a29-7690-bd4f-87647d91c40e",
+      "totalTokens": 198224,
+      "provenance": "authoritative cumulative rollout snapshot"
+    }
+  ],
+  "lifecycle": "completed",
+  "freshness": "observed NEAR LIVE; settled after completion",
+  "lagMs": {
+    "minimum": 85,
+    "maximum": 1368,
+    "samples": 13
+  },
+  "cursor": null,
+  "result": "PASS",
+  "notes": "One canonical Main node; Desktop metadata supplemented classification and workspace only, while rollout retained model, lifecycle, and cumulative Token authority. No prompt content retained."
+}

@@ -1,0 +1,38 @@
+{
+  "evidenceVersion": 1,
+  "phase": "2.5",
+  "scenario": "Gate C DESKTOP_STALE_ORPHAN",
+  "timestamp": "2026-08-30T19:42:51.733Z",
+  "fullThreadId": "01a02ff3-de17-7340-9844-5620eef3f19f",
+  "parentThreadId": null,
+  "childThreadIds": [],
+  "sourceFileIdentity": "absent: no matching rollout under default CODEX_HOME sessions",
+  "producerSurface": null,
+  "classificationConfidence": "confirmed",
+  "classificationEvidence": [
+    "exact fullThreadId Desktop catalog membership",
+    "rollout absent",
+    "persisted authoritative Thread absent",
+    "thread/read returned not loaded"
+  ],
+  "classificationProvenance": [
+    "desktop.local_thread_catalog read-only",
+    "sessions filesystem observation",
+    "state_5.sqlite read-only",
+    "app-server thread/read"
+  ],
+  "cwd": "F:/AI/CodexMonitor",
+  "workspaceAssignment": null,
+  "firstSeenMs": 1788118971733,
+  "latestSeenMs": 1788118971733,
+  "authoritativeLane": "NONE",
+  "sourceLanes": [],
+  "observedModels": [],
+  "authoritativeTokens": [],
+  "lifecycle": "isolated",
+  "freshness": "not admitted to LIVE, NEAR_LIVE, or HISTORICAL",
+  "lagMs": null,
+  "cursor": null,
+  "result": "PASS",
+  "notes": "Classified DESKTOP_STALE_ORPHAN with canonical Registry count 0 and Agent Monitor node count 0. codex-dev.db and state_5.sqlite length and last-write time remained unchanged during the gate. No prompt content retained."
+}

@@ -1,0 +1,57 @@
+{
+  "evidenceVersion": 1,
+  "phase": "2.5",
+  "scenario": "Gate D Desktop and CLI Surface Separation",
+  "timestamp": "2026-08-31T10:20:11.034Z",
+  "fullThreadId": "01a05754-1787-7c73-ae14-0d232142884f",
+  "parentThreadId": null,
+  "childThreadIds": [],
+  "sourceFileIdentity": "c:/users/deanx/.codex/sessions/2026/08/31/rollout-2026-08-31t18-18-44-01a05754-1787-7c73-ae14-0d232142884f.jsonl",
+  "producerSurface": "CLI",
+  "classificationConfidence": "confirmed",
+  "classificationEvidence": [
+    "weak originator=Codex Desktop",
+    "rollout source=exec"
+  ],
+  "classificationProvenance": [
+    "transport:CodexCliRollout",
+    "rollout.session_meta.originator",
+    "rollout.file-owner.session_meta.source"
+  ],
+  "cwd": "C:/Users/DeanX/.codex/worktrees/37b1/CodexMonitor",
+  "workspaceAssignment": null,
+  "firstSeenMs": 1788171611034,
+  "latestSeenMs": 1788171611034,
+  "authoritativeLane": "NEAR_LIVE",
+  "sourceLanes": [
+    {
+      "sourceKind": "codex-cli-rollout",
+      "temporalClass": "NEAR_LIVE",
+      "generation": "file:5dd023db1d52cdc57464fbdaf82783dbe1c085c016cc25db06aceb0c61fb2e92"
+    }
+  ],
+  "observedModels": [
+    {
+      "threadId": "01a05754-1787-7c73-ae14-0d232142884f",
+      "model": "gpt-5.6-sol",
+      "provenance": "authoritative codex-cli-rollout NEAR_LIVE lane"
+    }
+  ],
+  "authoritativeTokens": [
+    {
+      "threadId": "01a05754-1787-7c73-ae14-0d232142884f",
+      "totalTokens": 84267,
+      "provenance": "authoritative cumulative rollout snapshot"
+    }
+  ],
+  "lifecycle": "completed",
+  "freshness": "cold-discovered after completion; canonical source settled",
+  "lagMs": {
+    "minimum": 50316,
+    "maximum": 86715,
+    "samples": 8
+  },
+  "cursor": null,
+  "result": "PASS",
+  "notes": "Same CODEX_HOME also retained a confirmed DESKTOP Main. Strong rollout source=exec kept this thread CLI despite weak originator=Codex Desktop. No prompt content retained."
+}

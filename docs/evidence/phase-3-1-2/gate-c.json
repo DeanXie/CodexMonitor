@@ -1,0 +1,122 @@
+{
+  "gateId": "C",
+  "creatorSurface": "MONITOR",
+  "consumerSurface": "DESKTOP",
+  "threadId": "01a05d7e-4073-71d1-b171-d6c5a4f3367d",
+  "oldTurnId": "01a05d7e-6d7f-73f0-ab38-d86ab742aa9e",
+  "newTurnId": "01a05d8e-702d-7ac2-893a-6ad338c03ee3",
+  "rolloutFile": {
+    "identity": "608716722:56294995342193540",
+    "sha256": "UNKNOWN",
+    "searchScope": "CURRENT_CODEX_HOME_SESSIONS_RECURSIVE",
+    "matchCount": 1
+  },
+  "bytePositions": {
+    "before": 414327,
+    "resume": 414327,
+    "after": 792441
+  },
+  "tokens": {
+    "cumulativeBefore": 22542,
+    "cumulativeAfter": 58435,
+    "newTurn": 35893
+  },
+  "model": {
+    "before": "gpt-5.6-sol",
+    "after": "gpt-5.6-sol"
+  },
+  "lifecycle": "TASK_COMPLETE",
+  "workspace": "Phase 3.1.2 dedicated worktree",
+  "producerSurface": "MONITOR",
+  "states": {
+    "threadExists": "PASS",
+    "resumable": "PARTIAL",
+    "projectAssigned": "FAIL",
+    "projectRetained": "NOT_OBSERVED",
+    "catalogIndexed": "PASS",
+    "sidebarVisible": "PASS"
+  },
+  "occupiedWriterState": "NOT_OBSERVED",
+  "protocolCalls": [
+    {
+      "sequence": 1,
+      "surface": "MONITOR",
+      "phase": "CREATE",
+      "method": "thread/start",
+      "requestId": "1788274950239",
+      "outcome": "PASS",
+      "status": "COMPLETED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 0,
+      "turnCountAfter": 0
+    },
+    {
+      "sequence": 2,
+      "surface": "MONITOR",
+      "phase": "CONTINUE",
+      "method": "turn/start via send_user_message",
+      "requestId": "1788274961784",
+      "outcome": "PASS",
+      "status": "COMPLETED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 0,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 3,
+      "surface": "DESKTOP",
+      "phase": "READ",
+      "method": "read_thread app abstraction",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "PASS",
+      "status": "NOT_LOADED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 4,
+      "surface": "DESKTOP",
+      "phase": "RESUME",
+      "method": "navigate_to_codex_page; literal thread/resume not exposed",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "PARTIAL",
+      "status": "IDLE",
+      "errorClass": "PROTOCOL_METHOD_NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 5,
+      "surface": "DESKTOP",
+      "phase": "OBSERVE",
+      "method": "sanitized rollout snapshot",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "PASS",
+      "status": "UNCHANGED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 6,
+      "surface": "DESKTOP",
+      "phase": "CONTINUE",
+      "method": "send_message_to_thread",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "PASS",
+      "status": "COMPLETED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 2
+    }
+  ],
+  "readResult": "PASS",
+  "resumeResult": "PARTIAL",
+  "sameThreadId": "PASS",
+  "sameRollout": "PASS",
+  "newTurnCreated": "PASS",
+  "tokenContinuity": "PASS",
+  "duplicateCount": 0,
+  "result": "PARTIAL"
+}

@@ -12,7 +12,7 @@
       "head": "57d5bf82b32d7106a2d22b5580bbd599e78d9703"
     },
     "upstreamCodex": {
-      "head": null,
+      "head": "UNKNOWN",
       "availability": "UNKNOWN",
       "checkedRelativePath": "../Codex",
       "reason": "No upstream Codex checkout was present at the required relative path during the freeze."
@@ -26,9 +26,9 @@
       "utcOffset": "+08:00"
     },
     "codexMonitorBinary": {
-      "identity": "codex-monitor.exe",
-      "sha256": "CDD8770FD21DD2B055BCC4DF651AB6B233FF53D1B7A061DE7A219BE60E989A47",
-      "lastWriteTimeUtc": "2026-08-31T18:21:03Z"
+      "identity": "codex_monitor_daemon.exe",
+      "sha256": "372FFB618B849DB41A2D12DDE049748DF851217189B2B734173BDF1503E9934F",
+      "lastWriteTimeUtc": "2026-09-01T10:45:00Z"
     },
     "appServerDocumentation": {
       "identity": "docs/app-server-events.md",
@@ -41,8 +41,28 @@
     "listedThreadCount": 50,
     "persistedExistingThreadIdentifiers": false,
     "persistedExistingThreadTitles": false,
-    "testThreadIdsSelected": [],
-    "reservedTestThreadIds": [],
+    "testThreadIdsSelected": [
+      "01a05ccf-9886-7f33-b642-6534e371d1d0",
+      "01a05ccf-bc65-7b11-8f76-9b22621149f3",
+      "01a05d7e-4073-71d1-b171-d6c5a4f3367d",
+      "01a05d7e-8d11-7ab3-b1f1-32f97ce5014c",
+      "01a05d80-0f19-73e0-91a7-c5e33888bcff",
+      "01a05d82-2f35-7011-839a-4678972aba23"
+    ],
+    "reservedTestThreadIds": [
+      "01a05ccf-9886-7f33-b642-6534e371d1d0",
+      "01a05ccf-bc65-7b11-8f76-9b22621149f3",
+      "01a05d7e-4073-71d1-b171-d6c5a4f3367d",
+      "01a05d7e-8d11-7ab3-b1f1-32f97ce5014c",
+      "01a05d80-0f19-73e0-91a7-c5e33888bcff",
+      "01a05d82-2f35-7011-839a-4678972aba23"
+    ],
+    "occupancyTestThreadIds": [
+      "01a05d9c-20a0-74e2-8176-c7ff53f4552f",
+      "01a05d9f-38e5-7db0-85b7-8b82494a669d"
+    ],
+    "occupancyEvidenceThreadId": "01a05d9f-38e5-7db0-85b7-8b82494a669d",
+    "occupancyIdsRecordedBeforeWrite": true,
     "admissionRule": "A test thread ID must be absent from the pre-creator exclusion set and appended to reservedTestThreadIds before its first continuation write."
   },
   "sanitization": {

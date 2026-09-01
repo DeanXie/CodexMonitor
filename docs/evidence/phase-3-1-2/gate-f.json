@@ -1,0 +1,122 @@
+{
+  "gateId": "F",
+  "creatorSurface": "CLI",
+  "consumerSurface": "MONITOR",
+  "threadId": "01a05d82-2f35-7011-839a-4678972aba23",
+  "oldTurnId": "01a05d82-2fda-70f0-9539-9665474b7f28",
+  "newTurnId": "01a05d9b-bc5c-7ea0-8b2c-dabd1a5640d6",
+  "rolloutFile": {
+    "identity": "608716722:43910096366925390",
+    "sha256": "347E204D29C6671961CD734C2956B0AD0FD91B069A22B785EBB39977CCADCDBE",
+    "searchScope": "CURRENT_CODEX_HOME_SESSIONS_RECURSIVE",
+    "matchCount": 1
+  },
+  "bytePositions": {
+    "before": 400512,
+    "resume": 400512,
+    "after": 734681
+  },
+  "tokens": {
+    "cumulativeBefore": 19973,
+    "cumulativeAfter": 42733,
+    "newTurn": 22760
+  },
+  "model": {
+    "before": "gpt-5.6-sol",
+    "after": "gpt-5.6-sol"
+  },
+  "lifecycle": "TASK_COMPLETE",
+  "workspace": "Phase 3.1.2 dedicated worktree",
+  "producerSurface": "CLI",
+  "states": {
+    "threadExists": "PASS",
+    "resumable": "PASS",
+    "projectAssigned": "UNKNOWN",
+    "projectRetained": "NOT_OBSERVED",
+    "catalogIndexed": "UNKNOWN",
+    "sidebarVisible": "UNKNOWN"
+  },
+  "occupiedWriterState": "NOT_OBSERVED",
+  "protocolCalls": [
+    {
+      "sequence": 1,
+      "surface": "CLI",
+      "phase": "CREATE",
+      "method": "codex exec",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "PASS",
+      "status": "COMPLETED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 0,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 2,
+      "surface": "MONITOR",
+      "phase": "READ",
+      "method": "thread/read",
+      "requestId": "1788276853533",
+      "outcome": "PASS",
+      "status": "NOT_LOADED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 3,
+      "surface": "MONITOR",
+      "phase": "RESUME",
+      "method": "thread/resume",
+      "requestId": "1788276865835",
+      "outcome": "PASS",
+      "status": "IDLE",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 4,
+      "surface": "MONITOR",
+      "phase": "OBSERVE",
+      "method": "sanitized rollout snapshot",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "PASS",
+      "status": "UNCHANGED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 5,
+      "surface": "MONITOR",
+      "phase": "CONTINUE",
+      "method": "turn/start via send_user_message",
+      "requestId": "1788276882517",
+      "outcome": "PASS",
+      "status": "COMPLETED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 2
+    },
+    {
+      "sequence": 6,
+      "surface": "MONITOR",
+      "phase": "OBSERVE",
+      "method": "thread/read",
+      "requestId": "1788276888705",
+      "outcome": "PASS",
+      "status": "IDLE",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 2,
+      "turnCountAfter": 2
+    }
+  ],
+  "readResult": "PASS",
+  "resumeResult": "PASS",
+  "sameThreadId": "PASS",
+  "sameRollout": "PASS",
+  "newTurnCreated": "PASS",
+  "tokenContinuity": "PASS",
+  "duplicateCount": 0,
+  "result": "PASS"
+}

@@ -1,0 +1,98 @@
+{
+  "gateId": "B",
+  "creatorSurface": "DESKTOP",
+  "consumerSurface": "CLI",
+  "threadId": "01a05ccf-bc65-7b11-8f76-9b22621149f3",
+  "oldTurnId": "01a05ccf-bd4c-71c3-8255-a3dc38053a1b",
+  "newTurnId": "NOT_OBSERVED",
+  "rolloutFile": {
+    "identity": "608716722:3096224744927353",
+    "sha256": "UNKNOWN",
+    "searchScope": "CURRENT_CODEX_HOME_SESSIONS_RECURSIVE",
+    "matchCount": 1
+  },
+  "bytePositions": {
+    "before": 423592,
+    "resume": 423592,
+    "after": 423592
+  },
+  "tokens": {
+    "cumulativeBefore": 29771,
+    "cumulativeAfter": 29771,
+    "newTurn": "NOT_OBSERVED"
+  },
+  "model": {
+    "before": "gpt-5.6-sol",
+    "after": "gpt-5.6-sol"
+  },
+  "lifecycle": "TASK_COMPLETE",
+  "workspace": "CodexMonitor saved-project local checkout",
+  "producerSurface": "DESKTOP",
+  "states": {
+    "threadExists": "PASS",
+    "resumable": "FAIL",
+    "projectAssigned": "PASS",
+    "projectRetained": "NOT_OBSERVED",
+    "catalogIndexed": "UNKNOWN",
+    "sidebarVisible": "UNKNOWN"
+  },
+  "occupiedWriterState": "PASS",
+  "protocolCalls": [
+    {
+      "sequence": 1,
+      "surface": "DESKTOP",
+      "phase": "CREATE",
+      "method": "create_thread",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "PASS",
+      "status": "COMPLETED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 0,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 2,
+      "surface": "CLI",
+      "phase": "RESUME",
+      "method": "codex resume exact UUID",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "FAIL",
+      "status": "REJECTED",
+      "errorClass": "ACTIVE_WRITER_-32600",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 3,
+      "surface": "MONITOR",
+      "phase": "READ",
+      "method": "thread/read auxiliary evidence",
+      "requestId": "1788275679927",
+      "outcome": "PASS",
+      "status": "NOT_LOADED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    },
+    {
+      "sequence": 4,
+      "surface": "CLI",
+      "phase": "OBSERVE",
+      "method": "sanitized rollout snapshot",
+      "requestId": "NOT_OBSERVED",
+      "outcome": "PASS",
+      "status": "UNCHANGED",
+      "errorClass": "NOT_OBSERVED",
+      "turnCountBefore": 1,
+      "turnCountAfter": 1
+    }
+  ],
+  "readResult": "NOT_OBSERVED",
+  "resumeResult": "FAIL",
+  "sameThreadId": "PASS",
+  "sameRollout": "PASS",
+  "newTurnCreated": "NOT_OBSERVED",
+  "tokenContinuity": "PARTIAL",
+  "duplicateCount": 0,
+  "result": "FAIL"
+}

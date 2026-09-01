@@ -1,0 +1,38 @@
+{
+  "recordType": "phase-3-1-2-sanitized-occupancy-gate",
+  "threadId": "01a05d9f-38e5-7db0-85b7-8b82494a669d",
+  "activeTurnId": "01a05d9f-6f73-7671-a56d-a9b8de84205c",
+  "creatorSurface": "MONITOR_INSTANCE_A",
+  "consumerSurface": "MONITOR_INSTANCE_B",
+  "workspace": "Phase 3.1.2 dedicated worktree",
+  "producerTurnStart": {
+    "requestId": "1788277124972",
+    "status": "inProgress"
+  },
+  "consumerRead": {
+    "requestId": "1788277130910",
+    "result": "PASS",
+    "observedThreadId": "01a05d9f-38e5-7db0-85b7-8b82494a669d",
+    "status": "notLoaded"
+  },
+  "consumerResume": {
+    "requestId": "1788277136293",
+    "result": "FAIL",
+    "errorCode": -32600,
+    "errorClass": "ACTIVE_WRITER",
+    "sanitizedMessage": "thread already has an active writer"
+  },
+  "takeoverAttempted": false,
+  "forkAttempted": false,
+  "replacementThreadStarted": false,
+  "producerInterruptedByConsumer": false,
+  "producerFinalStatus": "idle",
+  "producerFinalReadRequestId": "1788278441189",
+  "rollout": {
+    "identity": "608716722:46443371157331704",
+    "matchCount": 1,
+    "turnCount": 1,
+    "latestLifecycle": "task_complete"
+  },
+  "result": "PASS"
+}

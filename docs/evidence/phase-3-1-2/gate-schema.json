@@ -12,7 +12,7 @@
     "threadId": { "type": "string", "minLength": 1 },
     "oldTurnId": { "$ref": "#/$defs/observedString" },
     "newTurnId": { "$ref": "#/$defs/observedString" },
-    "rolloutFile": { "type": "object", "additionalProperties": false, "required": ["identity", "sha256"], "properties": { "identity": { "$ref": "#/$defs/observedString" }, "sha256": { "$ref": "#/$defs/observedString" } } },
+    "rolloutFile": { "type": "object", "additionalProperties": false, "required": ["identity", "sha256", "searchScope", "matchCount"], "properties": { "identity": { "$ref": "#/$defs/observedString" }, "sha256": { "$ref": "#/$defs/observedString" }, "searchScope": { "$ref": "#/$defs/observedString" }, "matchCount": { "$ref": "#/$defs/nonNegativeOrUnknown" } } },
     "bytePositions": { "type": "object", "additionalProperties": false, "required": ["before", "resume", "after"], "properties": { "before": { "$ref": "#/$defs/nonNegativeOrUnknown" }, "resume": { "$ref": "#/$defs/nonNegativeOrUnknown" }, "after": { "$ref": "#/$defs/nonNegativeOrUnknown" } } },
     "tokens": { "type": "object", "additionalProperties": false, "required": ["cumulativeBefore", "cumulativeAfter", "newTurn"], "properties": { "cumulativeBefore": { "$ref": "#/$defs/nonNegativeOrUnknown" }, "cumulativeAfter": { "$ref": "#/$defs/nonNegativeOrUnknown" }, "newTurn": { "$ref": "#/$defs/nonNegativeOrUnknown" } } },
     "model": { "type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": { "before": { "$ref": "#/$defs/observedString" }, "after": { "$ref": "#/$defs/observedString" } } },

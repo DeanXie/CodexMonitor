@@ -18,11 +18,15 @@ use crate::rules;
 use crate::shared::account::{build_account_response, read_auth_account};
 use crate::types::WorkspaceEntry;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) mod external_thread_admission;
+
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
 #[allow(dead_code)]
 const MAX_INLINE_IMAGE_BYTES: u64 = 50 * 1024 * 1024;
 const THREAD_LIST_SOURCE_KINDS: &[&str] = &[
     "cli",
+    "exec",
     "vscode",
     "appServer",
     "subAgentReview",
@@ -30,6 +34,60 @@ const THREAD_LIST_SOURCE_KINDS: &[&str] = &[
     "subAgentThreadSpawn",
     "unknown",
 ];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ExactThreadMethod {
+    Read,
+    Resume,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ExactThreadRequest {
+    method: &'static str,
+    params: Value,
+}
+
+fn build_exact_thread_request(
+    method: ExactThreadMethod,
+    thread_id: &str,
+) -> Result<ExactThreadRequest, String> {
+    let thread_id = thread_id.trim();
+    if thread_id.is_empty() {
+        return Err("threadId is required".to_string());
+    }
+    let method = match method {
+        ExactThreadMethod::Read => "thread/read",
+        ExactThreadMethod::Resume => "thread/resume",
+    };
+    Ok(ExactThreadRequest {
+        method,
+        params: json!({ "threadId": thread_id }),
+    })
+}
+
+fn validate_exact_thread_response(
+    requested_thread_id: &str,
+    response: Value,
+) -> Result<Value, String> {
+    let requested_thread_id = requested_thread_id.trim();
+    if response.get("error").is_some() {
+        return Ok(response);
+    }
+    let response_thread_id = response
+        .pointer("/result/thread/id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "successful exact-thread response is missing thread.id for requested threadId {requested_thread_id}"
+            )
+        })?;
+    if response_thread_id != requested_thread_id {
+        return Err(format!(
+            "response thread.id {response_thread_id} does not match requested threadId {requested_thread_id}"
+        ));
+    }
+    Ok(response)
+}
 
 #[allow(dead_code)]
 fn image_extension_for_path(path: &str) -> Option<String> {
@@ -270,10 +328,11 @@ pub(crate) async fn resume_thread_core(
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id });
-    session
-        .send_request_for_workspace(&workspace_id, "thread/resume", params)
-        .await
+    let request = build_exact_thread_request(ExactThreadMethod::Resume, &thread_id)?;
+    let response = session
+        .send_request_for_workspace(&workspace_id, request.method, request.params)
+        .await?;
+    validate_exact_thread_response(&thread_id, response)
 }
 
 pub(crate) async fn read_thread_core(
@@ -282,10 +341,11 @@ pub(crate) async fn read_thread_core(
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id });
-    session
-        .send_request_for_workspace(&workspace_id, "thread/read", params)
-        .await
+    let request = build_exact_thread_request(ExactThreadMethod::Read, &thread_id)?;
+    let response = session
+        .send_request_for_workspace(&workspace_id, request.method, request.params)
+        .await?;
+    validate_exact_thread_response(&thread_id, response)
 }
 
 pub(crate) async fn thread_live_subscribe_core(
@@ -1042,4 +1102,103 @@ mod tests {
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentCompact"));
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentThreadSpawn"));
     }
+
+    #[test]
+    fn thread_list_includes_exec_source_kind() {
+        assert!(THREAD_LIST_SOURCE_KINDS.contains(&"exec"));
+    }
+
+    #[test]
+    fn exact_thread_read_builds_only_thread_read_with_full_id() {
+        let request = build_exact_thread_request(
+            ExactThreadMethod::Read,
+            "01a00000-0000-7000-8000-000000000001",
+        )
+        .expect("exact read request");
+
+        assert_eq!(request.method, "thread/read");
+        assert_eq!(
+            request.params,
+            json!({ "threadId": "01a00000-0000-7000-8000-000000000001" })
+        );
+    }
+
+    #[test]
+    fn exact_thread_resume_builds_only_thread_resume_with_full_id() {
+        let request = build_exact_thread_request(
+            ExactThreadMethod::Resume,
+            "01a00000-0000-7000-8000-000000000002",
+        )
+        .expect("exact resume request");
+
+        assert_eq!(request.method, "thread/resume");
+        assert_eq!(
+            request.params,
+            json!({ "threadId": "01a00000-0000-7000-8000-000000000002" })
+        );
+    }
+
+    #[test]
+    fn exact_thread_request_rejects_blank_full_id() {
+        let error = build_exact_thread_request(ExactThreadMethod::Read, "   ")
+            .expect_err("blank full thread id must be rejected");
+
+        assert_eq!(error, "threadId is required");
+    }
+
+    #[test]
+    fn exact_thread_response_rejects_missing_or_mismatched_full_id() {
+        let requested = "01a00000-0000-7000-8000-000000000003";
+        let matching_response = json!({
+            "id": 6,
+            "result": { "thread": { "id": requested, "preview": "same title" } }
+        });
+        let matching = validate_exact_thread_response(requested, matching_response.clone())
+            .expect("matching full thread id must be accepted");
+        let missing = validate_exact_thread_response(
+            requested,
+            json!({ "id": 7, "result": { "thread": { "preview": "same title" } } }),
+        )
+        .expect_err("missing response id must be rejected");
+        let mismatched = validate_exact_thread_response(
+            requested,
+            json!({
+                "id": 8,
+                "result": {
+                    "thread": {
+                        "id": "01a00000-0000-7000-8000-000000000099",
+                        "preview": "same title"
+                    }
+                }
+            }),
+        )
+        .expect_err("mismatched response id must be rejected");
+
+        assert_eq!(matching, matching_response);
+        assert!(missing.contains("missing thread.id"));
+        assert!(mismatched.contains("does not match requested threadId"));
+    }
+
+    #[test]
+    fn exact_thread_response_uses_the_normalized_requested_full_id() {
+        let response = json!({
+            "id": 9,
+            "result": {
+                "thread": { "id": "01a00000-0000-7000-8000-000000000004" }
+            }
+        });
+
+        let validated = validate_exact_thread_response(
+            " 01a00000-0000-7000-8000-000000000004 ",
+            response.clone(),
+        )
+        .expect("response must be compared with the normalized request id");
+
+        assert_eq!(validated, response);
+    }
 }
+
+#[cfg(test)]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[path = "codex_core/external_thread_admission_tests.rs"]
+mod external_thread_admission_tests;

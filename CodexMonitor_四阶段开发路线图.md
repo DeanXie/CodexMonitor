@@ -586,6 +586,38 @@ IDE
 
 ## 核心能力
 
+### Phase 3.1 当前实现边界
+
+External Thread admission / resume capability 使用独立的 Phase 3 状态，按
+`CodexThreadKey` 关联 Phase 2 canonical observation：
+
+```text
+CodexThreadKey
+    ↓
+Phase 2 canonical observation
+    +
+Phase 3 admission / resume capability
+```
+
+Phase 2 Global Source Core 继续只承担 observed runtime truth、canonical
+identity 与 source authority，不保存 resume/control-plane 语义。Phase 3
+admission 状态位于 `shared/codex_core/external_thread_admission.rs`，包含
+`exists`、`resumable`、writer/occupancy、workspace assignment、Surface
+projections、`projectAssigned` 与 `sidebarVisible`。
+
+当前约束：
+
+- 相同完整 ID 的多 Surface projection 只对应一个 admission record；同标题不同 ID 独立。
+- tombstone 优先，已删除 identity 不被后续较低权威 observation 复活。
+- workspace assignment 复用 longest-root；同长冲突保持 ambiguous/unassigned。
+- writer/occupancy 无直接证据时为 `UNKNOWN`，不支持 force takeover。
+- `projectAssigned` 与 `sidebarVisible` 只接受直接 Surface projection evidence；cwd、catalog presence 或 source kind 均不能推导它们。
+- exact-ID `thread/read` / `thread/resume` 统一构造；成功响应的 `result.thread.id` 必须与请求完整 ID 完全一致。
+- `thread/resume` 不 fallback 到 `thread/start`，也不等同于 `turn/start`。
+- Phase 3.1.1 本地 contract/state TDD 已 PASS；真实六向 Resume E2E 为 GO / NOT STARTED，Phase 3.2 为 NOT STARTED。
+- 6 个既有 zh-CN locale/date failures 继续作为已批准的 non-blocking test debt，不阻塞 Phase 3.1.1。
+- 本地不存在 `../Codex`，因此 upstream protocol hash 未刷新；该项记为 non-blocking verification gap。
+
 ### 1. Project / Workspace 互通
 
 Monitor 能够读取 Codex Desktop / CLI 使用的项目和 Workspace。
@@ -942,7 +974,11 @@ Phase 2 — Global Sources
    DEFERRED / NOT A PHASE 2 COMPLETION GATE
 
 Phase 3 — Cross-Surface Interoperability
-GO / NOT STARTED
+├─ 3.0 FORENSICS COMPLETE
+├─ 3.1.1 PASS
+├─ Cross-Surface Resume Real E2E
+│  GO / NOT STARTED
+└─ 3.2 NOT STARTED
 
 Phase 4 — Productization
 NOT STARTED
@@ -957,7 +993,7 @@ RESERVED
 
 下一任务：
 
-**Phase 3 — Cross-Surface Interoperability（GO / NOT STARTED）**
+**Cross-Surface Resume Real E2E（GO / NOT STARTED）**
 
 核心验收：
 
@@ -965,4 +1001,5 @@ RESERVED
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 
-本轮只完成 Phase 2.5 最终收口并停止。Phase 3 是下一阶段 GO，但尚未开始；后续需单独授权启动。
+Phase 3.1.1 已 PASS。Cross-Surface Resume Real E2E 仅为 GO，尚未开始；
+Phase 3.2 仍为 NOT STARTED。

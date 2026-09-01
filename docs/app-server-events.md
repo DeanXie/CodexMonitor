@@ -200,7 +200,12 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   `docs/fixtures/app-server/thread-delete-cascade.protocol.json`.
 
 - `thread/start`
+- `thread/read`
 - `thread/resume`
+  Both exact-ID operations use the same request-construction boundary. A
+  successful response is accepted only when `result.thread.id` exactly equals
+  the requested full thread ID. Resume never falls back to `thread/start` and
+  is not a `turn/start` operation.
 - `thread/fork`
 - `thread/list`
 - `thread/archive`
@@ -263,7 +268,6 @@ Compared against Codex v2 request methods, CodexMonitor currently does not send:
 - `thread/increment_elicitation`
 - `thread/loaded/list`
 - `thread/metadata/update`
-- `thread/read`
 - `thread/realtime/appendAudio`
 - `thread/realtime/appendText`
 - `thread/realtime/start`

@@ -1,0 +1,76 @@
+{
+  "gate": "D2",
+  "direction": "Monitor -> CLI",
+  "status": "PASS",
+  "threadId": "01a05de4-4098-7833-9deb-e3763e15f397",
+  "producerTurnId": "01a05de4-59d9-7533-8479-c44425d0f851",
+  "consumerTurnId": "01a05deb-7c52-7863-9da7-5f5929bb0e9e",
+  "producerWriterRelease": "isolated Monitor daemon normal daemon_shutdown",
+  "producerRead": "PASS",
+  "rolloutLookup": {
+    "scope": "C:\\Users\\DeanX\\.codex\\sessions recursively, exact full Thread ID",
+    "matchCount": 1,
+    "path": "C:\\Users\\DeanX\\.codex\\sessions\\2026\\09\\02\\rollout-2026-09-02T00-53-55-01a05de4-4098-7833-9deb-e3763e15f397.jsonl",
+    "bytesBefore": 422796,
+    "bytesAfter": 765358,
+    "duplicateCanonical": 0
+  },
+  "historyAndIndexLookup": {
+    "sessionIndexMembership": false,
+    "historyMembershipBefore": false,
+    "historyMembershipAfter": false
+  },
+  "sessionMetadata": {
+    "source": "vscode",
+    "originator": "Codex Desktop",
+    "cliVersion": "0.151.0-alpha.7.2",
+    "threadSourceFieldPresent": false
+  },
+  "globalPathInteractive": {
+    "exactCommand": "codex resume 01a05de4-4098-7833-9deb-e3763e15f397",
+    "resolvedVersion": "0.147.0",
+    "exitCode": 0,
+    "result": "authentication UI reached; manually exited; exact-ID discovery not reached",
+    "gateStatus": "UNKNOWN"
+  },
+  "globalPathExec": {
+    "exactCommand": "codex exec resume 01a05de4-4098-7833-9deb-e3763e15f397 <synthetic-continuation-prompt>",
+    "resolvedVersion": "0.147.0",
+    "exitCode": 1,
+    "result": "no rollout found for thread id (code -32600)",
+    "turnCreated": false
+  },
+  "versionMatchedInteractive": {
+    "exactCommand": "C:\\Users\\DeanX\\AppData\\Local\\OpenAI\\Codex\\bin\\b99306303521e97e\\codex.exe resume 01a05de4-4098-7833-9deb-e3763e15f397",
+    "resolvedVersion": "0.151.0-alpha.7.2",
+    "exitCode": 0,
+    "result": "PASS",
+    "threadId": "01a05de4-4098-7833-9deb-e3763e15f397",
+    "turnCreated": false,
+    "rolloutBytesBefore": 422796,
+    "rolloutBytesAfter": 422796
+  },
+  "versionMatchedExec": {
+    "exactCommand": "C:\\Users\\DeanX\\AppData\\Local\\OpenAI\\Codex\\bin\\b99306303521e97e\\codex.exe exec resume 01a05de4-4098-7833-9deb-e3763e15f397 <synthetic-continuation-prompt>",
+    "resolvedVersion": "0.151.0-alpha.7.2",
+    "exitCode": 0,
+    "result": "PASS",
+    "threadId": "01a05de4-4098-7833-9deb-e3763e15f397",
+    "newTurnId": "01a05deb-7c52-7863-9da7-5f5929bb0e9e",
+    "taskComplete": true
+  },
+  "tokenObservation": {
+    "before": 22508,
+    "after": 24250,
+    "continuity": "PASS"
+  },
+  "discoveryConditions": {
+    "specificSourceKindRequiredByVersionMatchedCli": false,
+    "historyMembershipRequiredByVersionMatchedCli": false,
+    "indexMembershipRequiredByVersionMatchedCli": false,
+    "interactiveOriginRequiredByVersionMatchedCli": false,
+    "execOriginRequiredByVersionMatchedCli": false,
+    "codeHome": "C:\\Users\\DeanX\\.codex"
+  },
+  "rootCause": "Versioned CLI authentication/discovery compatibility boundary: PATH CLI 0.147.0 is auth-blocked in interactive mode and cannot discover this vscode-origin rollout in exec mode; the Desktop/Monitor-matched 0.151.0-alpha.7.2 CLI discovers and resumes it in both modes. This is not a Monitor Thread-standardness defect or a product-mode split."
+}

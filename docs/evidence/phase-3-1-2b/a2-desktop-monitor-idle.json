@@ -1,0 +1,46 @@
+{
+  "gate": "A2",
+  "direction": "Desktop -> Monitor",
+  "status": "PASS",
+  "occupiedStatus": "BLOCKED_BY_ACTIVE_WRITER",
+  "threadId": "01a05dd5-648d-7432-a4ad-e32d60474763",
+  "producerTurnId": "01a05dd5-6559-7781-b0cc-f981943e9c5d",
+  "consumerTurnId": "01a05de1-9130-7ae0-841c-f86f965248aa",
+  "writerRelease": {
+    "mechanism": "public Desktop archive then unarchive lifecycle",
+    "privateDatabaseModified": false,
+    "forceTakeover": false
+  },
+  "exactRead": "PASS",
+  "resume": {
+    "result": "PASS",
+    "turnCreated": false,
+    "rolloutBytesBefore": 420318,
+    "rolloutBytesAfter": 420318,
+    "turnCountBefore": 1,
+    "turnCountAfter": 1
+  },
+  "explicitTurnStart": {
+    "result": "PASS",
+    "newTurnId": "01a05de1-9130-7ae0-841c-f86f965248aa",
+    "taskComplete": true
+  },
+  "rolloutLookup": {
+    "scope": "C:\\Users\\DeanX\\.codex\\sessions recursively, exact full Thread ID",
+    "matchCount": 1,
+    "path": "C:\\Users\\DeanX\\.codex\\sessions\\2026\\09\\02\\rollout-2026-09-02T00-37-41-01a05dd5-648d-7432-a4ad-e32d60474763.jsonl",
+    "bytesBefore": 420318,
+    "bytesAfter": 824140,
+    "duplicateCanonical": 0
+  },
+  "tokenObservation": {
+    "before": 28523,
+    "after": 33002,
+    "continuity": "PASS"
+  },
+  "sessionMetadata": {
+    "source": "vscode",
+    "originator": "Codex Desktop",
+    "cliVersion": "0.151.0-alpha.7.2"
+  }
+}

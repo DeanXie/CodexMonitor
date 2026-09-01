@@ -1,0 +1,36 @@
+{
+  "phase": "3.1.2b",
+  "title": "Resume Capability Closure",
+  "phase31Status": "PASS",
+  "phase32Started": false,
+  "sourceCodeModified": false,
+  "matrix": {
+    "A": {
+      "behavior": "PASS",
+      "whenOccupied": "BLOCKED_BY_ACTIVE_WRITER"
+    },
+    "B": {
+      "behavior": "PASS",
+      "whenOccupied": "BLOCKED_BY_ACTIVE_WRITER"
+    },
+    "C": {
+      "behavior": "PASS",
+      "protocolMethodObservation": "UNKNOWN"
+    },
+    "D": {
+      "behavior": "PASS",
+      "versionMatchedInteractive": "PASS",
+      "versionMatchedExec": "PASS"
+    },
+    "E": {
+      "behavior": "PASS",
+      "protocolMethodObservation": "UNKNOWN"
+    },
+    "F": {
+      "behavior": "PASS"
+    }
+  },
+  "activeWriterConclusion": "Normal occupancy protection, not lack of Resume capability",
+  "remainingCapabilityBlocker": null,
+  "operationalCaveat": "Global PATH resolves codex 0.147.0, while Desktop/Monitor use 0.151.0-alpha.7.2; the stale CLI has separate authentication/discovery compatibility failures."
+}

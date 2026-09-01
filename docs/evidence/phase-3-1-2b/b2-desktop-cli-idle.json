@@ -1,0 +1,53 @@
+{
+  "gate": "B2",
+  "direction": "Desktop -> CLI",
+  "status": "PASS",
+  "occupiedStatus": "BLOCKED_BY_ACTIVE_WRITER",
+  "threadId": "01a05dd6-8ec0-77b1-9eaa-33d6fa3356fb",
+  "producerTurnId": "01a05dd6-8faf-79e3-90f3-e778d0be2a91",
+  "consumerTurnId": "01a05de3-aee8-7fb2-a457-e6cc965481d9",
+  "writerRelease": {
+    "mechanism": "public Desktop archive then unarchive lifecycle",
+    "privateDatabaseModified": false,
+    "forceTakeover": false
+  },
+  "exactCommand": "C:\\Users\\DeanX\\AppData\\Local\\OpenAI\\Codex\\bin\\b99306303521e97e\\codex.exe resume 01a05dd6-8ec0-77b1-9eaa-33d6fa3356fb",
+  "cliVersion": "0.151.0-alpha.7.2",
+  "resumeLoad": {
+    "result": "PASS",
+    "exitCode": 0,
+    "threadId": "01a05dd6-8ec0-77b1-9eaa-33d6fa3356fb",
+    "turnCreated": false,
+    "rolloutBytesBefore": 420474,
+    "rolloutBytesAfter": 420474
+  },
+  "explicitTuiTurn": {
+    "result": "PASS",
+    "newTurnId": "01a05de3-aee8-7fb2-a457-e6cc965481d9",
+    "taskComplete": true
+  },
+  "rolloutLookup": {
+    "scope": "C:\\Users\\DeanX\\.codex\\sessions recursively, exact full Thread ID",
+    "matchCount": 1,
+    "path": "C:\\Users\\DeanX\\.codex\\sessions\\2026\\09\\02\\rollout-2026-09-02T00-38-57-01a05dd6-8ec0-77b1-9eaa-33d6fa3356fb.jsonl",
+    "bytesBefore": 420474,
+    "bytesAfter": 813723,
+    "duplicateCanonical": 0
+  },
+  "tokenObservation": {
+    "before": 28576,
+    "after": 31713,
+    "continuity": "PASS"
+  },
+  "sessionMetadata": {
+    "source": "vscode",
+    "originator": "Codex Desktop",
+    "cliVersion": "0.151.0-alpha.7.2"
+  },
+  "globalPathCaveat": {
+    "command": "codex resume 01a05dd6-8ec0-77b1-9eaa-33d6fa3356fb",
+    "resolvedVersion": "0.147.0",
+    "result": "authentication UI reached before exact-ID discovery",
+    "capabilityInference": "UNKNOWN for this stale/auth-blocked binary"
+  }
+}

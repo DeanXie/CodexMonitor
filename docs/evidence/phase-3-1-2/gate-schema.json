@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase-3-1-2/gate-schema.json",
+  "title": "Phase 3.1.2 sanitized cross-surface Gate record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["gateId", "creatorSurface", "consumerSurface", "threadId", "oldTurnId", "newTurnId", "rolloutFile", "bytePositions", "tokens", "model", "lifecycle", "workspace", "producerSurface", "states", "occupiedWriterState", "protocolCalls", "duplicateCount", "result"],
+  "properties": {
+    "gateId": { "type": "string", "minLength": 1 },
+    "creatorSurface": { "$ref": "#/$defs/surface" },
+    "consumerSurface": { "$ref": "#/$defs/surface" },
+    "threadId": { "type": "string", "minLength": 1 },
+    "oldTurnId": { "type": ["string", "null"] },
+    "newTurnId": { "type": ["string", "null"] },
+    "rolloutFile": { "type": "object", "additionalProperties": false, "required": ["identity"], "properties": { "identity": { "type": "string", "minLength": 1 }, "sha256": { "type": ["string", "null"] } } },
+    "bytePositions": { "type": "object", "additionalProperties": false, "required": ["before", "resume", "after"], "properties": { "before": { "$ref": "#/$defs/nonNegativeOrNull" }, "resume": { "$ref": "#/$defs/nonNegativeOrNull" }, "after": { "$ref": "#/$defs/nonNegativeOrNull" } } },
+    "tokens": { "type": "object", "additionalProperties": false, "required": ["cumulativeBefore", "cumulativeAfter", "newTurn"], "properties": { "cumulativeBefore": { "$ref": "#/$defs/nonNegativeOrNull" }, "cumulativeAfter": { "$ref": "#/$defs/nonNegativeOrNull" }, "newTurn": { "$ref": "#/$defs/nonNegativeOrNull" } } },
+    "model": { "type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": { "before": { "type": ["string", "null"] }, "after": { "type": ["string", "null"] } } },
+    "lifecycle": { "type": ["string", "null"] },
+    "workspace": { "type": ["string", "null"] },
+    "producerSurface": { "$ref": "#/$defs/surfaceOrNull" },
+    "states": { "type": "object", "additionalProperties": false, "required": ["project", "catalog", "sidebar"], "properties": { "project": { "$ref": "#/$defs/observation" }, "catalog": { "$ref": "#/$defs/observation" }, "sidebar": { "$ref": "#/$defs/observation" } } },
+    "occupiedWriterState": { "$ref": "#/$defs/observation" },
+    "protocolCalls": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "duplicateCount": { "type": "integer", "minimum": 0 },
+    "result": { "$ref": "#/$defs/result" }
+  },
+  "$defs": {
+    "surface": { "type": "string", "enum": ["CLI", "DESKTOP", "MONITOR", "REMOTE", "UNKNOWN", "NOT_OBSERVED"] },
+    "surfaceOrNull": { "anyOf": [{ "$ref": "#/$defs/surface" }, { "type": "null" }] },
+    "nonNegativeOrNull": { "type": ["integer", "null"], "minimum": 0 },
+    "observation": { "type": "string", "enum": ["PASS", "FAIL", "PARTIAL", "UNKNOWN", "NOT_OBSERVED"] },
+    "result": { "type": "string", "enum": ["PASS", "FAIL", "PARTIAL", "UNKNOWN", "NOT_OBSERVED"] }
+  }
+}

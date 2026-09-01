@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "recordType": "phase-3-1-2-sanitized-environment",
+  "frozenAtUtc": "2026-09-01T10:49:24.0353281Z",
+  "repositories": {
+    "codexMonitor": {
+      "head": "293ba492a66a43955bcde8a747e14b3a882e1b4b",
+      "branch": "codex/phase-3-1-2-e2e",
+      "workspace": "F:\\AI\\CodexMonitor\\.worktrees\\phase-3-1-2-e2e"
+    },
+    "crossProjectMemory": {
+      "head": "57d5bf82b32d7106a2d22b5580bbd599e78d9703"
+    },
+    "upstreamCodex": {
+      "head": null,
+      "availability": "UNKNOWN",
+      "checkedRelativePath": "../Codex",
+      "reason": "No upstream Codex checkout was present at the required relative path during the freeze."
+    }
+  },
+  "runtime": {
+    "codexCliVersion": "codex-cli 0.147.0",
+    "codexHomeMode": "current",
+    "timezone": {
+      "id": "China Standard Time",
+      "utcOffset": "+08:00"
+    },
+    "codexMonitorBinary": {
+      "identity": "codex-monitor.exe",
+      "sha256": "CDD8770FD21DD2B055BCC4DF651AB6B233FF53D1B7A061DE7A219BE60E989A47",
+      "lastWriteTimeUtc": "2026-08-31T18:21:03Z"
+    },
+    "appServerDocumentation": {
+      "identity": "docs/app-server-events.md",
+      "head": "293ba492a66a43955bcde8a747e14b3a882e1b4b",
+      "sha256": "9CDC745B648FA05B40A5AF4B6E4A4B065C286AA53E399CE575A766604D386478"
+    }
+  },
+  "testTargetExclusion": {
+    "existingThreadsChecked": true,
+    "listedThreadCount": 50,
+    "persistedExistingThreadIdentifiers": false,
+    "persistedExistingThreadTitles": false,
+    "testThreadIdsSelected": [],
+    "reservedTestThreadIds": [],
+    "admissionRule": "A test thread ID must be absent from the pre-creator exclusion set and appended to reservedTestThreadIds before its first continuation write."
+  },
+  "sanitization": {
+    "promptBodiesPersisted": false,
+    "responseBodiesPersisted": false,
+    "userSpecificCodexHomePathPersisted": false,
+    "existingThreadIdsPersisted": false,
+    "existingThreadTitlesPersisted": false
+  }
+}

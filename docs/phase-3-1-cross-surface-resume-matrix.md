@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 3.0 is FORENSICS COMPLETE. Phase 3.1.1 is PASS. Phase 3.1.2b closes the behavioral Resume capability Gate as PASS. Phase 3.2 has not started.
+Phase 3.0 is FORENSICS COMPLETE. Phase 3.1.1, Phase 3.1.2, and Phase 3.1.2b are PASS. Phase 3.1 Shared Thread Identity / Resume is PASS / COMPLETE, and the six-way Cross-Surface Resume E2E is PASS. Phase 3.2 Project / Workspace Interoperability is GO / NOT STARTED.
 
 All Gate evidence uses dedicated Phase 3.1.2/3.1.2b test Threads. No user development Thread was resumed. No force takeover, fork, replacement `thread/start`, Desktop private database edit, catalog edit, sidebar edit, rebase, force push, or history rewrite was performed.
 
@@ -80,6 +80,10 @@ The producer completed naturally. Its rollout retained one canonical Thread and 
 
 All six behavioral Resume directions are PASS. Occupied Desktop producers return `BLOCKED_BY_ACTIVE_WRITER`, which is correct behavior and does not reduce idle capability. C/E literal Desktop protocol-method observation remains `UNKNOWN` without reducing their behavior-level PASS.
 
-No Phase 3.1.1 implementation defect was proven, so no source-code fix was made. Phase 3.1 is PASS at the Resume interoperability capability layer. The stale global PATH CLI `0.147.0` remains an operational version/authentication compatibility caveat, not a Phase 3.1 capability blocker. Phase 3.2 remains NOT STARTED.
+No Phase 3.1.1 implementation defect was proven, so no source-code fix was made. Phase 3.1 is formally PASS / COMPLETE: Cross-Surface Resume six-way E2E is PASS, duplicate canonical Thread count is zero, active-writer protection is CONFIRMED, and the CLI version compatibility caveat is KNOWN.
+
+Codex `0.151.0-alpha.7.2` passes both interactive resume and exec resume. Global PATH Codex `0.147.0` has interactive authentication/discovery UNKNOWN and exec resume `no rollout found`. This is a CLI version/history/protocol compatibility boundary, not a Monitor-created Thread identity failure; Phase 3.1 will not be changed to support the stale `0.147.0` binary.
+
+Phase 3.2 Project / Workspace Interoperability is GO / NOT STARTED and is the next sole development starting point. This closeout does not begin Phase 3.2 implementation.
 
 Original sanitized evidence remains in `docs/evidence/phase-3-1-2/`; closure evidence is stored in `docs/evidence/phase-3-1-2b/`.

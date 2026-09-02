@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "phase": "3.2.5",
+  "gates": [
+    { "gate": "A", "creator": "Monitor/AppServer/CLI", "workspaceState": "ASSIGNED", "desktopProjectState": "ASSIGNED or UNASSIGNED by direct evidence", "basis": "unique normalized root", "evidence": "fixture and real", "result": "PASS" },
+    { "gate": "B", "creator": "fixture", "workspaceState": "ASSIGNED", "desktopProjectState": "NOT OBSERVED", "basis": "nested longest component-boundary root", "evidence": "executable fixture", "result": "PASS" },
+    { "gate": "C", "creator": "fixture", "workspaceState": "ASSIGNED", "desktopProjectState": "NOT OBSERVED", "basis": "duplicate records collapse to one WorkspaceKey", "evidence": "executable fixture", "result": "PASS" },
+    { "gate": "D", "creator": "fixture", "workspaceState": "AMBIGUOUS", "desktopProjectState": "NOT OBSERVED", "basis": "distinct equal-longest WorkspaceKeys", "evidence": "executable fixture", "result": "PASS" },
+    { "gate": "E", "creator": "CLI/AppServer", "workspaceState": "ASSIGNED", "desktopProjectState": "UNASSIGNED", "basis": "one Workspace root, two Project roots, no direct assignment", "evidence": "fixture and real", "result": "PASS" },
+    { "gate": "F", "creator": "Desktop/MonitorProject", "workspaceState": "ASSIGNED or independent", "desktopProjectState": "ASSIGNED", "basis": "explicit legacy assignment and confirmed alias", "evidence": "fixture and real", "result": "PASS" },
+    { "gate": "G", "creator": "Cross-Surface", "workspaceState": "ORIGIN A and TURN_EXECUTION B", "desktopProjectState": "independent", "basis": "same fullThreadId with scoped cwd evidence", "evidence": "fixture and real rollout", "result": "PASS" },
+    { "gate": "H", "creator": "Child", "workspaceState": "ASSIGNED or UNKNOWN", "desktopProjectState": "independent", "basis": "direct cwd precedes confirmed-parent ASSIGNED fallback", "evidence": "executable fixture", "result": "PASS" },
+    { "gate": "I", "creator": "CLI", "workspaceState": "ASSIGNED", "desktopProjectState": "UNASSIGNED", "basis": "session_meta.cwd and turn_context.cwd", "evidence": "fixture and isolated real Thread", "result": "PASS" },
+    { "gate": "J", "creator": "Monitor/AppServer", "workspaceState": "ASSIGNED", "desktopProjectState": "UNASSIGNED or ASSIGNED only by explicit assignment", "basis": "thread/start.cwd", "evidence": "fixture and isolated real Threads", "result": "PASS" },
+    { "gate": "K", "creator": "fixture", "workspaceState": "UNKNOWN or UNASSIGNED", "desktopProjectState": "NOT OBSERVED", "basis": "absent/invalid locator versus valid no-match", "evidence": "executable fixture", "result": "PASS" },
+    { "gate": "L", "creator": "Desktop", "workspaceState": "unaffected", "desktopProjectState": "AMBIGUOUS or UNKNOWN", "basis": "conflicting assignment or schema drift", "evidence": "fixture and real schema diagnostic", "result": "PASS" }
+  ],
+  "invariants": {
+    "threadWorkspaceProjectIdentitySeparated": true,
+    "rootDoesNotCreateProjectAssignment": true,
+    "projectAliasDoesNotCreateSecondCandidate": true,
+    "ambiguousWorkspaceDoesNotRoute": true,
+    "desktopPrivateStateReadOnly": true
+  }
+}

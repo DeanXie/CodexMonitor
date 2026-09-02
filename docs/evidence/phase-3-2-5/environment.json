@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "phase": "3.2.5",
+  "capturedAt": "2026-09-03T01:41:37+08:00",
+  "codexBinaryVersion": "0.151.0-alpha.7.2",
+  "executionEnvironmentKey": "local:C:\\Users\\DeanX\\.codex",
+  "monitorWorkspace": {
+    "workspaceEntryId": "cb31e463-fe8f-46cc-b6f7-7c0bd7820c74",
+    "configuredRoot": "F:\\AI\\CodexMonitor",
+    "workspaceKeyRoot": "f:/ai/codexmonitor",
+    "matchingWorkspaceEntryCount": 1
+  },
+  "desktopProjection": {
+    "projectCount": 4,
+    "explicitAssignmentCount": 53,
+    "projectsMigrated": true,
+    "threadAssignmentsMigrated": false,
+    "projectsContainingExactCodexMonitorRoot": 2,
+    "diagnostics": [
+      {
+        "source": "C:\\Users\\DeanX\\.codex\\sqlite\\state_5.sqlite",
+        "code": "private-schema-drift",
+        "detail": "threads.project_id is missing"
+      }
+    ]
+  },
+  "isolatedThreads": [
+    {
+      "creator": "CLI",
+      "fullThreadId": "01a06311-1473-7f31-966c-afcbb2108604",
+      "fullTurnId": "01a06311-14e1-76d1-8031-56fa8379abeb",
+      "cwdBasis": "session_meta.cwd and turn_context.cwd",
+      "workspaceState": "ASSIGNED",
+      "desktopProjectState": "UNASSIGNED"
+    },
+    {
+      "creator": "MonitorProject",
+      "fullThreadId": "01a06313-9137-78e3-b8cf-3b47bab6290a",
+      "fullTurnId": "01a06313-9259-70a1-9ad8-e2d46474f917",
+      "cwdBasis": "thread/start.cwd and turn/start cwd",
+      "workspaceState": "ASSIGNED",
+      "desktopProjectState": "ASSIGNED",
+      "legacyProjectId": "d3889abf-fb0d-4ad4-adbe-3b6526c74e0e",
+      "appServerProjectId": "01a04dd8-ed3f-7ff3-b1bc-d6753312ed3c",
+      "canonicalProjectCandidateCount": 1
+    },
+    {
+      "creator": "AppServer",
+      "fullThreadId": "01a06318-eef4-7b21-8850-79ce4c04aa1a",
+      "fullTurnId": "01a06318-ef5e-7320-b72c-af672fd2c38d",
+      "cwdBasis": "thread/start.cwd and turn/start cwd",
+      "workspaceState": "ASSIGNED",
+      "desktopProjectState": "UNASSIGNED"
+    }
+  ],
+  "historicalExplicitAssignment": {
+    "fullThreadId": "019f6beb-d8a6-7831-b1cc-beefd8c8a490",
+    "legacyProjectId": "local-66d8bcd4ba8eec778ff34975572c881d",
+    "appServerProjectId": "01a04dd8-ed50-75f2-87a4-ea88839fae5b",
+    "persistedProjectId": null,
+    "desktopProjectState": "ASSIGNED",
+    "canonicalProjectCandidateCount": 1
+  },
+  "privateStateReadOnlyBracket": {
+    "result": "PASS",
+    "beforeEqualsAfter": true,
+    "files": [
+      {
+        "pathKind": "desktop-global-state",
+        "size": 469198,
+        "sha256": "D4F5E82EA6E06A42A109CF597B11239A3CE2F72607E02B8ED2D520C8345AEB74"
+      },
+      {
+        "pathKind": "desktop-persisted-state-sqlite",
+        "size": 180224,
+        "sha256": "D9142F3415A88A880A717E5BF65E057CE2D5D55C85F6C046DDB85E773C88BCC1"
+      },
+      {
+        "pathKind": "desktop-catalog-sqlite",
+        "size": 614400,
+        "sha256": "0DB947B1792DE5428A56B142CFAD369E38BDB8B1118F81190E2FE61D0D1C383D"
+      },
+      {
+        "pathKind": "monitor-workspace-store",
+        "size": 950,
+        "sha256": "F829995C42F97F5EF9329F7A74CC5B23D171484D09A7BBD0531B487A373ED37E"
+      }
+    ]
+  },
+  "contentExcluded": [
+    "user text",
+    "agent text",
+    "reasoning",
+    "credentials",
+    "cookies",
+    "private file content"
+  ]
+}

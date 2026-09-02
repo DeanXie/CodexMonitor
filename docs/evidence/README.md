@@ -24,3 +24,9 @@ must not include prompt, reasoning, message, account, or raw diagnostic content.
 Do not reconstruct missing protocol evidence. If an earlier raw journal has
 already rotated out, retain the human acceptance result in project status docs
 and start durable summaries with the next gate that has verifiable identities.
+
+The Phase 3.2.5 Project / Workspace interoperability evidence is stored in
+`phase-3-2-5/`. Its dedicated contract fixture suite and evidence validator keep
+`UNKNOWN`, `NOT OBSERVED`, `NOT TESTED`, and
+`NOT RECOVERABLE BY CURRENT CONTRACT` explicit rather than inferring missing
+runtime observations.

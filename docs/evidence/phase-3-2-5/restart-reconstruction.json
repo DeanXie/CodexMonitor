@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "phase": "3.2.5",
+  "fullThreadId": "01a06318-eef4-7b21-8850-79ce4c04aa1a",
+  "fullTurnId": "01a06318-ef5e-7320-b72c-af672fd2c38d",
+  "initialProcess": {
+    "threadStartCwd": "F:\\AI\\CodexMonitor",
+    "turnStartCwd": "F:\\AI\\CodexMonitor",
+    "lifecycleCompleted": true
+  },
+  "laterCatalogRead": {
+    "threadStatus": "notLoaded",
+    "sameFullThreadId": true,
+    "cwd": "F:\\AI\\CodexMonitor",
+    "existingTurnObserved": true,
+    "result": "PASS"
+  },
+  "runtimeRelationReconstruction": {
+    "originEffectiveRelation": "RECOVERABLE from thread/read or thread/list cwd",
+    "historicalTurnRelation": "NOT RECOVERABLE BY CURRENT CONTRACT",
+    "reason": "ThreadWorkspaceRelationStore is runtime-only and reconstruction inputs create ORIGIN observations; old TURN_EXECUTION relations are not forged from incomplete evidence",
+    "fixtureResult": "PASS"
+  },
+  "freshStandaloneProcessAttempt": {
+    "result": "TEST LIMITATION",
+    "detail": "The restricted test account could not initialize the actual CODEX_HOME SQLite runtime; no product state was changed"
+  },
+  "determinism": {
+    "originWorkspaceKey": "f:/ai/codexmonitor",
+    "selectionIndependentOfHashMapOrder": true,
+    "selectionIndependentOfObservationAppendOrder": true,
+    "unsupportedHistoryNotInvented": true
+  }
+}

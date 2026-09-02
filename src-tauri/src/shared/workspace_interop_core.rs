@@ -37,3 +37,7 @@ mod tests;
 #[cfg(test)]
 #[path = "workspace_interop_core/desktop_project_projection_tests.rs"]
 mod desktop_project_projection_tests;
+
+#[cfg(test)]
+#[path = "workspace_interop_core/contract_fixture_tests.rs"]
+mod contract_fixture_tests;

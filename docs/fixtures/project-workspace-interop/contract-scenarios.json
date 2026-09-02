@@ -1,0 +1,162 @@
+{
+  "fixtureVersion": 1,
+  "phase": "3.2.5",
+  "environment": "local:fixture",
+  "host": "local:fixture",
+  "workspaceCases": [
+    {
+      "gate": "A",
+      "creator": "Monitor",
+      "cwd": "F:\\AI\\CodexMonitor\\src-tauri",
+      "roots": [{ "workspaceId": "workspace-monitor", "root": "F:\\AI\\CodexMonitor" }],
+      "expectedState": "ASSIGNED",
+      "expectedRoot": "f:/ai/codexmonitor",
+      "expectedCandidates": 1
+    },
+    {
+      "gate": "B",
+      "creator": "fixture",
+      "cwd": "F:\\AI\\CodexMonitor\\src-tauri",
+      "roots": [
+        { "workspaceId": "workspace-parent", "root": "F:\\AI" },
+        { "workspaceId": "workspace-monitor", "root": "F:\\AI\\CodexMonitor" }
+      ],
+      "expectedState": "ASSIGNED",
+      "expectedRoot": "f:/ai/codexmonitor",
+      "expectedCandidates": 1
+    },
+    {
+      "gate": "C",
+      "creator": "fixture",
+      "cwd": "F:\\AI\\CodexMonitor\\src-tauri",
+      "roots": [
+        { "workspaceId": "workspace-b", "root": "F:\\AI\\CodexMonitor" },
+        { "workspaceId": "workspace-a", "root": "\\\\?\\F:\\AI\\CODEXMONITOR\\" }
+      ],
+      "expectedState": "ASSIGNED",
+      "expectedRoot": "f:/ai/codexmonitor",
+      "expectedCandidates": 1,
+      "expectedRuntimeWorkspaceId": "workspace-a"
+    },
+    {
+      "gate": "K-invalid",
+      "creator": "fixture",
+      "cwd": "relative\\path",
+      "roots": [{ "workspaceId": "workspace-monitor", "root": "F:\\AI\\CodexMonitor" }],
+      "expectedState": "UNKNOWN",
+      "expectedCandidates": 0
+    },
+    {
+      "gate": "K-no-match",
+      "creator": "fixture",
+      "cwd": "D:\\isolated\\repo",
+      "roots": [{ "workspaceId": "workspace-monitor", "root": "F:\\AI\\CodexMonitor" }],
+      "expectedState": "UNASSIGNED",
+      "expectedCandidates": 0
+    }
+  ],
+  "projectCases": {
+    "E": {
+      "threadId": "thread-overlap",
+      "globalState": {
+        "thread-project-assignments": {},
+        "local-projects": {
+          "legacy-a": { "id": "legacy-a", "name": "A", "rootPaths": ["F:\\AI\\CodexMonitor"] },
+          "legacy-b": { "id": "legacy-b", "name": "B", "rootPaths": ["F:\\AI\\CodexMonitor"] }
+        },
+        "app-server-project-id-by-legacy-project-id-by-host": { "local:fixture": {} },
+        "app-server-projects-migration-by-host": {
+          "local:fixture": { "projectsMigrated": true, "threadAssignmentsMigrated": false, "version": 1 }
+        }
+      },
+      "expectedState": "UNASSIGNED",
+      "expectedCandidates": 0
+    },
+    "F": {
+      "threadId": "thread-explicit",
+      "persistedProjectId": null,
+      "globalState": {
+        "thread-project-assignments": {
+          "thread-explicit": { "projectKind": "local", "projectId": "legacy-a" }
+        },
+        "local-projects": {
+          "legacy-a": { "id": "legacy-a", "name": "A", "rootPaths": ["F:\\AI\\CodexMonitor"] }
+        },
+        "app-server-project-id-by-legacy-project-id-by-host": {
+          "local:fixture": { "legacy-a": "app-project-p" }
+        },
+        "app-server-projects-migration-by-host": {
+          "local:fixture": { "projectsMigrated": true, "threadAssignmentsMigrated": false, "version": 1 }
+        }
+      },
+      "expectedState": "ASSIGNED",
+      "expectedLegacyProjectId": "legacy-a",
+      "expectedAppServerProjectId": "app-project-p",
+      "expectedCandidates": 1
+    },
+    "L-conflict": {
+      "threadId": "thread-conflict",
+      "persistedProjectId": "app-project-q",
+      "globalState": {
+        "thread-project-assignments": {
+          "thread-conflict": { "projectKind": "local", "projectId": "legacy-a" }
+        },
+        "local-projects": {},
+        "app-server-project-id-by-legacy-project-id-by-host": {
+          "local:fixture": { "legacy-a": "app-project-p" }
+        },
+        "app-server-projects-migration-by-host": {
+          "local:fixture": { "projectsMigrated": true, "threadAssignmentsMigrated": false, "version": 1 }
+        }
+      },
+      "expectedState": "AMBIGUOUS",
+      "expectedCandidates": 2
+    },
+    "L-schema-drift": {
+      "threadId": "thread-drift",
+      "globalState": {
+        "thread-project-assignments": [],
+        "app-server-projects-migration-by-host": {
+          "local:fixture": { "projectsMigrated": true, "threadAssignmentsMigrated": false }
+        }
+      },
+      "expectedState": "UNKNOWN",
+      "expectedDiagnostic": "private-schema-drift"
+    }
+  },
+  "relationCases": {
+    "G": {
+      "threadId": "thread-origin-a-turn-b",
+      "originCwd": "C:\\origin\\repo",
+      "originRoot": "C:\\origin",
+      "turnId": "turn-b",
+      "turnCwd": "F:\\AI\\CodexMonitor\\src-tauri",
+      "turnRoot": "F:\\AI\\CodexMonitor",
+      "expectedOriginRoot": "c:/origin",
+      "expectedTurnRoot": "f:/ai/codexmonitor"
+    },
+    "H": {
+      "parentThreadId": "thread-parent",
+      "childDirectThreadId": "thread-child-direct",
+      "childFallbackThreadId": "thread-child-fallback",
+      "childBlockedThreadId": "thread-child-blocked",
+      "parentCwd": "F:\\AI\\CodexMonitor",
+      "childDirectCwd": "D:\\isolated\\repo",
+      "expectedFallbackBasis": "PARENT_FALLBACK"
+    },
+    "I": {
+      "creator": "CLI",
+      "threadId": "thread-cli",
+      "sessionMetaCwd": "F:\\AI\\CodexMonitor",
+      "expectedWorkspaceState": "ASSIGNED",
+      "expectedProjectState": "UNASSIGNED"
+    },
+    "J": {
+      "creator": "Monitor",
+      "threadId": "thread-monitor",
+      "threadStartCwd": "F:\\AI\\CodexMonitor",
+      "expectedWorkspaceState": "ASSIGNED",
+      "expectedProjectState": "UNASSIGNED"
+    }
+  }
+}

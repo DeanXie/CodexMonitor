@@ -14,6 +14,7 @@ pub(crate) mod local_usage_core;
 pub(crate) mod process_core;
 pub(crate) mod prompts_core;
 pub(crate) mod settings_core;
+pub(crate) mod workspace_interop_core;
 pub(crate) mod workspace_rpc;
 pub(crate) mod workspaces_core;
 pub(crate) mod worktree_core;

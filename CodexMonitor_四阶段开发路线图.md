@@ -618,7 +618,7 @@ projections、`projectAssigned` 与 `sidebarVisible`。
 - 六向结果固定为：Desktop → Monitor 在 idle 时 PASS、Desktop → CLI 在 idle 时 PASS、Monitor → Desktop PASS、Monitor → CLI PASS、CLI exec → Desktop PASS、CLI exec → Monitor PASS；全部 Gate 的 duplicate canonical Thread 均为 0。
 - `BLOCKED_BY_ACTIVE_WRITER` 是 occupied 状态的正确并发保护，不是 resume capability failure；idle A2/B2 已证明 writer 释放后可继续同一 Thread。
 - CLI 兼容性 caveat 固定为：Codex `0.151.0-alpha.7.2` interactive resume / exec resume 均 PASS；PATH Codex `0.147.0` interactive authentication/discovery UNKNOWN、exec resume `no rollout found`。根因归类为 CLI version/history/protocol compatibility boundary，不为兼容旧 `0.147.0` 修改 Phase 3.1。
-- Phase 3.2 — Project / Workspace Interoperability 已进入实施：3.2.0 = FORENSICS COMPLETE，3.2.1 = PASS / FROZEN，3.2.1a = PASS，3.2.2 = PASS / FROZEN，3.2.3 Monitor Runtime Reconciliation = PASS / FROZEN；3.2.4 Desktop Projection Read Adapter = GO / NOT STARTED，是下一唯一开发起点。
+- Phase 3.2 — Project / Workspace Interoperability 已进入实施：3.2.0 = FORENSICS COMPLETE，3.2.1 = PASS / FROZEN，3.2.1a = PASS，3.2.2 = PASS / FROZEN，3.2.3 = PASS / FROZEN，3.2.4 Desktop Projection Read Adapter = PASS / FROZEN；3.2.5 Contract Fixtures / Focused E2E = GO / NOT STARTED，是下一唯一开发起点。
 - 6 个既有 zh-CN locale/date failures 继续作为已批准的 non-blocking test debt，不阻塞 Phase 3.1 收口。
 - 本地不存在 `../Codex`，因此 upstream protocol hash 未刷新；该项记为 non-blocking verification gap。
 
@@ -989,7 +989,8 @@ Phase 3 — Cross-Surface Interoperability
 │  ├─ 3.2.1a Canonical Ambiguity Correction PASS
 │  ├─ 3.2.2 Scoped ThreadWorkspaceRelation PASS / FROZEN
 │  ├─ 3.2.3 Monitor Runtime Reconciliation PASS / FROZEN
-│  └─ 3.2.4 Desktop Projection Read Adapter GO / NOT STARTED
+│  ├─ 3.2.4 Desktop Projection Read Adapter PASS / FROZEN
+│  └─ 3.2.5 Contract Fixtures / Focused E2E GO / NOT STARTED
 
 Phase 4 — Productization
 NOT STARTED
@@ -1004,7 +1005,7 @@ RESERVED
 
 下一任务：
 
-**Phase 3.2.4 — Desktop Projection Read Adapter（GO / NOT STARTED）**
+**Phase 3.2.5 — Contract Fixtures / Focused E2E（GO / NOT STARTED）**
 
 核心验收：
 
@@ -1014,4 +1015,4 @@ RESERVED
 
 Phase 3.1.1、Phase 3.1.2 / 3.1.2b 与六向 Cross-Surface Resume E2E 均已 PASS；duplicate canonical Thread = 0，active writer protection = CONFIRMED，CLI version compatibility caveat = KNOWN。Phase 3.1 正式 PASS / COMPLETE。
 
-Phase 3.2.0 = FORENSICS COMPLETE；Phase 3.2.1 Root Locator Contract = PASS / FROZEN；Phase 3.2.1a Canonical Ambiguity Correction = PASS；Phase 3.2.2 Scoped ThreadWorkspaceRelation = PASS / FROZEN；Phase 3.2.3 Monitor Runtime Reconciliation = PASS / FROZEN。Monitor app-server runtime 已统一复用 frozen WorkspaceKey、ExecutionEnvironmentKey、NormalizedRootLocator 与 scoped ThreadWorkspaceRelation contract；`thread/start` / `thread/list` / `thread/read` / `thread/resume` 生成 ORIGIN observation，`turn/start` / `turn/started` 生成独立 TURN_EXECUTION observation。旧 `resolve_workspace_for_cwd` / HashMap longest-root arbitrary tie 路径已移除。`thread_workspace` 仅为 effective relation 派生的易失 routing cache：ASSIGNED 可缓存唯一 WorkspaceEntry，AMBIGUOUS / UNASSIGNED / UNKNOWN 均不缓存。confirmed parent fallback 只读取 parent effective ORIGIN 且要求 ASSIGNED；live 与 list reconstruction 使用同一 resolver，重复 observation 幂等。implementation commit：`707e247 feat: reconcile runtime workspace routing`。focused app-server 20 PASS、workspace interop 40 PASS、Phase 3.1 admission 10 PASS、exact-thread 5 PASS；Rust lib 348 PASS / 2 ignored；cargo check、cargo fmt、typecheck、diff check 均 PASS。Phase 3.2.4 Desktop Projection Read Adapter = GO / NOT STARTED，是下一唯一开发起点；本阶段未启动 Phase 3.2.4。
+Phase 3.2.0 = FORENSICS COMPLETE；Phase 3.2.1 Root Locator Contract = PASS / FROZEN；Phase 3.2.1a Canonical Ambiguity Correction = PASS；Phase 3.2.2 Scoped ThreadWorkspaceRelation = PASS / FROZEN；Phase 3.2.3 Monitor Runtime Reconciliation = PASS / FROZEN；Phase 3.2.4 Desktop Projection Read Adapter = PASS / FROZEN。Phase 3.2.4 复用 Phase 2.5 `DesktopMetadataReader` / `DesktopMetadataSnapshot`，以只读方式最小扩展 legacy Thread→Project assignment、legacy→app-server Project alias、migration state 与 `state_5.sqlite` project evidence，并在 shared core 建立 pure `DesktopProjectProjection` resolver。Workspace assignment 与 Desktop Project assignment 保持独立；Project roots 只作为 projection context；已确认 legacy/app-server aliases 归并为同一 canonical Project candidate；SQLite `project_id = NULL` 不否定 legacy assignment；schema drift 通过 diagnostic 与 UNKNOWN/partial projection fail-safe，不阻塞 Workspace runtime。implementation commit：`ae0a2be feat: project desktop workspace metadata read-only`。focused Phase 3.2.4 24 PASS、workspace interop 64 PASS、Desktop projection 16 PASS、app-server 20 PASS、Phase 3.1 admission 10 PASS、exact-thread 5 PASS；Rust lib 372 PASS / 2 ignored；cargo check、cargo fmt、typecheck、diff check 均 PASS。Phase 3.2.5 Contract Fixtures / Focused E2E = GO / NOT STARTED，是下一唯一开发起点；本阶段未启动 Phase 3.2.5。

@@ -1,10 +1,19 @@
 #![allow(dead_code, unused_imports)]
 
 mod locator;
+mod relation;
 mod resolver;
 mod value_types;
 
 pub(crate) use locator::{NormalizedRootLocator, RootLocatorPlatform};
+pub(crate) use relation::{
+    resolve_origin_workspace_relation, resolve_turn_execution_workspace_relation,
+    OriginWorkspaceRelationInput, ParentWorkspaceFallback, ThreadWorkspaceProvenance,
+    ThreadWorkspaceProvenanceKind, ThreadWorkspaceRelation, ThreadWorkspaceRelationBasis,
+    ThreadWorkspaceRelationConfidence, ThreadWorkspaceRelationKey, ThreadWorkspaceRelationScope,
+    ThreadWorkspaceRelationStore, TurnExecutionWorkspaceRelationInput,
+    WorkspaceRelationObservation,
+};
 pub(crate) use resolver::{
     resolve_workspace_root, ConfiguredWorkspaceRoot, PhysicalIdentityStatus, WorkspaceResolution,
     WorkspaceResolutionInput, WorkspaceResolutionState,

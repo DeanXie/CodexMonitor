@@ -1,4 +1,5 @@
 use super::*;
+use crate::shared::global_sources_core::rollout_identity::{CodexThreadKey, CodexTurnKey};
 
 fn environment(value: &str) -> ExecutionEnvironmentKey {
     ExecutionEnvironmentKey::new(value).expect("valid execution environment key")
@@ -264,4 +265,571 @@ fn dot_components_are_normalized_without_filesystem_identity_claims() {
         NormalizedRootLocator::parse("/srv/repo/./src/./", RootLocatorPlatform::Posix).unwrap();
 
     assert_eq!(locator.as_str(), "/srv/repo/src");
+}
+
+fn thread(value: &str) -> CodexThreadKey {
+    CodexThreadKey::new("codex-home-fixture", value)
+}
+
+fn observed_cwd(
+    cwd: &str,
+    roots: &[&str],
+    source: ThreadWorkspaceProvenanceKind,
+    observed_at: u64,
+) -> WorkspaceRelationObservation {
+    WorkspaceRelationObservation::from_cwd(
+        cwd,
+        RootLocatorPlatform::Windows,
+        environment("windows-host-a"),
+        roots
+            .iter()
+            .map(|root| ConfiguredWorkspaceRoot::new(*root))
+            .collect(),
+        source,
+        observed_at,
+    )
+}
+
+fn origin_relation(
+    thread_key: &CodexThreadKey,
+    thread_start: Option<&WorkspaceRelationObservation>,
+    session_meta: Option<&WorkspaceRelationObservation>,
+    parent_fallback: Option<ParentWorkspaceFallback<'_>>,
+) -> ThreadWorkspaceRelation {
+    resolve_origin_workspace_relation(&OriginWorkspaceRelationInput {
+        thread_key,
+        thread_start,
+        session_meta,
+        parent_fallback,
+        observed_at: 100,
+    })
+}
+
+fn turn_relation(
+    turn_key: &CodexTurnKey,
+    explicit_turn: Option<&WorkspaceRelationObservation>,
+    turn_context: Option<&WorkspaceRelationObservation>,
+    parent_fallback: Option<ParentWorkspaceFallback<'_>>,
+) -> ThreadWorkspaceRelation {
+    resolve_turn_execution_workspace_relation(&TurnExecutionWorkspaceRelationInput {
+        turn_key,
+        explicit_turn,
+        turn_context,
+        parent_fallback,
+        observed_at: 100,
+    })
+}
+
+#[test]
+fn origin_workspace_is_preserved_when_later_turn_changes_cwd() {
+    let thread_key = thread("same-full-thread-id");
+    let origin = observed_cwd(
+        r"C:\Users\fixture\repo\src",
+        &[r"C:\Users\fixture\repo", r"F:\AI\CodexMonitor"],
+        ThreadWorkspaceProvenanceKind::SessionMetaCwd,
+        10,
+    );
+    let later_turn = observed_cwd(
+        r"F:\AI\CodexMonitor.worktrees\phase-3\src",
+        &[
+            r"C:\Users\fixture\repo",
+            r"F:\AI\CodexMonitor.worktrees\phase-3",
+        ],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        20,
+    );
+    let origin = origin_relation(&thread_key, None, Some(&origin), None);
+    let turn = turn_relation(
+        &CodexTurnKey::new(thread_key.clone(), "turn-later"),
+        Some(&later_turn),
+        None,
+        None,
+    );
+
+    assert_eq!(
+        origin
+            .workspace_key()
+            .unwrap()
+            .normalized_root_locator
+            .as_str(),
+        "c:/users/fixture/repo"
+    );
+    assert_eq!(
+        turn.workspace_key()
+            .unwrap()
+            .normalized_root_locator
+            .as_str(),
+        "f:/ai/codexmonitor.worktrees/phase-3"
+    );
+    assert_eq!(origin.key.thread_key, turn.key.thread_key);
+    assert_eq!(origin.basis, ThreadWorkspaceRelationBasis::DirectCwd);
+    assert_eq!(
+        origin.provenance[0].kind,
+        ThreadWorkspaceProvenanceKind::SessionMetaCwd
+    );
+}
+
+#[test]
+fn each_turn_has_independent_execution_workspace_relation() {
+    let thread_key = thread("thread-a");
+    let turn_a = CodexTurnKey::new(thread_key.clone(), "turn-a");
+    let turn_b = CodexTurnKey::new(thread_key, "turn-b");
+    let cwd_a = observed_cwd(
+        r"C:\repo\src",
+        &[r"C:\repo", r"F:\repo"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        1,
+    );
+    let cwd_b = observed_cwd(
+        r"F:\repo\src",
+        &[r"C:\repo", r"F:\repo"],
+        ThreadWorkspaceProvenanceKind::TurnContextCwd,
+        2,
+    );
+
+    let relation_a = turn_relation(&turn_a, Some(&cwd_a), None, None);
+    let relation_b = turn_relation(&turn_b, None, Some(&cwd_b), None);
+
+    assert_ne!(relation_a.key, relation_b.key);
+    assert_ne!(relation_a.workspace_key(), relation_b.workspace_key());
+}
+
+#[test]
+fn same_thread_can_have_multiple_turn_workspace_keys() {
+    let thread_key = thread("thread-a");
+    let first = observed_cwd(
+        r"C:\repo",
+        &[r"C:\repo", r"F:\repo"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        1,
+    );
+    let second = observed_cwd(
+        r"F:\repo",
+        &[r"C:\repo", r"F:\repo"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        2,
+    );
+    let mut store = ThreadWorkspaceRelationStore::default();
+
+    store.observe(turn_relation(
+        &CodexTurnKey::new(thread_key.clone(), "turn-1"),
+        Some(&first),
+        None,
+        None,
+    ));
+    store.observe(turn_relation(
+        &CodexTurnKey::new(thread_key.clone(), "turn-2"),
+        Some(&second),
+        None,
+        None,
+    ));
+
+    let relations = store.relations_for_thread(&thread_key);
+    assert_eq!(relations.len(), 2);
+    assert_ne!(relations[0].workspace_key(), relations[1].workspace_key());
+}
+
+#[test]
+fn turn_direct_cwd_wins_over_parent_fallback() {
+    let parent = thread("parent");
+    let child = thread("child");
+    let parent_cwd = observed_cwd(
+        r"C:\parent",
+        &[r"C:\parent", r"F:\child"],
+        ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+        1,
+    );
+    let parent_relation = origin_relation(&parent, Some(&parent_cwd), None, None);
+    let child_turn = CodexTurnKey::new(child, "turn-1");
+    let direct = observed_cwd(
+        r"F:\child",
+        &[r"C:\parent", r"F:\child"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        2,
+    );
+
+    let relation = turn_relation(
+        &child_turn,
+        Some(&direct),
+        None,
+        Some(ParentWorkspaceFallback::confirmed(&parent_relation)),
+    );
+
+    assert_eq!(relation.basis, ThreadWorkspaceRelationBasis::DirectCwd);
+    assert_eq!(
+        relation
+            .workspace_key()
+            .unwrap()
+            .normalized_root_locator
+            .as_str(),
+        "f:/child"
+    );
+}
+
+#[test]
+fn child_without_cwd_can_inherit_confirmed_parent_workspace() {
+    let parent_cwd = observed_cwd(
+        r"C:\parent",
+        &[r"C:\parent"],
+        ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+        1,
+    );
+    let parent_relation = origin_relation(&thread("parent"), Some(&parent_cwd), None, None);
+
+    let child_relation = origin_relation(
+        &thread("child"),
+        None,
+        None,
+        Some(ParentWorkspaceFallback::confirmed(&parent_relation)),
+    );
+
+    assert_eq!(child_relation.state, WorkspaceResolutionState::Assigned);
+    assert_eq!(
+        child_relation.basis,
+        ThreadWorkspaceRelationBasis::ParentFallback
+    );
+    assert_eq!(
+        child_relation.confidence,
+        ThreadWorkspaceRelationConfidence::Inferred
+    );
+    assert_eq!(
+        child_relation.workspace_key(),
+        parent_relation.workspace_key()
+    );
+}
+
+#[test]
+fn child_without_confirmed_parent_remains_unknown() {
+    let parent_cwd = observed_cwd(
+        r"C:\parent",
+        &[r"C:\parent"],
+        ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+        1,
+    );
+    let parent_relation = origin_relation(&thread("parent"), Some(&parent_cwd), None, None);
+
+    let child_relation = origin_relation(
+        &thread("child"),
+        None,
+        None,
+        Some(ParentWorkspaceFallback::unconfirmed(&parent_relation)),
+    );
+
+    assert_eq!(child_relation.state, WorkspaceResolutionState::Unknown);
+    assert!(child_relation.workspace_key().is_none());
+    assert!(child_relation.candidate_workspace_keys.is_empty());
+}
+
+#[test]
+fn ambiguous_root_resolution_is_preserved_in_relation() {
+    let locator = NormalizedRootLocator::parse(r"C:\repo", RootLocatorPlatform::Windows).unwrap();
+    let key_a = WorkspaceKey::new(environment("windows-host-a"), locator.clone());
+    let key_b = WorkspaceKey::new(environment("windows-host-b"), locator);
+    let resolution = super::resolver::finalize_workspace_candidates(vec![
+        (1, key_b.clone()),
+        (1, key_a.clone()),
+    ]);
+    let observation = WorkspaceRelationObservation::from_resolution(
+        resolution,
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        Some(r"C:\repo".to_string()),
+        1,
+    );
+
+    let relation = turn_relation(
+        &CodexTurnKey::new(thread("thread-a"), "turn-1"),
+        Some(&observation),
+        None,
+        None,
+    );
+
+    assert_eq!(relation.state, WorkspaceResolutionState::Ambiguous);
+    assert!(relation.workspace_key().is_none());
+    assert_eq!(relation.candidate_workspace_keys, vec![key_a, key_b]);
+}
+
+#[test]
+fn unassigned_and_unknown_remain_distinct() {
+    let no_match = observed_cwd(
+        r"F:\other",
+        &[r"C:\repo"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        1,
+    );
+    let turn_key = CodexTurnKey::new(thread("thread-a"), "turn-1");
+
+    let unassigned = turn_relation(&turn_key, Some(&no_match), None, None);
+    let unknown = turn_relation(&turn_key, None, None, None);
+
+    assert_eq!(unassigned.state, WorkspaceResolutionState::Unassigned);
+    assert_eq!(unknown.state, WorkspaceResolutionState::Unknown);
+    assert!(unassigned.candidate_workspace_keys.is_empty());
+    assert!(unknown.candidate_workspace_keys.is_empty());
+}
+
+#[test]
+fn duplicate_workspace_candidates_do_not_create_false_ambiguity() {
+    let observation = observed_cwd(
+        r"C:\repo\src",
+        &[r"C:\repo", r"\\?\c:\REPO\", r"\\.\C:\repo"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        1,
+    );
+
+    let relation = turn_relation(
+        &CodexTurnKey::new(thread("thread-a"), "turn-1"),
+        Some(&observation),
+        None,
+        None,
+    );
+
+    assert_eq!(relation.state, WorkspaceResolutionState::Assigned);
+    assert_eq!(relation.candidate_workspace_keys.len(), 1);
+}
+
+#[test]
+fn later_observation_does_not_rewrite_historical_turn_relation() {
+    let thread_key = thread("thread-a");
+    let first = observed_cwd(
+        r"C:\repo",
+        &[r"C:\repo", r"F:\repo"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        1,
+    );
+    let later = observed_cwd(
+        r"F:\repo",
+        &[r"C:\repo", r"F:\repo"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        2,
+    );
+    let first_key =
+        ThreadWorkspaceRelationKey::turn(CodexTurnKey::new(thread_key.clone(), "turn-1"));
+    let mut store = ThreadWorkspaceRelationStore::default();
+    store.observe(turn_relation(
+        &CodexTurnKey::new(thread_key.clone(), "turn-1"),
+        Some(&first),
+        None,
+        None,
+    ));
+    let historical = store.current(&first_key).unwrap().clone();
+
+    store.observe(turn_relation(
+        &CodexTurnKey::new(thread_key, "turn-2"),
+        Some(&later),
+        None,
+        None,
+    ));
+
+    assert_eq!(store.current(&first_key), Some(&historical));
+}
+
+#[test]
+fn direct_evidence_supersedes_fallback_without_erasing_observation_history() {
+    let parent_cwd = observed_cwd(
+        r"C:\parent",
+        &[r"C:\parent", r"F:\child"],
+        ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+        1,
+    );
+    let parent_relation = origin_relation(&thread("parent"), Some(&parent_cwd), None, None);
+    let turn_key = CodexTurnKey::new(thread("child"), "turn-1");
+    let relation_key = ThreadWorkspaceRelationKey::turn(turn_key.clone());
+    let fallback = turn_relation(
+        &turn_key,
+        None,
+        None,
+        Some(ParentWorkspaceFallback::confirmed(&parent_relation)),
+    );
+    let direct_cwd = observed_cwd(
+        r"F:\child",
+        &[r"C:\parent", r"F:\child"],
+        ThreadWorkspaceProvenanceKind::TurnContextCwd,
+        2,
+    );
+    let direct = turn_relation(
+        &turn_key,
+        None,
+        Some(&direct_cwd),
+        Some(ParentWorkspaceFallback::confirmed(&parent_relation)),
+    );
+    let mut store = ThreadWorkspaceRelationStore::default();
+
+    assert!(store.observe(fallback));
+    assert!(store.observe(direct));
+
+    assert_eq!(store.history(&relation_key).len(), 2);
+    assert_eq!(
+        store.history(&relation_key)[0].basis,
+        ThreadWorkspaceRelationBasis::ParentFallback
+    );
+    assert_eq!(
+        store.current(&relation_key).unwrap().basis,
+        ThreadWorkspaceRelationBasis::DirectCwd
+    );
+}
+
+#[test]
+fn effective_relation_uses_evidence_precedence_not_observation_order() {
+    let parent_cwd = observed_cwd(
+        r"C:\parent",
+        &[r"C:\parent", r"F:\child"],
+        ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+        1,
+    );
+    let parent_relation = origin_relation(&thread("parent"), Some(&parent_cwd), None, None);
+    let turn_key = CodexTurnKey::new(thread("child"), "turn-1");
+    let relation_key = ThreadWorkspaceRelationKey::turn(turn_key.clone());
+    let direct_cwd = observed_cwd(
+        r"F:\child",
+        &[r"C:\parent", r"F:\child"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        2,
+    );
+    let direct = turn_relation(&turn_key, Some(&direct_cwd), None, None);
+    let fallback = turn_relation(
+        &turn_key,
+        None,
+        None,
+        Some(ParentWorkspaceFallback::confirmed(&parent_relation)),
+    );
+    let mut store = ThreadWorkspaceRelationStore::default();
+
+    assert!(store.observe(direct));
+    assert!(store.observe(fallback));
+
+    assert_eq!(store.history(&relation_key).len(), 2);
+    assert_eq!(
+        store.history(&relation_key).last().unwrap().basis,
+        ThreadWorkspaceRelationBasis::ParentFallback
+    );
+    assert_eq!(
+        store.current(&relation_key).unwrap().basis,
+        ThreadWorkspaceRelationBasis::DirectCwd
+    );
+}
+
+#[test]
+fn effective_relation_tie_break_is_independent_from_observation_order() {
+    let turn_key = CodexTurnKey::new(thread("thread-a"), "turn-1");
+    let relation_key = ThreadWorkspaceRelationKey::turn(turn_key.clone());
+    let workspace_a = turn_relation(
+        &turn_key,
+        Some(&observed_cwd(
+            r"C:\repo",
+            &[r"C:\repo", r"F:\repo"],
+            ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+            1,
+        )),
+        None,
+        None,
+    );
+    let workspace_b = turn_relation(
+        &turn_key,
+        Some(&observed_cwd(
+            r"F:\repo",
+            &[r"C:\repo", r"F:\repo"],
+            ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+            1,
+        )),
+        None,
+        None,
+    );
+    let mut forward = ThreadWorkspaceRelationStore::default();
+    let mut reverse = ThreadWorkspaceRelationStore::default();
+
+    assert!(forward.observe(workspace_a.clone()));
+    assert!(forward.observe(workspace_b.clone()));
+    assert!(reverse.observe(workspace_b));
+    assert!(reverse.observe(workspace_a));
+
+    assert_eq!(
+        forward.current(&relation_key),
+        reverse.current(&relation_key)
+    );
+}
+
+#[test]
+fn repeated_relation_observation_is_idempotent() {
+    let cwd = observed_cwd(
+        r"C:\repo",
+        &[r"C:\repo"],
+        ThreadWorkspaceProvenanceKind::SessionMetaCwd,
+        1,
+    );
+    let relation = origin_relation(&thread("thread-a"), None, Some(&cwd), None);
+    let key = relation.key.clone();
+    let mut store = ThreadWorkspaceRelationStore::default();
+
+    assert!(store.observe(relation.clone()));
+    assert!(!store.observe(relation));
+    assert_eq!(store.history(&key).len(), 1);
+}
+
+#[test]
+fn thread_identity_is_independent_from_workspace_relation() {
+    let thread_key = thread("same-full-thread-id");
+    let origin_cwd = observed_cwd(
+        r"C:\origin",
+        &[r"C:\origin", r"F:\turn"],
+        ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+        1,
+    );
+    let turn_cwd = observed_cwd(
+        r"F:\turn",
+        &[r"C:\origin", r"F:\turn"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        2,
+    );
+    let origin = origin_relation(&thread_key, Some(&origin_cwd), None, None);
+    let turn = turn_relation(
+        &CodexTurnKey::new(thread_key.clone(), "turn-1"),
+        Some(&turn_cwd),
+        None,
+        None,
+    );
+
+    assert_eq!(origin.key.thread_key, thread_key);
+    assert_eq!(turn.key.thread_key, thread_key);
+    assert_ne!(origin.workspace_key(), turn.workspace_key());
+}
+
+#[test]
+fn unknown_relation_retains_the_observation_time() {
+    let relation = resolve_origin_workspace_relation(&OriginWorkspaceRelationInput {
+        thread_key: &thread("thread-a"),
+        thread_start: None,
+        session_meta: None,
+        parent_fallback: None,
+        observed_at: 42,
+    });
+
+    assert_eq!(relation.state, WorkspaceResolutionState::Unknown);
+    assert_eq!(relation.observed_at, 42);
+}
+
+#[test]
+fn scope_specific_cwd_evidence_cannot_cross_relation_boundaries() {
+    let origin_only = observed_cwd(
+        r"C:\repo",
+        &[r"C:\repo"],
+        ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+        1,
+    );
+    let turn_only = observed_cwd(
+        r"C:\repo",
+        &[r"C:\repo"],
+        ThreadWorkspaceProvenanceKind::ExplicitTurnCwd,
+        2,
+    );
+
+    let turn_relation = turn_relation(
+        &CodexTurnKey::new(thread("thread-a"), "turn-1"),
+        Some(&origin_only),
+        None,
+        None,
+    );
+    let origin_relation = origin_relation(&thread("thread-a"), None, Some(&turn_only), None);
+
+    assert_eq!(turn_relation.state, WorkspaceResolutionState::Unknown);
+    assert_eq!(origin_relation.state, WorkspaceResolutionState::Unknown);
 }

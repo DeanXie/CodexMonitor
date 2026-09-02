@@ -15,6 +15,10 @@ use tokio::time::timeout;
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
+use crate::shared::workspace_interop_core::{
+    ExecutionEnvironmentKey, RootLocatorPlatform, RuntimeOriginWorkspaceObservation,
+    RuntimeTurnWorkspaceObservation, RuntimeWorkspaceReconciler, RuntimeWorkspaceRoute,
+};
 use crate::types::WorkspaceEntry;
 
 #[cfg(target_os = "windows")]
@@ -43,6 +47,7 @@ fn extract_thread_id(value: &Value) -> Option<String> {
         .or_else(|| extract_from_container(value.get("result")))
 }
 
+#[cfg(test)]
 fn push_thread_id(out: &mut Vec<String>, value: Option<&Value>) {
     let Some(value) = value else {
         return;
@@ -58,6 +63,7 @@ fn push_thread_id(out: &mut Vec<String>, value: Option<&Value>) {
     }
 }
 
+#[cfg(test)]
 fn extract_related_thread_ids(value: &Value) -> Vec<String> {
     fn collect_agent_thread_ids(value: Option<&Value>, out: &mut Vec<String>) {
         let Some(value) = value else {
@@ -177,38 +183,11 @@ fn extract_related_thread_ids(value: &Value) -> Vec<String> {
         .collect()
 }
 
-fn normalize_root_path(value: &str) -> String {
-    let normalized = value.replace('\\', "/");
-    let normalized = normalized.trim_end_matches('/');
-    if normalized.is_empty() {
-        return String::new();
-    }
-    let lower = normalized.to_ascii_lowercase();
-    let normalized = if lower.starts_with("//?/unc/") {
-        format!("//{}", &normalized[8..])
-    } else if lower.starts_with("//?/") || lower.starts_with("//./") {
-        normalized[4..].to_string()
-    } else {
-        normalized.to_string()
-    };
-    if normalized.is_empty() {
-        return String::new();
-    }
-
-    let bytes = normalized.as_bytes();
-    let is_drive_path =
-        bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/';
-    if is_drive_path || normalized.starts_with("//") {
-        normalized.to_ascii_lowercase()
-    } else {
-        normalized.to_string()
-    }
-}
-
 #[derive(Debug, Clone)]
 struct ThreadListEntry {
     thread_id: String,
     cwd: Option<String>,
+    confirmed_parent_thread_id: Option<String>,
     is_memory_consolidation: bool,
 }
 
@@ -259,6 +238,7 @@ fn extract_thread_entries_from_thread_list_result(value: &Value) -> Vec<ThreadLi
             out.push(ThreadListEntry {
                 thread_id,
                 cwd,
+                confirmed_parent_thread_id: confirmed_parent_thread_id(input),
                 is_memory_consolidation,
             });
         }
@@ -277,34 +257,6 @@ fn extract_thread_entries_from_thread_list_result(value: &Value) -> Vec<ThreadLi
         collect_entries(result, &mut out);
     }
     out
-}
-
-fn resolve_workspace_for_cwd(
-    cwd: &str,
-    workspace_roots: &HashMap<String, String>,
-) -> Option<String> {
-    let normalized_cwd = normalize_root_path(cwd);
-    if normalized_cwd.is_empty() {
-        return None;
-    }
-    workspace_roots
-        .iter()
-        .filter_map(|(workspace_id, root)| {
-            if root.is_empty() {
-                return None;
-            }
-            let is_exact_match = root == &normalized_cwd;
-            let is_nested_match = normalized_cwd.len() > root.len()
-                && normalized_cwd.starts_with(root)
-                && normalized_cwd.as_bytes().get(root.len()) == Some(&b'/');
-            if is_exact_match || is_nested_match {
-                Some((workspace_id, root.len()))
-            } else {
-                None
-            }
-        })
-        .max_by_key(|(_, root_len)| *root_len)
-        .map(|(workspace_id, _)| workspace_id.clone())
 }
 
 fn normalize_subagent_kind(value: &str) -> String {
@@ -416,6 +368,213 @@ fn should_broadcast_global_workspace_notification(
 pub(crate) struct RequestContext {
     workspace_id: String,
     method: String,
+    params: Value,
+}
+
+#[derive(Debug)]
+struct RuntimeRouteUpdate {
+    thread_id: String,
+    route: RuntimeWorkspaceRoute,
+}
+
+fn string_at<'a>(value: &'a Value, pointers: &[&str]) -> Option<&'a str> {
+    pointers
+        .iter()
+        .find_map(|pointer| value.pointer(pointer).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn message_cwd(value: &Value) -> Option<&str> {
+    string_at(
+        value,
+        &[
+            "/params/thread/cwd",
+            "/params/turn/cwd",
+            "/params/cwd",
+            "/result/thread/cwd",
+            "/result/turn/cwd",
+            "/result/cwd",
+            "/cwd",
+        ],
+    )
+}
+
+fn message_turn_id(value: &Value) -> Option<&str> {
+    string_at(
+        value,
+        &[
+            "/params/turn/id",
+            "/params/turnId",
+            "/params/turn_id",
+            "/result/turn/id",
+            "/result/turnId",
+            "/result/turn_id",
+        ],
+    )
+}
+
+fn confirmed_parent_thread_id(value: &Value) -> Option<String> {
+    string_at(
+        value,
+        &[
+            "/params/thread/source/subagent/thread_spawn/parent_thread_id",
+            "/params/thread/source/subAgent/threadSpawn/parentThreadId",
+            "/params/source/subagent/thread_spawn/parent_thread_id",
+            "/params/source/subAgent/threadSpawn/parentThreadId",
+            "/thread/source/subagent/thread_spawn/parent_thread_id",
+            "/thread/source/subAgent/threadSpawn/parentThreadId",
+            "/source/subagent/thread_spawn/parent_thread_id",
+            "/source/subAgent/threadSpawn/parentThreadId",
+        ],
+    )
+    .map(str::to_string)
+}
+
+fn reconcile_runtime_message(
+    runtime: &mut RuntimeWorkspaceReconciler,
+    request: Option<&RequestContext>,
+    value: &Value,
+    observed_at: u64,
+) -> Vec<RuntimeRouteUpdate> {
+    let mut updates = Vec::new();
+    if let Some(request) = request {
+        match request.method.as_str() {
+            "thread/start" => {
+                if let Some(thread_id) = extract_thread_id(value) {
+                    let route = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+                        thread_id: &thread_id,
+                        thread_start_cwd: message_cwd(&request.params),
+                        session_meta_cwd: message_cwd(value),
+                        confirmed_parent_thread_id: confirmed_parent_thread_id(value).as_deref(),
+                        observed_at,
+                    });
+                    updates.push(RuntimeRouteUpdate { thread_id, route });
+                }
+            }
+            "thread/list" => {
+                for entry in extract_thread_entries_from_thread_list_result(value)
+                    .into_iter()
+                    .filter(|entry| !entry.is_memory_consolidation)
+                {
+                    let route = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+                        thread_id: &entry.thread_id,
+                        thread_start_cwd: None,
+                        session_meta_cwd: entry.cwd.as_deref(),
+                        confirmed_parent_thread_id: entry.confirmed_parent_thread_id.as_deref(),
+                        observed_at,
+                    });
+                    updates.push(RuntimeRouteUpdate {
+                        thread_id: entry.thread_id,
+                        route,
+                    });
+                }
+            }
+            "turn/start" => {
+                let thread_id = extract_thread_id(&json!({ "params": request.params.clone() }));
+                if let (Some(thread_id), Some(turn_id)) = (thread_id, message_turn_id(value)) {
+                    let route = runtime.observe_turn(RuntimeTurnWorkspaceObservation {
+                        thread_id: &thread_id,
+                        turn_id,
+                        explicit_turn_cwd: message_cwd(&request.params),
+                        turn_context_cwd: message_cwd(value),
+                        confirmed_parent_thread_id: None,
+                        observed_at,
+                    });
+                    updates.push(RuntimeRouteUpdate { thread_id, route });
+                }
+            }
+            "thread/read" | "thread/resume" => {
+                if let (Some(thread_id), Some(cwd)) = (extract_thread_id(value), message_cwd(value))
+                {
+                    let route = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+                        thread_id: &thread_id,
+                        thread_start_cwd: None,
+                        session_meta_cwd: Some(cwd),
+                        confirmed_parent_thread_id: confirmed_parent_thread_id(value).as_deref(),
+                        observed_at,
+                    });
+                    updates.push(RuntimeRouteUpdate { thread_id, route });
+                }
+            }
+            _ => {}
+        }
+        return updates;
+    }
+
+    match value.get("method").and_then(Value::as_str) {
+        Some("thread/started") => {
+            if let Some(thread_id) = extract_thread_id(value) {
+                let parent_id = confirmed_parent_thread_id(value);
+                let route = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+                    thread_id: &thread_id,
+                    thread_start_cwd: message_cwd(value),
+                    session_meta_cwd: None,
+                    confirmed_parent_thread_id: parent_id.as_deref(),
+                    observed_at,
+                });
+                updates.push(RuntimeRouteUpdate { thread_id, route });
+            }
+        }
+        Some("turn/started") => {
+            if let (Some(thread_id), Some(turn_id)) =
+                (extract_thread_id(value), message_turn_id(value))
+            {
+                let parent_id = confirmed_parent_thread_id(value);
+                let route = runtime.observe_turn(RuntimeTurnWorkspaceObservation {
+                    thread_id: &thread_id,
+                    turn_id,
+                    explicit_turn_cwd: None,
+                    turn_context_cwd: message_cwd(value),
+                    confirmed_parent_thread_id: parent_id.as_deref(),
+                    observed_at,
+                });
+                updates.push(RuntimeRouteUpdate { thread_id, route });
+            }
+        }
+        _ => {}
+    }
+    updates
+}
+
+fn apply_runtime_route_updates(
+    cache: &mut HashMap<String, String>,
+    updates: Vec<RuntimeRouteUpdate>,
+) {
+    for update in updates {
+        if let Some(workspace_id) = update.route.workspace_id {
+            cache.insert(update.thread_id, workspace_id);
+        } else {
+            cache.remove(&update.thread_id);
+        }
+    }
+}
+
+fn runtime_message_observation_key(value: &Value) -> String {
+    value.to_string()
+}
+
+pub(crate) fn runtime_reconciler_for_home(codex_home: Option<&Path>) -> RuntimeWorkspaceReconciler {
+    let codex_home_identity =
+        crate::shared::global_sources_core::runtime_config::discover_runtime_codex_homes(
+            codex_home.map(Path::to_path_buf),
+            std::iter::empty(),
+        )
+        .into_iter()
+        .next()
+        .map(|source| source.codex_home.identity)
+        .unwrap_or_else(|| "codex-home:runtime-default".to_string());
+    let platform = if cfg!(windows) {
+        RootLocatorPlatform::Windows
+    } else {
+        RootLocatorPlatform::Posix
+    };
+    let execution_environment_key = ExecutionEnvironmentKey::new(match platform {
+        RootLocatorPlatform::Windows => "monitor-local-windows",
+        RootLocatorPlatform::Posix => "monitor-local-posix",
+    })
+    .expect("runtime execution environment key is non-empty");
+    RuntimeWorkspaceReconciler::new(codex_home_identity, execution_environment_key, platform)
 }
 
 fn build_initialize_params(client_version: &str) -> Value {
@@ -440,13 +599,15 @@ pub(crate) struct WorkspaceSession {
     pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Value>>>,
     pub(crate) request_context: Mutex<HashMap<u64, RequestContext>>,
     pub(crate) thread_workspace: Mutex<HashMap<String, String>>,
+    pub(crate) workspace_reconciler: Mutex<RuntimeWorkspaceReconciler>,
+    pub(crate) runtime_observation_keys: Mutex<HashSet<String>>,
+    pub(crate) runtime_observation_clock: AtomicU64,
     pub(crate) hidden_thread_ids: Mutex<HashSet<String>>,
     pub(crate) next_id: AtomicU64,
     /// Callbacks for background threads - events for these threadIds are sent through the channel
     pub(crate) background_thread_callbacks: Mutex<HashMap<String, mpsc::UnboundedSender<Value>>>,
     pub(crate) owner_workspace_id: String,
     pub(crate) workspace_ids: Mutex<HashSet<String>>,
-    pub(crate) workspace_roots: Mutex<HashMap<String, String>>,
 }
 
 impl WorkspaceSession {
@@ -464,19 +625,23 @@ impl WorkspaceSession {
             .await
             .insert(workspace_id.to_string());
         if let Some(path) = workspace_path {
-            let normalized = normalize_root_path(path);
-            if !normalized.is_empty() {
-                self.workspace_roots
-                    .lock()
-                    .await
-                    .insert(workspace_id.to_string(), normalized);
-            }
+            self.workspace_reconciler
+                .lock()
+                .await
+                .register_workspace(workspace_id, path);
         }
     }
 
     pub(crate) async fn unregister_workspace(&self, workspace_id: &str) {
         self.workspace_ids.lock().await.remove(workspace_id);
-        self.workspace_roots.lock().await.remove(workspace_id);
+        self.workspace_reconciler
+            .lock()
+            .await
+            .unregister_workspace(workspace_id);
+        self.thread_workspace
+            .lock()
+            .await
+            .retain(|_, routed_workspace_id| routed_workspace_id != workspace_id);
     }
 
     pub(crate) async fn workspace_ids_snapshot(&self) -> Vec<String> {
@@ -513,14 +678,9 @@ impl WorkspaceSession {
             RequestContext {
                 workspace_id: workspace_id.to_string(),
                 method: method.to_string(),
+                params: params.clone(),
             },
         );
-        if let Some(thread_id) = extract_thread_id(&json!({ "params": params.clone() })) {
-            self.thread_workspace
-                .lock()
-                .await
-                .insert(thread_id, workspace_id.to_string());
-        }
         if let Err(error) = self
             .write_message(json!({ "id": id, "method": method, "params": params }))
             .await
@@ -777,6 +937,12 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     let stdout = child.stdout.take().ok_or("missing stdout")?;
     let stderr = child.stderr.take().ok_or("missing stderr")?;
 
+    let resolved_codex_home = codex_home
+        .clone()
+        .or_else(crate::codex::home::resolve_default_codex_home);
+    let mut workspace_reconciler = runtime_reconciler_for_home(resolved_codex_home.as_deref());
+    workspace_reconciler.register_workspace(&entry.id, &entry.path);
+
     let session = Arc::new(WorkspaceSession {
         codex_args,
         child: Mutex::new(child),
@@ -784,15 +950,14 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
         pending: Mutex::new(HashMap::new()),
         request_context: Mutex::new(HashMap::new()),
         thread_workspace: Mutex::new(HashMap::new()),
+        workspace_reconciler: Mutex::new(workspace_reconciler),
+        runtime_observation_keys: Mutex::new(HashSet::new()),
+        runtime_observation_clock: AtomicU64::new(0),
         hidden_thread_ids: Mutex::new(HashSet::new()),
         next_id: AtomicU64::new(1),
         background_thread_callbacks: Mutex::new(HashMap::new()),
         owner_workspace_id: entry.id.clone(),
         workspace_ids: Mutex::new(HashSet::from([entry.id.clone()])),
-        workspace_roots: Mutex::new(HashMap::from([(
-            entry.id.clone(),
-            normalize_root_path(&entry.path),
-        )])),
     });
 
     let session_clone = Arc::clone(&session);
@@ -828,48 +993,48 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             let thread_id = extract_thread_id(&value);
             let mut request_workspace: Option<String> = None;
             let mut request_method: Option<String> = None;
+            let mut completed_request: Option<RequestContext> = None;
             if let Some(id) = maybe_id {
                 if has_result_or_error {
                     if let Some(context) = session_clone.request_context.lock().await.remove(&id) {
-                        request_workspace = Some(context.workspace_id);
-                        request_method = Some(context.method);
+                        request_workspace = Some(context.workspace_id.clone());
+                        request_method = Some(context.method.clone());
+                        completed_request = Some(context);
                     }
                 }
             }
 
-            if let Some(ref workspace_id) = request_workspace {
-                let related_thread_ids = extract_related_thread_ids(&value);
-                if !related_thread_ids.is_empty() {
-                    let mut thread_workspace = session_clone.thread_workspace.lock().await;
-                    for tid in related_thread_ids {
-                        thread_workspace.insert(tid, workspace_id.clone());
-                    }
-                } else if let Some(ref tid) = thread_id {
-                    session_clone
-                        .thread_workspace
-                        .lock()
-                        .await
-                        .insert(tid.clone(), workspace_id.clone());
-                }
+            let observation_key = runtime_message_observation_key(&value);
+            let should_reconcile = session_clone
+                .runtime_observation_keys
+                .lock()
+                .await
+                .insert(observation_key);
+            if should_reconcile {
+                let observed_at = session_clone
+                    .runtime_observation_clock
+                    .fetch_add(1, Ordering::SeqCst);
+                let updates = {
+                    let mut runtime = session_clone.workspace_reconciler.lock().await;
+                    reconcile_runtime_message(
+                        &mut *runtime,
+                        completed_request.as_ref(),
+                        &value,
+                        observed_at,
+                    )
+                };
+                let mut cache = session_clone.thread_workspace.lock().await;
+                apply_runtime_route_updates(&mut *cache, updates);
             }
             if matches!(request_method.as_deref(), Some("thread/list")) {
                 let thread_entries = extract_thread_entries_from_thread_list_result(&value);
                 if !thread_entries.is_empty() {
-                    let workspace_roots = session_clone.workspace_roots.lock().await.clone();
                     let mut hidden_thread_ids = Vec::new();
                     let mut thread_workspace = session_clone.thread_workspace.lock().await;
                     for entry in thread_entries {
                         if entry.is_memory_consolidation {
                             thread_workspace.remove(&entry.thread_id);
                             hidden_thread_ids.push(entry.thread_id);
-                            continue;
-                        }
-                        let mapped_workspace = entry
-                            .cwd
-                            .as_deref()
-                            .and_then(|cwd| resolve_workspace_for_cwd(cwd, &workspace_roots));
-                        if let Some(workspace_id) = mapped_workspace {
-                            thread_workspace.insert(entry.thread_id, workspace_id);
                         }
                     }
                     drop(thread_workspace);
@@ -894,8 +1059,12 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             };
 
             let routed_workspace_id = mapped_thread_workspace
+                .clone()
                 .or_else(|| request_workspace.clone())
                 .unwrap_or_else(|| fallback_workspace_id.clone());
+            let should_broadcast_unresolved_thread = thread_id.is_some()
+                && mapped_thread_workspace.is_none()
+                && request_workspace.is_none();
 
             if let Some(ref tid) = thread_id {
                 if method_name == Some("codex/backgroundThread") {
@@ -944,18 +1113,6 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                 }
             }
 
-            if matches!(method_name, Some("item/started") | Some("item/completed")) {
-                let related_thread_ids = extract_related_thread_ids(&value);
-                if !related_thread_ids.is_empty() {
-                    let mut thread_workspace = session_clone.thread_workspace.lock().await;
-                    for related_id in related_thread_ids {
-                        thread_workspace
-                            .entry(related_id)
-                            .or_insert_with(|| routed_workspace_id.clone());
-                    }
-                }
-            }
-
             if matches!(
                 method_name,
                 Some("thread/archived") | Some("thread/deleted")
@@ -983,11 +1140,13 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                     }
                     // Don't emit to frontend if this is a background thread event
                     if !sent_to_background {
-                        if should_broadcast_global_workspace_notification(
-                            method_name,
-                            thread_id.as_ref(),
-                            request_workspace.as_deref(),
-                        ) {
+                        if should_broadcast_unresolved_thread
+                            || should_broadcast_global_workspace_notification(
+                                method_name,
+                                thread_id.as_ref(),
+                                request_workspace.as_deref(),
+                            )
+                        {
                             let workspace_ids = session_clone.workspace_ids_snapshot().await;
                             if workspace_ids.is_empty() {
                                 let payload = AppServerEvent {
@@ -1027,11 +1186,13 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                 }
                 // Don't emit to frontend if this is a background thread event
                 if !sent_to_background {
-                    if should_broadcast_global_workspace_notification(
-                        method_name,
-                        thread_id.as_ref(),
-                        request_workspace.as_deref(),
-                    ) {
+                    if should_broadcast_unresolved_thread
+                        || should_broadcast_global_workspace_notification(
+                            method_name,
+                            thread_id.as_ref(),
+                            request_workspace.as_deref(),
+                        )
+                    {
                         let workspace_ids = session_clone.workspace_ids_snapshot().await;
                         if workspace_ids.is_empty() {
                             let payload = AppServerEvent {
@@ -1118,13 +1279,191 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_initialize_params, extract_related_thread_ids,
-        extract_thread_entries_from_thread_list_result, extract_thread_id, normalize_root_path,
-        resolve_workspace_for_cwd, should_suppress_hidden_thread_event, source_subagent_kind,
-        thread_started_is_memory_consolidation,
+        apply_runtime_route_updates, build_initialize_params, extract_related_thread_ids,
+        extract_thread_entries_from_thread_list_result, extract_thread_id,
+        reconcile_runtime_message, should_suppress_hidden_thread_event, source_subagent_kind,
+        thread_started_is_memory_consolidation, RequestContext,
+    };
+    use crate::shared::workspace_interop_core::{
+        ExecutionEnvironmentKey, RootLocatorPlatform, RuntimeWorkspaceReconciler,
     };
     use serde_json::json;
     use std::collections::HashMap;
+
+    fn runtime_reconciler() -> RuntimeWorkspaceReconciler {
+        let mut runtime = RuntimeWorkspaceReconciler::new(
+            "codex-home-fixture",
+            ExecutionEnvironmentKey::new("monitor-runtime-fixture").unwrap(),
+            RootLocatorPlatform::Windows,
+        );
+        runtime.register_workspace("workspace-a", r"C:\origin");
+        runtime.register_workspace("workspace-b", r"F:\turn");
+        runtime
+    }
+
+    fn request_context(
+        workspace_id: &str,
+        method: &str,
+        params: serde_json::Value,
+    ) -> RequestContext {
+        RequestContext {
+            workspace_id: workspace_id.to_string(),
+            method: method.to_string(),
+            params,
+        }
+    }
+
+    #[test]
+    fn live_thread_start_and_thread_list_reconstruction_share_runtime_contract() {
+        let mut live = runtime_reconciler();
+        let start_context = request_context(
+            "workspace-a",
+            "thread/start",
+            json!({ "cwd": r"C:\origin" }),
+        );
+        let live_updates = reconcile_runtime_message(
+            &mut live,
+            Some(&start_context),
+            &json!({ "result": { "thread": { "id": "thread-a" } } }),
+            1,
+        );
+        let mut reconstructed = runtime_reconciler();
+        let list_context = request_context("workspace-a", "thread/list", json!({}));
+        let reconstructed_updates = reconcile_runtime_message(
+            &mut reconstructed,
+            Some(&list_context),
+            &json!({ "result": { "data": [{ "id": "thread-a", "cwd": r"C:\origin" }] } }),
+            1,
+        );
+
+        assert_eq!(
+            live_updates[0].route.workspace_id.as_deref(),
+            Some("workspace-a")
+        );
+        assert_eq!(
+            reconstructed_updates[0].route.workspace_id.as_deref(),
+            Some("workspace-a")
+        );
+        assert_eq!(
+            live.route_for_origin("thread-a").unwrap().workspace_key,
+            reconstructed
+                .route_for_origin("thread-a")
+                .unwrap()
+                .workspace_key
+        );
+    }
+
+    #[test]
+    fn runtime_turn_start_uses_explicit_cwd_without_rewriting_origin() {
+        let mut runtime = runtime_reconciler();
+        let start_context = request_context(
+            "workspace-a",
+            "thread/start",
+            json!({ "cwd": r"C:\origin" }),
+        );
+        reconcile_runtime_message(
+            &mut runtime,
+            Some(&start_context),
+            &json!({ "result": { "thread": { "id": "thread-a" } } }),
+            1,
+        );
+        let turn_context = request_context(
+            "workspace-b",
+            "turn/start",
+            json!({ "threadId": "thread-a", "cwd": r"F:\turn" }),
+        );
+        let updates = reconcile_runtime_message(
+            &mut runtime,
+            Some(&turn_context),
+            &json!({ "result": { "turn": { "id": "turn-b" } } }),
+            2,
+        );
+
+        assert_eq!(
+            updates[0].route.workspace_id.as_deref(),
+            Some("workspace-b")
+        );
+        assert_eq!(
+            runtime
+                .route_for_origin("thread-a")
+                .unwrap()
+                .workspace_id
+                .as_deref(),
+            Some("workspace-a")
+        );
+        assert_eq!(
+            runtime
+                .route_for_turn("thread-a", "turn-b")
+                .unwrap()
+                .workspace_id
+                .as_deref(),
+            Some("workspace-b")
+        );
+    }
+
+    #[test]
+    fn exact_read_without_cwd_does_not_forge_workspace_relation_or_cache() {
+        let mut runtime = runtime_reconciler();
+        let context = request_context(
+            "workspace-b",
+            "thread/read",
+            json!({ "threadId": "external-thread" }),
+        );
+        let updates = reconcile_runtime_message(
+            &mut runtime,
+            Some(&context),
+            &json!({ "result": { "thread": { "id": "external-thread" } } }),
+            1,
+        );
+        let mut cache = HashMap::new();
+        apply_runtime_route_updates(&mut cache, updates);
+
+        assert!(runtime.route_for_origin("external-thread").is_none());
+        assert!(!cache.contains_key("external-thread"));
+    }
+
+    #[test]
+    fn confirmed_child_notification_uses_parent_fallback_only_without_direct_cwd() {
+        let mut runtime = runtime_reconciler();
+        let parent_context = request_context(
+            "workspace-a",
+            "thread/start",
+            json!({ "cwd": r"C:\origin" }),
+        );
+        reconcile_runtime_message(
+            &mut runtime,
+            Some(&parent_context),
+            &json!({ "result": { "thread": { "id": "parent" } } }),
+            1,
+        );
+        let updates = reconcile_runtime_message(
+            &mut runtime,
+            None,
+            &json!({
+                "method": "thread/started",
+                "params": {
+                    "thread": {
+                        "id": "child",
+                        "source": {
+                            "subagent": {
+                                "thread_spawn": { "parent_thread_id": "parent" }
+                            }
+                        }
+                    }
+                }
+            }),
+            2,
+        );
+
+        assert_eq!(
+            updates[0].route.workspace_id.as_deref(),
+            Some("workspace-a")
+        );
+        assert_eq!(
+            updates[0].route.basis,
+            crate::shared::workspace_interop_core::ThreadWorkspaceRelationBasis::ParentFallback
+        );
+    }
 
     #[test]
     fn extract_thread_id_reads_camel_case() {
@@ -1249,58 +1588,6 @@ mod tests {
         let ids = extract_related_thread_ids(&value);
         assert!(ids.contains(&"thread-parent".to_string()));
         assert!(ids.contains(&"thread-child-single".to_string()));
-    }
-
-    #[test]
-    fn resolve_workspace_for_cwd_normalizes_windows_paths() {
-        let mut roots = HashMap::new();
-        roots.insert("ws-1".to_string(), normalize_root_path("C:\\Dev\\Codex"));
-        assert_eq!(
-            resolve_workspace_for_cwd("c:/dev/codex", &roots),
-            Some("ws-1".to_string())
-        );
-    }
-
-    #[test]
-    fn resolve_workspace_for_cwd_normalizes_windows_namespace_paths() {
-        let mut roots = HashMap::new();
-        roots.insert("ws-1".to_string(), normalize_root_path("C:\\Dev\\Codex"));
-        assert_eq!(
-            resolve_workspace_for_cwd("\\\\?\\C:\\Dev\\Codex", &roots),
-            Some("ws-1".to_string())
-        );
-    }
-
-    #[test]
-    fn normalize_root_path_normalizes_windows_namespace_unc_paths() {
-        assert_eq!(
-            normalize_root_path("\\\\?\\UNC\\SERVER\\Share\\Repo\\"),
-            "//server/share/repo"
-        );
-    }
-
-    #[test]
-    fn resolve_workspace_for_cwd_matches_nested_paths() {
-        let mut roots = HashMap::new();
-        roots.insert("ws-1".to_string(), normalize_root_path("/tmp/codex"));
-        assert_eq!(
-            resolve_workspace_for_cwd("/tmp/codex/subdir/project", &roots),
-            Some("ws-1".to_string())
-        );
-    }
-
-    #[test]
-    fn resolve_workspace_for_cwd_prefers_longest_matching_root() {
-        let mut roots = HashMap::new();
-        roots.insert("ws-parent".to_string(), normalize_root_path("/tmp/codex"));
-        roots.insert(
-            "ws-child".to_string(),
-            normalize_root_path("/tmp/codex/subdir"),
-        );
-        assert_eq!(
-            resolve_workspace_for_cwd("/tmp/codex/subdir/project", &roots),
-            Some("ws-child".to_string())
-        );
     }
 
     #[test]

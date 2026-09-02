@@ -174,12 +174,16 @@ mod tests {
             pending: Mutex::new(HashMap::new()),
             request_context: Mutex::new(HashMap::new()),
             thread_workspace: Mutex::new(HashMap::new()),
+            workspace_reconciler: Mutex::new(
+                crate::backend::app_server::runtime_reconciler_for_home(None),
+            ),
+            runtime_observation_keys: Mutex::new(std::collections::HashSet::new()),
+            runtime_observation_clock: AtomicU64::new(0),
             hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
             background_thread_callbacks: Mutex::new(HashMap::new()),
             owner_workspace_id: "test-owner".to_string(),
             workspace_ids: Mutex::new(HashSet::from(["test-owner".to_string()])),
-            workspace_roots: Mutex::new(HashMap::new()),
         }
     }
 

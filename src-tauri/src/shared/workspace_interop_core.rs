@@ -3,6 +3,7 @@
 mod locator;
 mod relation;
 mod resolver;
+mod runtime_reconciliation;
 mod value_types;
 
 pub(crate) use locator::{NormalizedRootLocator, RootLocatorPlatform};
@@ -17,6 +18,10 @@ pub(crate) use relation::{
 pub(crate) use resolver::{
     resolve_workspace_root, ConfiguredWorkspaceRoot, PhysicalIdentityStatus, WorkspaceResolution,
     WorkspaceResolutionInput, WorkspaceResolutionState,
+};
+pub(crate) use runtime_reconciliation::{
+    RuntimeOriginWorkspaceObservation, RuntimeTurnWorkspaceObservation, RuntimeWorkspaceReconciler,
+    RuntimeWorkspaceRoute,
 };
 pub(crate) use value_types::{ExecutionEnvironmentKey, WorkspaceKey};
 

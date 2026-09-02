@@ -793,6 +793,281 @@ fn thread_identity_is_independent_from_workspace_relation() {
     assert_ne!(origin.workspace_key(), turn.workspace_key());
 }
 
+fn runtime_reconciler() -> RuntimeWorkspaceReconciler {
+    RuntimeWorkspaceReconciler::new(
+        "codex-home-fixture",
+        environment("windows-host-a"),
+        RootLocatorPlatform::Windows,
+    )
+}
+
+#[test]
+fn runtime_unique_root_routes_to_correct_workspace_entry() {
+    let mut runtime = runtime_reconciler();
+    runtime.register_workspace("workspace-a", r"C:\repo");
+
+    let route = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "thread-a",
+        thread_start_cwd: Some(r"C:\repo\src"),
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: None,
+        observed_at: 1,
+    });
+
+    assert_eq!(route.state, WorkspaceResolutionState::Assigned);
+    assert_eq!(route.workspace_id.as_deref(), Some("workspace-a"));
+}
+
+#[test]
+fn runtime_nested_roots_choose_longest_workspace_entry() {
+    let mut runtime = runtime_reconciler();
+    runtime.register_workspace("workspace-parent", r"C:\repo");
+    runtime.register_workspace("workspace-child", r"C:\repo\nested");
+
+    let route = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "thread-a",
+        thread_start_cwd: Some(r"C:\repo\nested\src"),
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: None,
+        observed_at: 1,
+    });
+
+    assert_eq!(route.workspace_id.as_deref(), Some("workspace-child"));
+}
+
+#[test]
+fn runtime_duplicate_config_for_same_workspace_key_is_assigned_deterministically() {
+    let mut forward = runtime_reconciler();
+    forward.register_workspace("workspace-b", r"C:\repo");
+    forward.register_workspace("workspace-a", r"c:/REPO/");
+    let mut reverse = runtime_reconciler();
+    reverse.register_workspace("workspace-a", r"c:/REPO/");
+    reverse.register_workspace("workspace-b", r"C:\repo");
+
+    let observation = RuntimeOriginWorkspaceObservation {
+        thread_id: "thread-a",
+        thread_start_cwd: None,
+        session_meta_cwd: Some(r"C:\repo"),
+        confirmed_parent_thread_id: None,
+        observed_at: 1,
+    };
+    let forward_route = forward.observe_origin(observation);
+    let reverse_route = reverse.observe_origin(observation);
+
+    assert_eq!(forward_route.state, WorkspaceResolutionState::Assigned);
+    assert_eq!(forward_route.workspace_id.as_deref(), Some("workspace-a"));
+    assert_eq!(forward_route, reverse_route);
+}
+
+#[test]
+fn runtime_ambiguous_unassigned_and_unknown_relations_never_route() {
+    let mut runtime = runtime_reconciler();
+    runtime.register_workspace("workspace-a", r"C:\repo");
+    let thread_key = CodexThreadKey::new("codex-home-fixture", "thread-a");
+    let locator = NormalizedRootLocator::parse(r"C:\repo", RootLocatorPlatform::Windows).unwrap();
+    let key_a = WorkspaceKey::new(environment("windows-host-a"), locator.clone());
+    let key_b = WorkspaceKey::new(environment("windows-host-b"), locator);
+    let ambiguous = super::resolver::finalize_workspace_candidates(vec![(1, key_a), (1, key_b)]);
+    let ambiguous_relation = resolve_origin_workspace_relation(&OriginWorkspaceRelationInput {
+        thread_key: &thread_key,
+        thread_start: Some(&WorkspaceRelationObservation::from_resolution(
+            ambiguous,
+            ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+            Some(r"C:\repo".to_string()),
+            1,
+        )),
+        session_meta: None,
+        parent_fallback: None,
+        observed_at: 1,
+    });
+
+    let ambiguous_route = runtime.observe_relation(ambiguous_relation);
+    let unassigned_route = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "thread-unassigned",
+        thread_start_cwd: Some(r"F:\outside"),
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: None,
+        observed_at: 1,
+    });
+    let unknown_route = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "thread-unknown",
+        thread_start_cwd: Some("relative/path"),
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: None,
+        observed_at: 1,
+    });
+
+    assert_eq!(ambiguous_route.state, WorkspaceResolutionState::Ambiguous);
+    assert!(ambiguous_route.workspace_id.is_none());
+    assert_eq!(unassigned_route.state, WorkspaceResolutionState::Unassigned);
+    assert!(unassigned_route.workspace_id.is_none());
+    assert_eq!(unknown_route.state, WorkspaceResolutionState::Unknown);
+    assert!(unknown_route.workspace_id.is_none());
+}
+
+#[test]
+fn runtime_origin_and_turn_execution_relations_remain_independent() {
+    let mut runtime = runtime_reconciler();
+    runtime.register_workspace("workspace-a", r"C:\origin");
+    runtime.register_workspace("workspace-b", r"F:\turn");
+
+    runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "thread-a",
+        thread_start_cwd: Some(r"C:\origin"),
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: None,
+        observed_at: 1,
+    });
+    runtime.observe_turn(RuntimeTurnWorkspaceObservation {
+        thread_id: "thread-a",
+        turn_id: "turn-1",
+        explicit_turn_cwd: Some(r"C:\origin"),
+        turn_context_cwd: None,
+        confirmed_parent_thread_id: None,
+        observed_at: 2,
+    });
+    runtime.observe_turn(RuntimeTurnWorkspaceObservation {
+        thread_id: "thread-a",
+        turn_id: "turn-2",
+        explicit_turn_cwd: Some(r"F:\turn"),
+        turn_context_cwd: None,
+        confirmed_parent_thread_id: None,
+        observed_at: 3,
+    });
+
+    assert_eq!(
+        runtime
+            .route_for_origin("thread-a")
+            .unwrap()
+            .workspace_id
+            .as_deref(),
+        Some("workspace-a")
+    );
+    assert_eq!(
+        runtime
+            .route_for_turn("thread-a", "turn-1")
+            .unwrap()
+            .workspace_id
+            .as_deref(),
+        Some("workspace-a")
+    );
+    assert_eq!(
+        runtime
+            .route_for_turn("thread-a", "turn-2")
+            .unwrap()
+            .workspace_id
+            .as_deref(),
+        Some("workspace-b")
+    );
+}
+
+#[test]
+fn runtime_child_fallback_requires_confirmed_assigned_parent() {
+    let mut runtime = runtime_reconciler();
+    runtime.register_workspace("workspace-a", r"C:\repo");
+    runtime.register_workspace("workspace-b", r"F:\direct");
+    runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "parent",
+        thread_start_cwd: Some(r"C:\repo"),
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: None,
+        observed_at: 1,
+    });
+
+    let inherited = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "child",
+        thread_start_cwd: None,
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: Some("parent"),
+        observed_at: 2,
+    });
+    let unknown = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "orphan",
+        thread_start_cwd: None,
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: Some("missing-parent"),
+        observed_at: 2,
+    });
+    let direct = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "child-direct",
+        thread_start_cwd: Some(r"F:\direct"),
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: Some("parent"),
+        observed_at: 3,
+    });
+
+    let ambiguous_parent_key = CodexThreadKey::new("codex-home-fixture", "ambiguous-parent");
+    let locator = NormalizedRootLocator::parse(r"C:\repo", RootLocatorPlatform::Windows).unwrap();
+    let ambiguous = super::resolver::finalize_workspace_candidates(vec![
+        (
+            1,
+            WorkspaceKey::new(environment("windows-host-a"), locator.clone()),
+        ),
+        (1, WorkspaceKey::new(environment("windows-host-b"), locator)),
+    ]);
+    runtime.observe_relation(resolve_origin_workspace_relation(
+        &OriginWorkspaceRelationInput {
+            thread_key: &ambiguous_parent_key,
+            thread_start: Some(&WorkspaceRelationObservation::from_resolution(
+                ambiguous,
+                ThreadWorkspaceProvenanceKind::ThreadStartCwd,
+                Some(r"C:\repo".to_string()),
+                1,
+            )),
+            session_meta: None,
+            parent_fallback: None,
+            observed_at: 1,
+        },
+    ));
+    let ambiguous_parent_fallback = runtime.observe_origin(RuntimeOriginWorkspaceObservation {
+        thread_id: "ambiguous-child",
+        thread_start_cwd: None,
+        session_meta_cwd: None,
+        confirmed_parent_thread_id: Some("ambiguous-parent"),
+        observed_at: 3,
+    });
+
+    assert_eq!(inherited.workspace_id.as_deref(), Some("workspace-a"));
+    assert_eq!(
+        inherited.basis,
+        ThreadWorkspaceRelationBasis::ParentFallback
+    );
+    assert_eq!(unknown.state, WorkspaceResolutionState::Unknown);
+    assert!(unknown.workspace_id.is_none());
+    assert_eq!(direct.workspace_id.as_deref(), Some("workspace-b"));
+    assert_eq!(direct.basis, ThreadWorkspaceRelationBasis::DirectCwd);
+    assert_eq!(
+        ambiguous_parent_fallback.state,
+        WorkspaceResolutionState::Unknown
+    );
+    assert!(ambiguous_parent_fallback.workspace_id.is_none());
+}
+
+#[test]
+fn runtime_reconstruction_and_repeated_observations_are_deterministic() {
+    let mut first = runtime_reconciler();
+    first.register_workspace("workspace-b", r"C:\repo");
+    first.register_workspace("workspace-a", r"c:/REPO/");
+    let mut second = runtime_reconciler();
+    second.register_workspace("workspace-a", r"c:/REPO/");
+    second.register_workspace("workspace-b", r"C:\repo");
+    let observation = RuntimeOriginWorkspaceObservation {
+        thread_id: "thread-a",
+        thread_start_cwd: None,
+        session_meta_cwd: Some(r"C:\repo"),
+        confirmed_parent_thread_id: None,
+        observed_at: 7,
+    };
+
+    let first_route = first.observe_origin(observation);
+    let repeated_route = first.observe_origin(observation);
+    let second_route = second.observe_origin(observation);
+
+    assert_eq!(first_route, repeated_route);
+    assert_eq!(first_route, second_route);
+    assert_eq!(first.history_len_for_origin("thread-a"), 1);
+}
+
 #[test]
 fn unknown_relation_retains_the_observation_time() {
     let relation = resolve_origin_workspace_relation(&OriginWorkspaceRelationInput {

@@ -60,6 +60,14 @@ pub(crate) struct DesktopProjectMetadata {
     pub root_paths: Vec<String>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopProjectMigrationState {
+    pub projects_migrated: Option<bool>,
+    pub thread_assignments_migrated: Option<bool>,
+    pub version: Option<i64>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DesktopMetadataDiagnostic {
@@ -75,10 +83,14 @@ pub(crate) struct DesktopMetadataSnapshot {
     pub global_state_available: bool,
     pub catalog_available: bool,
     pub persisted_state_available: bool,
+    pub legacy_project_assignments_available: bool,
+    pub persisted_project_id_available: bool,
     pub catalog_entries: Vec<DesktopCatalogEntry>,
     pub persisted_threads: HashMap<String, DesktopPersistedThread>,
     pub project_assignments: HashMap<String, String>,
     pub projects: HashMap<String, DesktopProjectMetadata>,
+    pub project_id_mappings_by_host: HashMap<String, HashMap<String, String>>,
+    pub project_migrations_by_host: HashMap<String, DesktopProjectMigrationState>,
     pub thread_writable_roots: HashMap<String, Vec<String>>,
     pub diagnostics: Vec<DesktopMetadataDiagnostic>,
 }
@@ -104,10 +116,13 @@ impl DesktopMetadataSnapshot {
     ) -> Self {
         let mut snapshot = Self {
             codex_home_identity: codex_home_identity.into(),
+            global_state_available: true,
             ..Self::default()
         };
         parse_assignments(value, &mut snapshot);
         parse_projects(value, &mut snapshot);
+        parse_project_id_mappings(value, &mut snapshot);
+        parse_project_migrations(value, &mut snapshot);
         parse_writable_roots(value, &mut snapshot);
         snapshot
     }
@@ -115,6 +130,9 @@ impl DesktopMetadataSnapshot {
     fn merge_global_state(&mut self, mut other: Self) {
         self.project_assignments = std::mem::take(&mut other.project_assignments);
         self.projects = std::mem::take(&mut other.projects);
+        self.legacy_project_assignments_available = other.legacy_project_assignments_available;
+        self.project_id_mappings_by_host = std::mem::take(&mut other.project_id_mappings_by_host);
+        self.project_migrations_by_host = std::mem::take(&mut other.project_migrations_by_host);
         self.thread_writable_roots = std::mem::take(&mut other.thread_writable_roots);
         self.diagnostics.append(&mut other.diagnostics);
     }
@@ -170,12 +188,129 @@ fn parse_assignments(value: &Value, snapshot: &mut DesktopMetadataSnapshot) {
         ));
         return;
     };
+    let mut schema_valid = true;
     for (thread_id, assignment) in assignments {
         if let Some(project_id) = assignment.get("projectId").and_then(Value::as_str) {
             snapshot
                 .project_assignments
                 .insert(thread_id.clone(), project_id.to_string());
+        } else {
+            schema_valid = false;
+            snapshot.diagnostics.push(private_schema_drift(
+                ".codex-global-state.json",
+                "thread project assignment projectId is missing or not a string",
+            ));
         }
+    }
+    snapshot.legacy_project_assignments_available = schema_valid;
+}
+
+fn parse_project_id_mappings(value: &Value, snapshot: &mut DesktopMetadataSnapshot) {
+    let Some(mappings) = value.get("app-server-project-id-by-legacy-project-id-by-host") else {
+        return;
+    };
+    let Some(mappings) = mappings.as_object() else {
+        snapshot.diagnostics.push(private_schema_drift(
+            ".codex-global-state.json",
+            "app-server-project-id-by-legacy-project-id-by-host is not an object",
+        ));
+        return;
+    };
+    for (host_identity, host_mappings) in mappings {
+        let Some(host_mappings) = host_mappings.as_object() else {
+            snapshot.diagnostics.push(private_schema_drift(
+                ".codex-global-state.json",
+                "project ID mapping host entry is not an object",
+            ));
+            continue;
+        };
+        let mut parsed = HashMap::new();
+        for (legacy_project_id, app_server_project_id) in host_mappings {
+            let Some(app_server_project_id) = app_server_project_id.as_str() else {
+                snapshot.diagnostics.push(private_schema_drift(
+                    ".codex-global-state.json",
+                    "project ID mapping value is not a string",
+                ));
+                continue;
+            };
+            parsed.insert(legacy_project_id.clone(), app_server_project_id.to_string());
+        }
+        snapshot
+            .project_id_mappings_by_host
+            .insert(host_identity.clone(), parsed);
+    }
+}
+
+fn parse_project_migrations(value: &Value, snapshot: &mut DesktopMetadataSnapshot) {
+    let Some(migrations) = value.get("app-server-projects-migration-by-host") else {
+        return;
+    };
+    let Some(migrations) = migrations.as_object() else {
+        snapshot.diagnostics.push(private_schema_drift(
+            ".codex-global-state.json",
+            "app-server-projects-migration-by-host is not an object",
+        ));
+        return;
+    };
+    for (host_identity, migration) in migrations {
+        let Some(migration) = migration.as_object() else {
+            snapshot.diagnostics.push(private_schema_drift(
+                ".codex-global-state.json",
+                "project migration host entry is not an object",
+            ));
+            continue;
+        };
+        let projects_migrated = optional_migration_bool(migration, "projectsMigrated", snapshot);
+        let thread_assignments_migrated =
+            optional_migration_bool(migration, "threadAssignmentsMigrated", snapshot);
+        let version = optional_migration_version(migration, snapshot);
+        snapshot.project_migrations_by_host.insert(
+            host_identity.clone(),
+            DesktopProjectMigrationState {
+                projects_migrated,
+                thread_assignments_migrated,
+                version,
+            },
+        );
+    }
+}
+
+fn optional_migration_bool(
+    migration: &serde_json::Map<String, Value>,
+    field: &str,
+    snapshot: &mut DesktopMetadataSnapshot,
+) -> Option<bool> {
+    match migration.get(field) {
+        Some(value) => match value.as_bool() {
+            Some(value) => Some(value),
+            None => {
+                snapshot.diagnostics.push(private_schema_drift(
+                    ".codex-global-state.json",
+                    &format!("project migration {field} is not a boolean"),
+                ));
+                None
+            }
+        },
+        None => None,
+    }
+}
+
+fn optional_migration_version(
+    migration: &serde_json::Map<String, Value>,
+    snapshot: &mut DesktopMetadataSnapshot,
+) -> Option<i64> {
+    match migration.get("version") {
+        Some(value) => match value.as_i64() {
+            Some(value) => Some(value),
+            None => {
+                snapshot.diagnostics.push(private_schema_drift(
+                    ".codex-global-state.json",
+                    "project migration version is not an integer",
+                ));
+                None
+            }
+        },
+        None => None,
     }
 }
 
@@ -319,6 +454,13 @@ fn read_persisted_threads(path: &Path, snapshot: &mut DesktopMetadataSnapshot) {
             "threads.id is missing",
         ));
         return;
+    }
+    snapshot.persisted_project_id_available = columns.contains("project_id");
+    if !snapshot.persisted_project_id_available {
+        snapshot.diagnostics.push(private_schema_drift(
+            &path.to_string_lossy(),
+            "threads.project_id is missing",
+        ));
     }
     let sql = format!(
         "SELECT id, {}, {}, {}, {}, {}, {} FROM threads",

@@ -618,7 +618,7 @@ projections、`projectAssigned` 与 `sidebarVisible`。
 - 六向结果固定为：Desktop → Monitor 在 idle 时 PASS、Desktop → CLI 在 idle 时 PASS、Monitor → Desktop PASS、Monitor → CLI PASS、CLI exec → Desktop PASS、CLI exec → Monitor PASS；全部 Gate 的 duplicate canonical Thread 均为 0。
 - `BLOCKED_BY_ACTIVE_WRITER` 是 occupied 状态的正确并发保护，不是 resume capability failure；idle A2/B2 已证明 writer 释放后可继续同一 Thread。
 - CLI 兼容性 caveat 固定为：Codex `0.151.0-alpha.7.2` interactive resume / exec resume 均 PASS；PATH Codex `0.147.0` interactive authentication/discovery UNKNOWN、exec resume `no rollout found`。根因归类为 CLI version/history/protocol compatibility boundary，不为兼容旧 `0.147.0` 修改 Phase 3.1。
-- Phase 3.2 — Project / Workspace Interoperability 已进入实施：3.2.0 = FORENSICS COMPLETE，3.2.1 = PASS / FROZEN，3.2.1a = PASS；3.2.2 = GO / NOT STARTED，是下一唯一开发起点。
+- Phase 3.2 — Project / Workspace Interoperability 已进入实施：3.2.0 = FORENSICS COMPLETE，3.2.1 = PASS / FROZEN，3.2.1a = PASS，3.2.2 = PASS / FROZEN；3.2.3 Monitor Runtime Reconciliation = GO / NOT STARTED，是下一唯一开发起点。
 - 6 个既有 zh-CN locale/date failures 继续作为已批准的 non-blocking test debt，不阻塞 Phase 3.1 收口。
 - 本地不存在 `../Codex`，因此 upstream protocol hash 未刷新；该项记为 non-blocking verification gap。
 
@@ -987,7 +987,8 @@ Phase 3 — Cross-Surface Interoperability
 │  ├─ 3.2.0 Focused Forensics & Contract FORENSICS COMPLETE
 │  ├─ 3.2.1 Root Locator Contract PASS / FROZEN
 │  ├─ 3.2.1a Canonical Ambiguity Correction PASS
-│  └─ 3.2.2 Scoped ThreadWorkspaceRelation GO / NOT STARTED
+│  ├─ 3.2.2 Scoped ThreadWorkspaceRelation PASS / FROZEN
+│  └─ 3.2.3 Monitor Runtime Reconciliation GO / NOT STARTED
 
 Phase 4 — Productization
 NOT STARTED
@@ -1002,7 +1003,7 @@ RESERVED
 
 下一任务：
 
-**Phase 3.2.2 — Scoped ThreadWorkspaceRelation（GO / NOT STARTED）**
+**Phase 3.2.3 — Monitor Runtime Reconciliation（GO / NOT STARTED）**
 
 核心验收：
 
@@ -1012,4 +1013,4 @@ RESERVED
 
 Phase 3.1.1、Phase 3.1.2 / 3.1.2b 与六向 Cross-Surface Resume E2E 均已 PASS；duplicate canonical Thread = 0，active writer protection = CONFIRMED，CLI version compatibility caveat = KNOWN。Phase 3.1 正式 PASS / COMPLETE。
 
-Phase 3.2.0 = FORENSICS COMPLETE；Phase 3.2.1 Root Locator Contract = PASS / FROZEN；Phase 3.2.1a Canonical Ambiguity Correction = PASS。Phase 3.2.2 Scoped ThreadWorkspaceRelation = GO / NOT STARTED，是下一唯一开发起点；本阶段收口未启动 Phase 3.2.2。
+Phase 3.2.0 = FORENSICS COMPLETE；Phase 3.2.1 Root Locator Contract = PASS / FROZEN；Phase 3.2.1a Canonical Ambiguity Correction = PASS；Phase 3.2.2 Scoped ThreadWorkspaceRelation = PASS / FROZEN。ORIGIN direct evidence 固定为 `thread/start.cwd`、`session_meta.cwd`；TURN_EXECUTION direct evidence 固定为 `explicit turn cwd > turn_context.cwd`。两类 scope 都仅在 direct evidence 不存在时允许 confirmed parent ASSIGNED workspace 生成 INFERRED fallback。append-only history 保存全部 observation，effective relation 按 scope、basis、source precedence、observation time 与稳定内容 tie-break 计算，不按 `Vec` 最后一项或写入顺序选择。implementation commit：`28436fe feat: model scoped thread workspace relations`。focused 33 PASS；shared-core 207 PASS / 1 ignored；Rust lib 342 PASS / 2 ignored；cargo check、cargo fmt、typecheck、diff check 均 PASS。Phase 3.2.3 Monitor Runtime Reconciliation = GO / NOT STARTED，是下一唯一开发起点；本阶段未启动 Phase 3.2.3。

@@ -618,7 +618,7 @@ projections、`projectAssigned` 与 `sidebarVisible`。
 - 六向结果固定为：Desktop → Monitor 在 idle 时 PASS、Desktop → CLI 在 idle 时 PASS、Monitor → Desktop PASS、Monitor → CLI PASS、CLI exec → Desktop PASS、CLI exec → Monitor PASS；全部 Gate 的 duplicate canonical Thread 均为 0。
 - `BLOCKED_BY_ACTIVE_WRITER` 是 occupied 状态的正确并发保护，不是 resume capability failure；idle A2/B2 已证明 writer 释放后可继续同一 Thread。
 - CLI 兼容性 caveat 固定为：Codex `0.151.0-alpha.7.2` interactive resume / exec resume 均 PASS；PATH Codex `0.147.0` interactive authentication/discovery UNKNOWN、exec resume `no rollout found`。根因归类为 CLI version/history/protocol compatibility boundary，不为兼容旧 `0.147.0` 修改 Phase 3.1。
-- Phase 3.2 — Project / Workspace Interoperability = PASS / COMPLETE：3.2.0 = FORENSICS COMPLETE，3.2.1 = PASS / FROZEN，3.2.1a = PASS，3.2.2 = PASS / FROZEN，3.2.3 = PASS / FROZEN，3.2.4 = PASS / FROZEN，3.2.5 Contract Fixtures / Focused E2E = PASS。Phase 3.3 = GO / NOT STARTED。
+- Phase 3.2 — Project / Workspace Interoperability = PASS / COMPLETE：3.2.0 = FORENSICS COMPLETE，3.2.1 = PASS / FROZEN，3.2.1a = PASS，3.2.2 = PASS / FROZEN，3.2.3 = PASS / FROZEN，3.2.4 = PASS / FROZEN，3.2.5 Contract Fixtures / Focused E2E = PASS。Phase 3.3.0 = FORENSICS COMPLETE；Phase 3.3.1 = PASS / FROZEN；Phase 3.3.2 = GO / NOT STARTED。
 - 6 个既有 zh-CN locale/date failures 继续作为已批准的 non-blocking test debt，不阻塞 Phase 3.1 收口。
 - 本地不存在 `../Codex`，因此 upstream protocol hash 未刷新；该项记为 non-blocking verification gap。
 
@@ -1005,7 +1005,15 @@ RESERVED
 
 下一任务：
 
-**Phase 3.3（GO / NOT STARTED）**
+**Phase 3.3.2 — Creation-intent / First-Turn Coordination（GO / NOT STARTED）**
+
+Phase 3.3.0 = FORENSICS COMPLETE；Phase 3.3.1 Creation Acknowledgement Contract = PASS / FROZEN。实现提交：`ab4d9d7`。Contract 与验证详情见 [Phase 3.3.1](docs/phase-3-3-1-creation-acknowledgement.md)。
+
+`THREAD_ACKNOWLEDGED ≠ PERSISTENCE_CONFIRMED ≠ FIRST_TURN_ACCEPTED ≠ FIRST_TURN_OUTCOME`。合法 `thread/start` 仅确认服务端完整 ID；persistence 需要匹配的 persisted session_meta 证据；ephemeral 无可靠字段为 UNKNOWN，明确 TRUE 不得判为标准持久化 Session。首次 Turn 失败保留原 Thread，不补发 thread/start。
+
+`CREATION_OUTCOME_UNKNOWN` 仅是 contract 状态；未实现 creation-intent 幂等、timeout reconciliation、reconnect recovery 或自动 retry。Phase 3.1 / 3.2 冻结语义不变，Desktop Project/sidebar 无写入。Phase 3.3.2 保持 GO / NOT STARTED，未自行开始。
+
+最终验证：Rust lib 403 passed / 3 ignored；creation focused 18 passed；shared codex_core 45 passed；Phase 3.1 admission 10 / exact-ID 5 passed；workspace interop 77 passed / 1 ignored；app-server 20 passed；frontend focused 170 passed。Full frontend 1095 passed / 6 个既有 zh-CN locale/date failure，沿用已批准 pre-existing / non-blocking baseline waiver，new Phase 3.3.1 regressions = 0。cargo check --all-targets、cargo fmt --check、npm run typecheck、git diff --check 均通过。
 
 核心验收：
 
@@ -1015,4 +1023,4 @@ RESERVED
 
 Phase 3.1.1、Phase 3.1.2 / 3.1.2b 与六向 Cross-Surface Resume E2E 均已 PASS；duplicate canonical Thread = 0，active writer protection = CONFIRMED，CLI version compatibility caveat = KNOWN。Phase 3.1 正式 PASS / COMPLETE。
 
-Phase 3.2.0 = FORENSICS COMPLETE；Phase 3.2.1 Root Locator Contract = PASS / FROZEN；Phase 3.2.1a Canonical Ambiguity Correction = PASS；Phase 3.2.2 Scoped ThreadWorkspaceRelation = PASS / FROZEN；Phase 3.2.3 Monitor Runtime Reconciliation = PASS / FROZEN；Phase 3.2.4 Desktop Projection Read Adapter = PASS / FROZEN；Phase 3.2.5 Contract Fixtures / Focused E2E = PASS。Gate A–L 均通过，覆盖 unique/nested/duplicate/equal-longest roots、同 root 多 Desktop Projects、explicit assignment/alias、ORIGIN A 与 later Turn B、confirmed-parent fallback、CLI 与 Monitor/app-server Thread、invalid/no-match locator、Project conflict 与 schema drift。Desktop private metadata adapter 的前后 SHA-256 bracket 完全一致；Phase 3.1 exact-ID admission/resume 零回归。runtime-only relation store 可从 thread/list/read cwd deterministic 重建 ORIGIN；缺少 Turn 级恢复证据时，历史 TURN_EXECUTION 明确为 `NOT RECOVERABLE BY CURRENT CONTRACT` 且不得伪造。focused 13 PASS、workspace interop 77 PASS / 1 ignored、Desktop projection 24 PASS、app-server 20 PASS、Phase 3.1 admission 10 PASS、exact-thread 5 PASS；Rust lib 385 PASS / 3 ignored；cargo check、cargo fmt、typecheck、evidence validator、diff check 均 PASS。Phase 3.2 = PASS / COMPLETE；Phase 3.3 = GO / NOT STARTED，本阶段未启动 Phase 3.3。
+Phase 3.2.0 = FORENSICS COMPLETE；Phase 3.2.1 Root Locator Contract = PASS / FROZEN；Phase 3.2.1a Canonical Ambiguity Correction = PASS；Phase 3.2.2 Scoped ThreadWorkspaceRelation = PASS / FROZEN；Phase 3.2.3 Monitor Runtime Reconciliation = PASS / FROZEN；Phase 3.2.4 Desktop Projection Read Adapter = PASS / FROZEN；Phase 3.2.5 Contract Fixtures / Focused E2E = PASS。Gate A–L 均通过，覆盖 unique/nested/duplicate/equal-longest roots、同 root 多 Desktop Projects、explicit assignment/alias、ORIGIN A 与 later Turn B、confirmed-parent fallback、CLI 与 Monitor/app-server Thread、invalid/no-match locator、Project conflict 与 schema drift。Desktop private metadata adapter 的前后 SHA-256 bracket 完全一致；Phase 3.1 exact-ID admission/resume 零回归。runtime-only relation store 可从 thread/list/read cwd deterministic 重建 ORIGIN；缺少 Turn 级恢复证据时，历史 TURN_EXECUTION 明确为 `NOT RECOVERABLE BY CURRENT CONTRACT` 且不得伪造。focused 13 PASS、workspace interop 77 PASS / 1 ignored、Desktop projection 24 PASS、app-server 20 PASS、Phase 3.1 admission 10 PASS、exact-thread 5 PASS；Rust lib 385 PASS / 3 ignored；cargo check、cargo fmt、typecheck、evidence validator、diff check 均 PASS。Phase 3.2 = PASS / COMPLETE；Phase 3.3 已进入分片实施，当前状态见下。

@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { GlobalSourceSnapshot } from "@/features/agent-monitor/global-source/types";
+import type {
+  GlobalSourceSnapshot,
+  GlobalSourceThreadKey,
+  GlobalSourceTurnKey,
+} from "@/features/agent-monitor/global-source/types";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
@@ -388,8 +392,31 @@ export async function setWorkspaceRuntimeCodexArgs(
   });
 }
 
+export type ThreadCreationAcknowledgement = {
+  state:
+    | "CREATE_IN_FLIGHT"
+    | "THREAD_ACKNOWLEDGED"
+    | "CREATION_FAILED"
+    | "CREATION_OUTCOME_UNKNOWN";
+  threadKey: GlobalSourceThreadKey;
+  persistence: "NOT_YET_CONFIRMED" | "PERSISTENCE_CONFIRMED";
+  ephemeral: "TRUE" | "FALSE" | "UNKNOWN";
+  firstTurnAcceptance: "NOT_YET_ACCEPTED" | "FIRST_TURN_ACCEPTED";
+  firstTurn: GlobalSourceTurnKey | null;
+  firstTurnOutcome: "UNKNOWN" | "COMPLETED" | "FAILED" | "INTERRUPTED" | "REJECTED";
+};
+
+export type ThreadStartResponse = {
+  result: {
+    thread: { id: string; [key: string]: unknown };
+    creationAcknowledgement: ThreadCreationAcknowledgement;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export async function startThread(workspaceId: string) {
-  return invoke<any>("start_thread", { workspaceId });
+  return invoke<ThreadStartResponse>("start_thread", { workspaceId });
 }
 
 export async function forkThread(workspaceId: string, threadId: string) {

@@ -20,6 +20,7 @@ import {
 } from "@utils/threadItems";
 import { saveThreadActivity } from "@threads/utils/threadStorage";
 import { useThreadActions } from "./useThreadActions";
+import { acknowledgedCreation } from "./creationTestFixtures";
 
 vi.mock("@services/tauri", () => ({
   startThread: vi.fn(),
@@ -115,7 +116,7 @@ describe("useThreadActions", () => {
 
   it("starts a thread and activates it by default", async () => {
     vi.mocked(startThread).mockResolvedValue({
-      result: { thread: { id: "thread-1" }, model: "gpt-observed" },
+      result: { ...acknowledgedCreation("thread-1").result, model: "gpt-observed" },
     });
 
     const onRuntimeRecord = vi.fn();
@@ -142,8 +143,36 @@ describe("useThreadActions", () => {
     expect(onRuntimeRecord).toHaveBeenCalledWith(expect.objectContaining({
       source: "SERVER",
       label: "thread/start response",
-      payload: { result: { thread: { id: "thread-1" }, model: "gpt-observed" } },
+      payload: { result: { ...acknowledgedCreation("thread-1").result, model: "gpt-observed" } },
     }));
+  });
+
+  it.each([
+    { result: { thread: { id: "unacknowledged-id" } } },
+    { ...acknowledgedCreation("thread-1"), error: { message: "server rejected" } },
+    { result: { ...acknowledgedCreation("thread-1").result, thread: { id: "other-thread" } } },
+    { result: { ...acknowledgedCreation("thread-1").result, thread: { id: 5 } } },
+  ])("creation acknowledgement fails closed before activation: %j", async (response) => {
+    vi.mocked(startThread).mockResolvedValue(response as Awaited<ReturnType<typeof startThread>>);
+    const { result, dispatch, loadedThreadsRef } = renderActions();
+    await act(async () => {
+      await expect(result.current.startThreadForWorkspace("ws-1")).rejects.toThrow();
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(loadedThreadsRef.current).toEqual({});
+    expect(startThread).toHaveBeenCalledTimes(1);
+    expect(forkThread).not.toHaveBeenCalled();
+    expect(resumeThread).not.toHaveBeenCalled();
+  });
+
+  it("creation transport failure does not create a replacement thread", async () => {
+    vi.mocked(startThread).mockRejectedValueOnce(new Error("request timed out"));
+    const { result, dispatch } = renderActions();
+    await act(async () => {
+      await expect(result.current.startThreadForWorkspace("ws-1")).rejects.toThrow("request timed out");
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(startThread).toHaveBeenCalledTimes(1);
   });
 
   it("forks a thread and activates the fork", async () => {
@@ -200,9 +229,7 @@ describe("useThreadActions", () => {
   });
 
   it("starts a thread without activating when requested", async () => {
-    vi.mocked(startThread).mockResolvedValue({
-      result: { thread: { id: "thread-2" } },
-    });
+    vi.mocked(startThread).mockResolvedValue(acknowledgedCreation("thread-2"));
 
     const { result, dispatch } = renderActions();
 

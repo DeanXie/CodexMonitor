@@ -19,6 +19,7 @@ import {
 import { STORAGE_KEY_DETACHED_REVIEW_LINKS } from "@threads/utils/threadStorage";
 import { useQueuedSend } from "./useQueuedSend";
 import { useThreads } from "./useThreads";
+import { acknowledgedCreation } from "./creationTestFixtures";
 
 type AppServerHandlers = Parameters<typeof useAppServerEvents>[0];
 
@@ -70,6 +71,30 @@ describe("useThreads UX integration", () => {
 
   afterEach(() => {
     nowSpy.mockRestore();
+  });
+
+  it.each(["rejected", "transport-error"])("3.3.1 first turn %s keeps the acknowledged thread without replacement", async (failure) => {
+    const id = "01a05de4-4098-7833-9deb-e3763e15f397";
+    vi.mocked(startThread).mockResolvedValue(acknowledgedCreation(id));
+    if (failure === "rejected") {
+      vi.mocked(sendUserMessageService).mockResolvedValue({ error: { message: "turn rejected" } });
+    } else {
+      vi.mocked(sendUserMessageService).mockRejectedValue(new Error("transport failed"));
+    }
+    const { result } = renderHook(() => useThreads({ activeWorkspace: workspace, onWorkspaceConnected: vi.fn() }));
+    await act(async () => { await result.current.startThread(); });
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+    expect(setThreadName).not.toHaveBeenCalled();
+    expect(result.current.activeThreadId).toBe(id);
+
+    await act(async () => {
+      expect(await result.current.sendUserMessage("synthetic first turn")).toEqual({ status: "blocked" });
+    });
+    expect(result.current.activeThreadId).toBe(id);
+    expect(result.current.threadsByWorkspace[workspace.id].map(thread => thread.id)).toEqual([id]);
+    expect(sendUserMessageService).toHaveBeenCalledWith(workspace.id, id, "synthetic first turn", expect.any(Object));
+    expect(startThread).toHaveBeenCalledTimes(1);
+    expect(setThreadName).not.toHaveBeenCalled();
   });
 
   it("forwards each raw app-server notification to Runtime ingestion", () => {
@@ -168,9 +193,7 @@ describe("useThreads UX integration", () => {
 
   it("applies runtime codex args before start and selection resume", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
-    vi.mocked(startThread).mockResolvedValue({
-      result: { thread: { id: "thread-new" } },
-    } as Awaited<ReturnType<typeof startThread>>);
+    vi.mocked(startThread).mockResolvedValue(acknowledgedCreation("thread-new"));
     vi.mocked(resumeThread).mockResolvedValue({
       result: {
         thread: {
@@ -216,9 +239,7 @@ describe("useThreads UX integration", () => {
 
   it("applies runtime codex args before direct startThreadForWorkspace calls", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
-    vi.mocked(startThread).mockResolvedValue({
-      result: { thread: { id: "thread-direct-new" } },
-    } as Awaited<ReturnType<typeof startThread>>);
+    vi.mocked(startThread).mockResolvedValue(acknowledgedCreation("thread-direct-new"));
 
     const { result } = renderHook(() =>
       useThreads({
@@ -427,9 +448,7 @@ describe("useThreads UX integration", () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => {
       throw new Error("runtime sync failed");
     });
-    vi.mocked(startThread).mockResolvedValue({
-      result: { thread: { id: "thread-new" } },
-    } as Awaited<ReturnType<typeof startThread>>);
+    vi.mocked(startThread).mockResolvedValue(acknowledgedCreation("thread-new"));
 
     const { result } = renderHook(() =>
       useThreads({

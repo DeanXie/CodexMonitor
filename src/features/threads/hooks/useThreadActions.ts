@@ -173,16 +173,26 @@ export function useThreadActions({
           label: "thread/start response",
           payload: response,
         });
-        const threadId = extractThreadId(response);
-        if (threadId) {
-          dispatch({ type: "ensureThread", workspaceId, threadId });
-          if (shouldActivate) {
-            dispatch({ type: "setActiveThreadId", workspaceId, threadId });
-          }
-          loadedThreadsRef.current[threadId] = true;
-          return threadId;
+        // Only the shared backend validates protocol IDs. Do not coerce an
+        // arbitrary response into a created thread or infer persistence here.
+        const acknowledgement = response?.result?.creationAcknowledgement;
+        const threadId = response?.result?.thread?.id;
+        if (
+          response?.error !== undefined ||
+          acknowledgement?.state !== "THREAD_ACKNOWLEDGED" ||
+          typeof threadId !== "string" ||
+          !threadId ||
+          acknowledgement.threadKey?.threadId !== threadId ||
+          !acknowledgement.threadKey?.codexHomeIdentity
+        ) {
+          throw new Error("CREATION_FAILED / INVALID_RESPONSE: missing or conflicting acknowledgement");
         }
-        return null;
+        dispatch({ type: "ensureThread", workspaceId, threadId });
+        if (shouldActivate) {
+          dispatch({ type: "setActiveThreadId", workspaceId, threadId });
+        }
+        loadedThreadsRef.current[threadId] = true;
+        return threadId;
       } catch (error) {
         onDebug?.({
           id: `${Date.now()}-client-thread-start-error`,
@@ -194,7 +204,7 @@ export function useThreadActions({
         throw error;
       }
     },
-    [dispatch, extractThreadId, loadedThreadsRef, onDebug, onRuntimeRecord],
+    [dispatch, loadedThreadsRef, onDebug, onRuntimeRecord],
   );
 
   const resumeThreadForWorkspace = useCallback(

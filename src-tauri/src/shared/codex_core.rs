@@ -21,6 +21,12 @@ use crate::types::WorkspaceEntry;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) mod external_thread_admission;
 
+pub(crate) mod creation_acknowledgement;
+
+#[cfg(test)]
+#[path = "codex_core/creation_acknowledgement_tests.rs"]
+mod creation_acknowledgement_tests;
+
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
 #[allow(dead_code)]
 const MAX_INLINE_IMAGE_BYTES: u64 = 50 * 1024 * 1024;
@@ -313,13 +319,18 @@ pub(crate) async fn start_thread_core(
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
-    let params = json!({
-        "cwd": workspace_path,
-        "approvalPolicy": "on-request"
-    });
-    session
-        .send_request_for_workspace(&workspace_id, "thread/start", params)
+    let codex_home_identity = session
+        .workspace_reconciler
+        .lock()
         .await
+        .codex_home_identity()
+        .to_string();
+    creation_acknowledgement::start_thread_with_acknowledgement(
+        &codex_home_identity,
+        &workspace_path,
+        |method, params| session.send_request_for_workspace(&workspace_id, method, params),
+    )
+    .await
 }
 
 pub(crate) async fn resume_thread_core(

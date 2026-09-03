@@ -47,6 +47,11 @@ pub(crate) struct RuntimeWorkspaceReconciler {
 }
 
 impl RuntimeWorkspaceReconciler {
+    /// The already-resolved runtime namespace, shared with creation acknowledgement.
+    pub(crate) fn codex_home_identity(&self) -> &str {
+        &self.codex_home_identity
+    }
+
     pub(crate) fn new(
         codex_home_identity: impl Into<String>,
         execution_environment_key: ExecutionEnvironmentKey,

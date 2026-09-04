@@ -486,6 +486,11 @@ export function SettingsCodexSection({
         <select
           id="default-access"
           className="settings-select"
+          title={
+            appSettings.defaultAccessMode === "current"
+              ? "Allows writes within the active workspace and enables network access. Approval remains on-request."
+              : undefined
+          }
           value={appSettings.defaultAccessMode}
           onChange={(event) =>
             void onUpdateAppSettings({
@@ -495,7 +500,7 @@ export function SettingsCodexSection({
           }
         >
           <option value="read-only">Read only</option>
-          <option value="current">On-request</option>
+          <option value="current">Workspace access (network enabled)</option>
           <option value="full-access">Full access</option>
         </select>
       </SettingsToggleRow>

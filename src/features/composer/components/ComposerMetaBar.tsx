@@ -260,6 +260,11 @@ export function ComposerMetaBar({
           <select
             className="composer-select composer-select--approval"
             aria-label="Agent access"
+            title={
+              accessMode === "current"
+                ? "Allows writes within the active workspace and enables network access. Approval remains on-request."
+                : undefined
+            }
             disabled={disabled}
             value={accessMode}
             onChange={(event) =>
@@ -267,7 +272,7 @@ export function ComposerMetaBar({
             }
           >
             <option value="read-only">Read only</option>
-            <option value="current">On-Request</option>
+            <option value="current">Workspace access (network enabled)</option>
             <option value="full-access">Full access</option>
           </select>
         </div>

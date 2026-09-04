@@ -14,6 +14,7 @@ use crate::backend::events::AppServerEvent;
 use crate::event_sink::TauriEventSink;
 use crate::remote_backend;
 use crate::shared::agents_config_core;
+use crate::shared::codex_core::creation_coordination::{IntentId, TurnIntent};
 use crate::shared::codex_core::{self, insert_optional_nullable_string};
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
@@ -72,8 +73,56 @@ pub(crate) async fn codex_update(
 }
 
 #[tauri::command]
+pub(crate) async fn get_creation_context(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(&*state, app, "get_creation_context", json!({})).await;
+    }
+    Ok(state.creation_coordinator.context())
+}
+
+#[tauri::command]
+pub(crate) async fn get_creation_intent_status(
+    intent: IntentId,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "get_creation_intent_status",
+            json!({"intent":intent}),
+        )
+        .await;
+    }
+    state.creation_coordinator.creation_status(&intent)
+}
+
+#[tauri::command]
+pub(crate) async fn get_first_turn_intent_status(
+    intent: IntentId,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "get_first_turn_intent_status",
+            json!({"intent":intent}),
+        )
+        .await;
+    }
+    state.creation_coordinator.turn_status(&intent)
+}
+
+#[tauri::command]
 pub(crate) async fn start_thread(
     workspace_id: String,
+    creation_intent: IntentId,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -82,12 +131,19 @@ pub(crate) async fn start_thread(
             &*state,
             app,
             "start_thread",
-            json!({ "workspaceId": workspace_id }),
+            json!({ "workspaceId": workspace_id, "creationIntent":creation_intent }),
         )
         .await;
     }
 
-    codex_core::start_thread_core(&state.sessions, &state.workspaces, workspace_id).await
+    codex_core::start_thread_core(
+        &state.sessions,
+        &state.workspaces,
+        workspace_id,
+        &state.creation_coordinator,
+        creation_intent,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -107,7 +163,13 @@ pub(crate) async fn resume_thread(
         .await;
     }
 
-    codex_core::resume_thread_core(&state.sessions, workspace_id, thread_id).await
+    codex_core::resume_thread_core(
+        &state.sessions,
+        workspace_id,
+        thread_id,
+        &state.creation_coordinator,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -126,7 +188,13 @@ pub(crate) async fn read_thread(
         )
         .await
     } else {
-        codex_core::read_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone()).await
+        codex_core::read_thread_core(
+            &state.sessions,
+            workspace_id.clone(),
+            thread_id.clone(),
+            &state.creation_coordinator,
+        )
+        .await
     };
 
     let status = classify_thread_read_response(&response);
@@ -432,6 +500,7 @@ pub(crate) async fn send_user_message(
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
     collaboration_mode: Option<Value>,
+    turn_intent: Option<TurnIntent>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -446,6 +515,9 @@ pub(crate) async fn send_user_message(
         payload.insert("workspaceId".to_string(), json!(workspace_id));
         payload.insert("threadId".to_string(), json!(thread_id));
         payload.insert("text".to_string(), json!(text));
+        if let Some(intent) = turn_intent {
+            payload.insert("turnIntent".into(), json!(intent));
+        }
         payload.insert("model".to_string(), json!(model));
         payload.insert("effort".to_string(), json!(effort));
         insert_optional_nullable_string(&mut payload, "serviceTier", service_tier);
@@ -479,6 +551,8 @@ pub(crate) async fn send_user_message(
         images,
         app_mentions,
         collaboration_mode,
+        &state.creation_coordinator,
+        turn_intent,
     )
     .await
 }

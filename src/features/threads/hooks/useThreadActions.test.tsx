@@ -45,6 +45,7 @@ vi.mock("@threads/utils/threadStorage", () => ({
 }));
 
 describe("useThreadActions", () => {
+  const creationIntent = { id: "creation-intent-test", processEpoch: "process-epoch-test" };
   const workspace: WorkspaceInfo = {
     id: "ws-1",
     name: "CodexMonitor",
@@ -124,11 +125,11 @@ describe("useThreadActions", () => {
 
     let threadId: string | null = null;
     await act(async () => {
-      threadId = await result.current.startThreadForWorkspace("ws-1");
+      threadId = await result.current.startThreadForWorkspace("ws-1", { creationIntent });
     });
 
     expect(threadId).toBe("thread-1");
-    expect(startThread).toHaveBeenCalledWith("ws-1");
+    expect(startThread).toHaveBeenCalledWith("ws-1", creationIntent);
     expect(dispatch).toHaveBeenCalledWith({
       type: "ensureThread",
       workspaceId: "ws-1",
@@ -147,6 +148,22 @@ describe("useThreadActions", () => {
     }));
   });
 
+  it("forwards a caller-owned creation intent unchanged to thread/start", async () => {
+    vi.mocked(startThread).mockResolvedValue(acknowledgedCreation("thread-intent"));
+    const { result } = renderActions();
+
+    await act(async () => {
+      await result.current.startThreadForWorkspace("ws-1", {
+        creationIntent: { id: "creation-intent-1", processEpoch: "process-epoch-1" },
+      });
+    });
+
+    expect(startThread).toHaveBeenCalledWith("ws-1", {
+      id: "creation-intent-1",
+      processEpoch: "process-epoch-1",
+    });
+  });
+
   it.each([
     { result: { thread: { id: "unacknowledged-id" } } },
     { ...acknowledgedCreation("thread-1"), error: { message: "server rejected" } },
@@ -156,7 +173,7 @@ describe("useThreadActions", () => {
     vi.mocked(startThread).mockResolvedValue(response as Awaited<ReturnType<typeof startThread>>);
     const { result, dispatch, loadedThreadsRef } = renderActions();
     await act(async () => {
-      await expect(result.current.startThreadForWorkspace("ws-1")).rejects.toThrow();
+      await expect(result.current.startThreadForWorkspace("ws-1", { creationIntent })).rejects.toThrow();
     });
     expect(dispatch).not.toHaveBeenCalled();
     expect(loadedThreadsRef.current).toEqual({});
@@ -169,7 +186,7 @@ describe("useThreadActions", () => {
     vi.mocked(startThread).mockRejectedValueOnce(new Error("request timed out"));
     const { result, dispatch } = renderActions();
     await act(async () => {
-      await expect(result.current.startThreadForWorkspace("ws-1")).rejects.toThrow("request timed out");
+      await expect(result.current.startThreadForWorkspace("ws-1", { creationIntent })).rejects.toThrow("request timed out");
     });
     expect(dispatch).not.toHaveBeenCalled();
     expect(startThread).toHaveBeenCalledTimes(1);
@@ -234,7 +251,7 @@ describe("useThreadActions", () => {
     const { result, dispatch } = renderActions();
 
     await act(async () => {
-      await result.current.startThreadForWorkspace("ws-1", { activate: false });
+      await result.current.startThreadForWorkspace("ws-1", { activate: false, creationIntent });
     });
 
     expect(dispatch).toHaveBeenCalledWith({

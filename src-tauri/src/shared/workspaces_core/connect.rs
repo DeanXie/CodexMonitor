@@ -168,6 +168,7 @@ mod tests {
         let stdin = child.stdin.take().expect("dummy child stdin");
 
         Arc::new(WorkspaceSession {
+            creation_coordinator: Mutex::new(None),
             codex_args: None,
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),

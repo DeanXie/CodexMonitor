@@ -16,6 +16,20 @@ pub(super) async fn try_handle(
     params: &Value,
 ) -> Option<Result<Value, String>> {
     match method {
+        "get_creation_context" => Some(Ok(state.creation_coordinator.context())),
+        "get_creation_intent_status" | "get_first_turn_intent_status" => {
+            let intent = match serde_json::from_value(
+                params.get("intent").cloned().unwrap_or(Value::Null),
+            ) {
+                Ok(intent) => intent,
+                Err(error) => return Some(Err(format!("invalid intent: {error}"))),
+            };
+            Some(if method == "get_creation_intent_status" {
+                state.creation_coordinator.creation_status(&intent)
+            } else {
+                state.creation_coordinator.turn_status(&intent)
+            })
+        }
         "get_codex_config_path" => {
             let path = match settings_core::get_codex_config_path_core() {
                 Ok(value) => value,
@@ -35,7 +49,13 @@ pub(super) async fn try_handle(
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            Some(state.start_thread(workspace_id).await)
+            let intent = match serde_json::from_value(
+                params.get("creationIntent").cloned().unwrap_or(Value::Null),
+            ) {
+                Ok(intent) => intent,
+                Err(error) => return Some(Err(format!("invalid creationIntent: {error}"))),
+            };
+            Some(state.start_thread(workspace_id, intent).await)
         }
         "resume_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {
@@ -188,6 +208,15 @@ pub(super) async fn try_handle(
             let app_mentions = parse_optional_value(params, "appMentions")
                 .and_then(|value| value.as_array().cloned());
             let collaboration_mode = parse_optional_value(params, "collaborationMode");
+            let turn_intent = match params
+                .get("turnIntent")
+                .filter(|v| !v.is_null())
+                .map(|v| serde_json::from_value(v.clone()))
+                .transpose()
+            {
+                Ok(intent) => intent,
+                Err(error) => return Some(Err(format!("invalid turnIntent: {error}"))),
+            };
             Some(
                 state
                     .send_user_message(
@@ -201,6 +230,7 @@ pub(super) async fn try_handle(
                         images,
                         app_mentions,
                         collaboration_mode,
+                        turn_intent,
                     )
                     .await,
             )

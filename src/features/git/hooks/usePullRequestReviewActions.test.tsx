@@ -9,6 +9,10 @@ import type {
 } from "@/types";
 import { usePullRequestReviewActions } from "./usePullRequestReviewActions";
 
+vi.mock("@threads/hooks/creationAction", () => ({
+  createMonitorCreationAction: () => ({ creationIntent: Promise.resolve({ id: "creation-test", processEpoch: "epoch-test" }) }),
+}));
+
 const pushErrorToastMock = vi.fn();
 
 vi.mock("@services/toasts", () => ({
@@ -79,6 +83,7 @@ describe("usePullRequestReviewActions", () => {
 
     expect(options.startThreadForWorkspace).toHaveBeenCalledWith(workspace.id, {
       activate: false,
+      creationAction: expect.any(Object),
     });
     expect(options.sendUserMessageToThread).toHaveBeenCalledWith(
       workspace,
@@ -112,6 +117,7 @@ describe("usePullRequestReviewActions", () => {
 
     expect(options.startThreadForWorkspace).toHaveBeenCalledWith(workspace.id, {
       activate: true,
+      creationAction: expect.any(Object),
     });
   });
 

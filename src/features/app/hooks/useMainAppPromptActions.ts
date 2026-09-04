@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { SendMessageResult, WorkspaceInfo } from "@/types";
+import { createMonitorCreationAction, createMonitorFirstTurnAction, type CreationAction } from "@threads/hooks/creationAction";
 
 type PromptPayload = {
   scope: "workspace" | "global";
@@ -23,13 +24,14 @@ type UseMainAppPromptActionsArgs = {
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean },
+    options?: { activate?: boolean; creationAction?: CreationAction },
   ) => Promise<string | null>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
     threadId: string,
     text: string,
     images?: string[],
+    options?: { creationIntent?: import("@services/tauri").CreationIntentContext; turnIntent?: import("@services/tauri").CreationIntentContext },
   ) => Promise<void | SendMessageResult>;
   createPrompt: (data: PromptPayload) => Promise<void>;
   updatePrompt: (data: PromptUpdatePayload) => Promise<void>;
@@ -118,13 +120,19 @@ export function useMainAppPromptActions({
       if (!activeWorkspace.connected) {
         await connectWorkspace(activeWorkspace);
       }
+      const creationAction = createMonitorCreationAction();
+      const firstTurnAction = createMonitorFirstTurnAction(creationAction);
       const threadId = await startThreadForWorkspace(activeWorkspace.id, {
         activate: false,
+        creationAction,
       });
       if (!threadId) {
         return;
       }
-      await sendUserMessageToThread(activeWorkspace, threadId, trimmed, []);
+      await sendUserMessageToThread(activeWorkspace, threadId, trimmed, [], {
+        creationIntent: await firstTurnAction.creationIntent,
+        turnIntent: await firstTurnAction.turnIntent,
+      });
     },
     [activeWorkspace, connectWorkspace, sendUserMessageToThread, startThreadForWorkspace],
   );

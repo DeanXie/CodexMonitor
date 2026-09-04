@@ -415,8 +415,31 @@ export type ThreadStartResponse = {
   [key: string]: unknown;
 };
 
-export async function startThread(workspaceId: string) {
-  return invoke<ThreadStartResponse>("start_thread", { workspaceId });
+export type CreationIntentContext = {
+  id: string;
+  processEpoch: string;
+};
+
+export async function getCreationContext(): Promise<{ processEpoch: string }> {
+  return invoke("get_creation_context");
+}
+
+export async function getCreationIntentStatus(intent: CreationIntentContext) {
+  return invoke("get_creation_intent_status", { intent });
+}
+
+export async function getFirstTurnIntentStatus(intent: CreationIntentContext) {
+  return invoke("get_first_turn_intent_status", { intent });
+}
+
+export async function startThread(
+  workspaceId: string,
+  creationIntent: CreationIntentContext,
+) {
+  return invoke<ThreadStartResponse>("start_thread", {
+    workspaceId,
+    creationIntent,
+  });
 }
 
 export async function forkThread(workspaceId: string, threadId: string) {
@@ -485,6 +508,8 @@ export async function sendUserMessage(
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
     appMentions?: AppMention[];
+    turnIntent?: CreationIntentContext;
+    creationIntent?: CreationIntentContext;
   },
 ) {
   const images = await normalizeImagesForRpc(options?.images);
@@ -505,6 +530,9 @@ export async function sendUserMessage(
   }
   if (options?.appMentions && options.appMentions.length > 0) {
     payload.appMentions = options.appMentions;
+  }
+  if (options?.turnIntent) {
+    payload.turnIntent = { intent: options.turnIntent, creationIntent: options.creationIntent };
   }
   return invoke("send_user_message", payload);
 }

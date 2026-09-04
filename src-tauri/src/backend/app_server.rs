@@ -14,12 +14,30 @@ use tokio::time::timeout;
 
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
+use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
 use crate::shared::workspace_interop_core::{
     ExecutionEnvironmentKey, RootLocatorPlatform, RuntimeOriginWorkspaceObservation,
     RuntimeTurnWorkspaceObservation, RuntimeWorkspaceReconciler, RuntimeWorkspaceRoute,
 };
 use crate::types::WorkspaceEntry;
+
+pub(crate) async fn write_message_to<W: tokio::io::AsyncWrite + Unpin>(
+    stdin: &Mutex<W>,
+    value: Value,
+    boundary: Option<&DispatchBoundary>,
+) -> Result<(), String> {
+    let mut line = serde_json::to_string(&value).map_err(|e| e.to_string())?;
+    line.push('\n');
+    let mut stdin = stdin.lock().await;
+    if let Some(boundary) = boundary {
+        boundary.mark_dispatched();
+    }
+    stdin
+        .write_all(line.as_bytes())
+        .await
+        .map_err(|e| e.to_string())
+}
 
 #[cfg(target_os = "windows")]
 use crate::shared::process_core::{build_cmd_c_command, resolve_windows_executable};
@@ -600,6 +618,8 @@ pub(crate) struct WorkspaceSession {
     pub(crate) request_context: Mutex<HashMap<u64, RequestContext>>,
     pub(crate) thread_workspace: Mutex<HashMap<String, String>>,
     pub(crate) workspace_reconciler: Mutex<RuntimeWorkspaceReconciler>,
+    // Shared process owner survives session reconnect; this is only an observer.
+    pub(crate) creation_coordinator: Mutex<Option<CreationCoordinator>>,
     pub(crate) runtime_observation_keys: Mutex<HashSet<String>>,
     pub(crate) runtime_observation_clock: AtomicU64,
     pub(crate) hidden_thread_ids: Mutex<HashSet<String>>,
@@ -669,6 +689,17 @@ impl WorkspaceSession {
         method: &str,
         params: Value,
     ) -> Result<Value, String> {
+        self.send_request_for_workspace_observed(workspace_id, method, params, None)
+            .await
+    }
+
+    pub(crate) async fn send_request_for_workspace_observed(
+        &self,
+        workspace_id: &str,
+        method: &str,
+        params: Value,
+        boundary: Option<&DispatchBoundary>,
+    ) -> Result<Value, String> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
         self.register_workspace(workspace_id).await;
@@ -681,9 +712,12 @@ impl WorkspaceSession {
                 params: params.clone(),
             },
         );
-        if let Err(error) = self
-            .write_message(json!({ "id": id, "method": method, "params": params }))
-            .await
+        if let Err(error) = write_message_to(
+            &self.stdin,
+            json!({ "id": id, "method": method, "params": params }),
+            boundary,
+        )
+        .await
         {
             self.pending.lock().await.remove(&id);
             self.request_context.lock().await.remove(&id);
@@ -951,6 +985,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
         request_context: Mutex::new(HashMap::new()),
         thread_workspace: Mutex::new(HashMap::new()),
         workspace_reconciler: Mutex::new(workspace_reconciler),
+        creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),
         hidden_thread_ids: Mutex::new(HashSet::new()),
@@ -988,6 +1023,28 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             let has_method = value.get("method").is_some();
             let has_result_or_error = value.get("result").is_some() || value.get("error").is_some();
             let method_name = value.get("method").and_then(|method| method.as_str());
+
+            if method_name == Some("turn/completed") {
+                if let (Some(thread), Some(turn), Some(outcome)) = (
+                    value.pointer("/params/threadId").and_then(Value::as_str),
+                    value.pointer("/params/turn/id").and_then(Value::as_str),
+                    value.pointer("/params/turn/status").and_then(Value::as_str),
+                ) {
+                    let observer = session_clone.creation_coordinator.lock().await.clone();
+                    if let Some(observer) = observer {
+                        let home = session_clone
+                            .workspace_reconciler
+                            .lock()
+                            .await
+                            .codex_home_identity()
+                            .to_string();
+                        observer.observe_known_turn_outcome(
+                            &crate::shared::global_sources_core::rollout_identity::CodexThreadKey::new(home,thread),
+                            turn,outcome,
+                        );
+                    }
+                }
+            }
 
             // Check if this event is for a background thread
             let thread_id = extract_thread_id(&value);

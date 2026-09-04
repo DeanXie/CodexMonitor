@@ -485,6 +485,7 @@ export default function MainApp() {
     resetWorkspaceThreads,
     refreshThread,
     sendUserMessage,
+    beginSendAction,
     sendUserMessageToThread,
     startFork,
     startReview,
@@ -1169,6 +1170,7 @@ export default function MainApp() {
     },
     actions: {
       connectWorkspace,
+      beginSendAction,
       startThreadForWorkspace,
       sendUserMessage,
       sendUserMessageToThread,

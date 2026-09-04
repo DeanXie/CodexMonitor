@@ -31,6 +31,11 @@ import {
   setThreadName as setThreadNameService,
 } from "@services/tauri";
 import {
+  createMonitorCreationAction,
+  createMonitorSendAction,
+  type CreationAction,
+} from "./creationAction";
+import {
   makeCustomNameKey,
   saveCustomName,
 } from "@threads/utils/threadStorage";
@@ -97,6 +102,15 @@ export function useThreads({
   threadSortKey = "updated_at",
   onThreadCodexMetadataDetected,
 }: UseThreadsOptions) {
+  // This records the currently selected explicit creation action only. It is
+  // intentionally not keyed by workspace or prompt: a second New action is a
+  // distinct action and replaces this selection.
+  const selectedCreationActionRef = useRef<{
+    workspaceId: string;
+    action: CreationAction;
+    startPromise: Promise<string | null> | null;
+  } | null>(null);
+  const creationActionByThreadRef = useRef(new Map<string, CreationAction>());
   const maxItemsPerThread =
     chatHistoryScrollbackItems === undefined
       ? CHAT_SCROLLBACK_DEFAULT
@@ -660,27 +674,97 @@ export function useThreads({
   );
 
   const startThreadForWorkspace = useCallback(
-    async (workspaceId: string, options?: { activate?: boolean }) => {
+    async (
+      workspaceId: string,
+      options?: { activate?: boolean; creationAction?: CreationAction },
+    ) => {
+      if (!options?.creationAction) {
+        throw new Error("CREATION_FAILED: missing CreationIntent");
+      }
       await ensureWorkspaceRuntimeCodexArgsBestEffort(workspaceId, null, "start");
-      return startThreadForWorkspaceInternal(workspaceId, options);
+      const threadId = await startThreadForWorkspaceInternal(workspaceId, {
+        activate: options.activate,
+        creationIntent: await options.creationAction.creationIntent,
+      });
+      if (threadId) {
+        creationActionByThreadRef.current.set(`${workspaceId}\n${threadId}`, options.creationAction);
+      }
+      return threadId;
     },
     [ensureWorkspaceRuntimeCodexArgsBestEffort, startThreadForWorkspaceInternal],
   );
+
+  const beginCreationAction = useCallback(
+    () => createMonitorCreationAction(),
+    [],
+  );
+
+  const beginCreationActionForWorkspace = useCallback(
+    (workspaceId: string, reuseSelected = false) => {
+      const selected = selectedCreationActionRef.current;
+      if (reuseSelected && selected?.workspaceId === workspaceId) {
+        return selected.action;
+      }
+      const action = beginCreationAction();
+      selectedCreationActionRef.current = { workspaceId, action, startPromise: null };
+      return action;
+    },
+    [beginCreationAction],
+  );
+
+  const beginSendAction = useCallback((forceCreation = false) => {
+    if (!activeWorkspace) {
+      return createMonitorSendAction();
+    }
+    const existing = !forceCreation && activeThreadId
+      ? creationActionByThreadRef.current.get(`${activeWorkspace.id}\n${activeThreadId}`)
+      : undefined;
+    const selected = selectedCreationActionRef.current;
+    const creationAction = forceCreation
+      ? beginCreationActionForWorkspace(activeWorkspace.id)
+      : existing
+      ?? (!activeThreadId && selected?.workspaceId === activeWorkspace.id
+        ? selected.action
+        : !activeThreadId
+          ? beginCreationActionForWorkspace(activeWorkspace.id)
+          : undefined);
+    return createMonitorSendAction(creationAction);
+  }, [activeThreadId, activeWorkspace, beginCreationActionForWorkspace]);
 
   const startThread = useCallback(async () => {
     if (!activeWorkspaceId) {
       return null;
     }
-    return startThreadForWorkspace(activeWorkspaceId);
-  }, [activeWorkspaceId, startThreadForWorkspace]);
+    const creationAction = beginCreationActionForWorkspace(activeWorkspaceId);
+    const startPromise = startThreadForWorkspace(activeWorkspaceId, {
+      creationAction,
+    });
+    if (selectedCreationActionRef.current?.action === creationAction) {
+      selectedCreationActionRef.current.startPromise = startPromise;
+    }
+    return startPromise;
+  }, [activeWorkspaceId, beginCreationActionForWorkspace, startThreadForWorkspace]);
 
-  const ensureThreadForActiveWorkspace = useCallback(async () => {
+  const ensureThreadForActiveWorkspace = useCallback(async (creationAction?: CreationAction) => {
     if (!activeWorkspace) {
       return null;
     }
     let threadId = activeThreadId;
     if (!threadId) {
-      threadId = await startThreadForWorkspace(activeWorkspace.id);
+      const selectedAction = selectedCreationActionRef.current;
+      if (
+        selectedAction?.workspaceId === activeWorkspace.id
+        && (!creationAction || creationAction === selectedAction.action)
+        && selectedAction.startPromise
+      ) {
+        return selectedAction.startPromise;
+      }
+      const action = creationAction
+        ?? (selectedAction?.workspaceId === activeWorkspace.id ? selectedAction.action : undefined);
+      if (!action) {
+        return null;
+      }
+      threadId = await startThreadForWorkspace(activeWorkspace.id, { creationAction: action });
       if (!threadId) {
         return null;
       }
@@ -702,13 +786,17 @@ export function useThreads({
   ]);
 
   const ensureThreadForWorkspace = useCallback(
-    async (workspaceId: string) => {
+    async (workspaceId: string, creationAction?: CreationAction) => {
       const currentActiveThreadId = state.activeThreadIdByWorkspace[workspaceId] ?? null;
       const shouldActivate = workspaceId === activeWorkspaceId;
       let threadId = currentActiveThreadId;
       if (!threadId) {
+        if (!creationAction) {
+          return null;
+        }
         threadId = await startThreadForWorkspace(workspaceId, {
           activate: shouldActivate,
+          creationAction,
         });
         if (!threadId) {
           return null;
@@ -801,6 +889,12 @@ export function useThreads({
     updateThreadParent,
     registerDetachedReviewChild,
     renameThread,
+    onCoordinatedFirstTurnAccepted: (workspaceId, threadId, creationAction) => {
+      const key = `${workspaceId}\n${threadId}`;
+      if (creationActionByThreadRef.current.get(key) === creationAction) {
+        creationActionByThreadRef.current.delete(key);
+      }
+    },
   });
 
   const hasLocalThreadSnapshot = useCallback(
@@ -923,6 +1017,7 @@ export function useThreads({
     resetWorkspaceThreads,
     loadOlderThreadsForWorkspace,
     sendUserMessage,
+    beginSendAction,
     sendUserMessageToThread,
     startFork,
     startReview,

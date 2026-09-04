@@ -22,6 +22,11 @@ use crate::types::WorkspaceEntry;
 pub(crate) mod external_thread_admission;
 
 pub(crate) mod creation_acknowledgement;
+pub(crate) mod creation_coordination;
+
+#[cfg(test)]
+#[path = "codex_core/creation_coordination_tests.rs"]
+mod creation_coordination_tests;
 
 #[cfg(test)]
 #[path = "codex_core/creation_acknowledgement_tests.rs"]
@@ -316,29 +321,41 @@ pub(crate) async fn start_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: String,
+    coordinator: &creation_coordination::CreationCoordinator,
+    intent: creation_coordination::IntentId,
 ) -> Result<Value, String> {
-    let session = get_session_clone(sessions, &workspace_id).await?;
-    let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
-    let codex_home_identity = session
-        .workspace_reconciler
-        .lock()
+    coordinator
+        .create(&intent, &workspace_id.clone(), |boundary| async move {
+            let session = get_session_clone(sessions, &workspace_id).await?;
+            let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
+            let codex_home_identity = session
+                .workspace_reconciler
+                .lock()
+                .await
+                .codex_home_identity()
+                .to_string();
+            *session.creation_coordinator.lock().await = Some(coordinator.clone());
+            let response = session
+                .send_request_for_workspace_observed(
+                    &workspace_id,
+                    "thread/start",
+                    json!({"cwd":workspace_path,"approvalPolicy":"on-request"}),
+                    Some(&boundary),
+                )
+                .await?;
+            Ok((codex_home_identity, response))
+        })
         .await
-        .codex_home_identity()
-        .to_string();
-    creation_acknowledgement::start_thread_with_acknowledgement(
-        &codex_home_identity,
-        &workspace_path,
-        |method, params| session.send_request_for_workspace(&workspace_id, method, params),
-    )
-    .await
 }
 
 pub(crate) async fn resume_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
     thread_id: String,
+    coordinator: &creation_coordination::CreationCoordinator,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    *session.creation_coordinator.lock().await = Some(coordinator.clone());
     let request = build_exact_thread_request(ExactThreadMethod::Resume, &thread_id)?;
     let response = session
         .send_request_for_workspace(&workspace_id, request.method, request.params)
@@ -350,8 +367,10 @@ pub(crate) async fn read_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
     thread_id: String,
+    coordinator: &creation_coordination::CreationCoordinator,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    *session.creation_coordinator.lock().await = Some(coordinator.clone());
     let request = build_exact_thread_request(ExactThreadMethod::Read, &thread_id)?;
     let response = session
         .send_request_for_workspace(&workspace_id, request.method, request.params)
@@ -567,45 +586,83 @@ pub(crate) async fn send_user_message_core(
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
     collaboration_mode: Option<Value>,
+    coordinator: &creation_coordination::CreationCoordinator,
+    turn_intent: Option<creation_coordination::TurnIntent>,
 ) -> Result<Value, String> {
-    let session = get_session_clone(sessions, &workspace_id).await?;
-    let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
-    let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
-    let sandbox_policy = match access_mode.as_str() {
-        "full-access" => json!({ "type": "dangerFullAccess" }),
-        "read-only" => json!({ "type": "readOnly" }),
-        _ => json!({
-            "type": "workspaceWrite",
-            "writableRoots": [workspace_path.clone()],
-            "networkAccess": true
-        }),
-    };
-
-    let approval_policy = if access_mode == "full-access" {
-        "never"
-    } else {
-        "on-request"
-    };
-
-    let input = build_turn_input_items(text, images, app_mentions)?;
-
-    let mut params = Map::new();
-    params.insert("threadId".to_string(), json!(thread_id));
-    params.insert("input".to_string(), json!(input));
-    params.insert("cwd".to_string(), json!(workspace_path));
-    params.insert("approvalPolicy".to_string(), json!(approval_policy));
-    params.insert("sandboxPolicy".to_string(), json!(sandbox_policy));
-    params.insert("model".to_string(), json!(model));
-    params.insert("effort".to_string(), json!(effort));
-    insert_optional_nullable_string(&mut params, "serviceTier", service_tier);
-    if let Some(mode) = collaboration_mode {
-        if !mode.is_null() {
-            params.insert("collaborationMode".to_string(), mode);
+    let bound_workspace = workspace_id.clone();
+    let bound_thread = thread_id.clone();
+    let target_intent = turn_intent.clone();
+    let operation = |boundary: Option<creation_coordination::DispatchBoundary>| async move {
+        let session = get_session_clone(sessions, &workspace_id).await?;
+        let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
+        let home = session
+            .workspace_reconciler
+            .lock()
+            .await
+            .codex_home_identity()
+            .to_string();
+        let thread_key = crate::shared::global_sources_core::rollout_identity::CodexThreadKey::new(
+            home, &thread_id,
+        );
+        if let Some(intent) = target_intent.as_ref() {
+            coordinator.validate_turn_target(intent, &thread_key)?;
         }
+        if boundary.is_none() && coordinator.requires_first_turn_intent(&thread_key) {
+            return Err("FIRST_TURN_INTENT_REQUIRED".into());
+        }
+        *session.creation_coordinator.lock().await = Some(coordinator.clone());
+        let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
+        let sandbox_policy = match access_mode.as_str() {
+            "full-access" => json!({ "type": "dangerFullAccess" }),
+            "read-only" => json!({ "type": "readOnly" }),
+            _ => json!({
+                "type": "workspaceWrite",
+                "writableRoots": [workspace_path.clone()],
+                "networkAccess": true
+            }),
+        };
+
+        let approval_policy = if access_mode == "full-access" {
+            "never"
+        } else {
+            "on-request"
+        };
+
+        let input = build_turn_input_items(text, images, app_mentions)?;
+
+        let mut params = Map::new();
+        params.insert("threadId".to_string(), json!(thread_id));
+        params.insert("input".to_string(), json!(input));
+        params.insert("cwd".to_string(), json!(workspace_path));
+        params.insert("approvalPolicy".to_string(), json!(approval_policy));
+        params.insert("sandboxPolicy".to_string(), json!(sandbox_policy));
+        params.insert("model".to_string(), json!(model));
+        params.insert("effort".to_string(), json!(effort));
+        insert_optional_nullable_string(&mut params, "serviceTier", service_tier);
+        if let Some(mode) = collaboration_mode {
+            if !mode.is_null() {
+                params.insert("collaborationMode".to_string(), mode);
+            }
+        }
+        let response = session
+            .send_request_for_workspace_observed(
+                &workspace_id,
+                "turn/start",
+                Value::Object(params),
+                boundary.as_ref(),
+            )
+            .await?;
+        Ok((thread_key, response))
+    };
+    if let Some(intent) = turn_intent {
+        coordinator
+            .turn(&intent, &bound_workspace, &bound_thread, |boundary| {
+                operation(Some(boundary))
+            })
+            .await
+    } else {
+        operation(None).await.map(|(_, response)| response)
     }
-    session
-        .send_request_for_workspace(&workspace_id, "turn/start", Value::Object(params))
-        .await
 }
 
 pub(crate) async fn turn_steer_core(

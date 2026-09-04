@@ -21,6 +21,7 @@ import {
   getAppsList as getAppsListService,
   listMcpServerStatus as listMcpServerStatusService,
 } from "@services/tauri";
+import type { CreationAction, SendAction } from "./creationAction";
 import { expandCustomPromptText } from "@utils/customPrompts";
 import {
   asString,
@@ -81,7 +82,7 @@ type UseThreadMessagingOptions = {
   onDebug?: (entry: DebugEntry) => void;
   onRuntimeRecord?: (record: RuntimeProtocolRecord) => void;
   pushThreadErrorMessage: (threadId: string, message: string) => void;
-  ensureThreadForActiveWorkspace: () => Promise<string | null>;
+  ensureThreadForActiveWorkspace: (creationAction?: CreationAction) => Promise<string | null>;
   ensureThreadForWorkspace: (workspaceId: string) => Promise<string | null>;
   refreshThread: (workspaceId: string, threadId: string) => Promise<string | null>;
   forkThreadForWorkspace: (
@@ -96,6 +97,11 @@ type UseThreadMessagingOptions = {
     childId: string,
   ) => void;
   renameThread?: (workspaceId: string, threadId: string, name: string) => void;
+  onCoordinatedFirstTurnAccepted?: (
+    workspaceId: string,
+    threadId: string,
+    creationAction: CreationAction,
+  ) => void;
 };
 
 export function useThreadMessaging({
@@ -133,6 +139,7 @@ export function useThreadMessaging({
   updateThreadParent,
   registerDetachedReviewChild,
   renameThread,
+  onCoordinatedFirstTurnAccepted,
 }: UseThreadMessagingOptions) {
   const sendMessageToThread = useCallback(
     async (
@@ -272,6 +279,8 @@ export function useThreadMessaging({
               accessMode: resolvedAccessMode,
               images,
               appMentions,
+              turnIntent: options?.turnIntent,
+              creationIntent: options?.creationIntent,
             }),
           )) as Record<string, unknown>;
 
@@ -324,6 +333,13 @@ export function useThreadMessaging({
           return { status: "blocked" };
         }
         setActiveTurnId(threadId, turnId);
+        if (options?.coordinatedCreationAction) {
+          onCoordinatedFirstTurnAccepted?.(
+            workspace.id,
+            threadId,
+            options.coordinatedCreationAction,
+          );
+        }
         return { status: "sent" };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -365,6 +381,7 @@ export function useThreadMessaging({
       markProcessing,
       model,
       onDebug,
+      onCoordinatedFirstTurnAccepted,
       onRuntimeRecord,
       pushThreadErrorMessage,
       recordThreadActivity,
@@ -380,7 +397,7 @@ export function useThreadMessaging({
       text: string,
       images: string[] = [],
       appMentions: AppMention[] = [],
-      options?: { sendIntent?: ComposerSendIntent },
+      options?: { sendIntent?: ComposerSendIntent; sendAction?: SendAction },
     ): Promise<SendMessageResult> => {
       if (!activeWorkspace) {
         return { status: "blocked" };
@@ -406,7 +423,9 @@ export function useThreadMessaging({
         return { status: "blocked" };
       }
       const finalText = promptExpansion?.expanded ?? messageText;
-      const threadId = await ensureThreadForActiveWorkspace();
+      const sendAction = options?.sendAction;
+      const creationAction = sendAction?.creationAction;
+      const threadId = await ensureThreadForActiveWorkspace(creationAction);
       if (!threadId) {
         return { status: "blocked" };
       }
@@ -414,6 +433,9 @@ export function useThreadMessaging({
         skipPromptExpansion: true,
         appMentions,
         sendIntent: options?.sendIntent,
+        turnIntent: sendAction ? await sendAction.turnIntent : undefined,
+        creationIntent: creationAction ? await creationAction.creationIntent : undefined,
+        coordinatedCreationAction: creationAction,
       });
     },
     [

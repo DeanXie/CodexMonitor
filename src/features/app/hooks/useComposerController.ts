@@ -9,6 +9,7 @@ import type {
 } from "../../../types";
 import { useComposerImages } from "../../composer/hooks/useComposerImages";
 import { useQueuedSend } from "../../threads/hooks/useQueuedSend";
+import type { SendAction } from "../../threads/hooks/creationAction";
 
 export function useComposerController({
   activeThreadId,
@@ -22,6 +23,7 @@ export function useComposerController({
   followUpMessageBehavior,
   appsEnabled,
   connectWorkspace,
+  beginSendAction,
   startThreadForWorkspace,
   sendUserMessage,
   sendUserMessageToThread,
@@ -45,6 +47,7 @@ export function useComposerController({
   followUpMessageBehavior: FollowUpMessageBehavior;
   appsEnabled: boolean;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
+  beginSendAction: (forceCreation?: boolean) => SendAction;
   startThreadForWorkspace: (
     workspaceId: string,
     options?: { activate?: boolean },
@@ -104,6 +107,7 @@ export function useComposerController({
     appsEnabled,
     activeWorkspace,
     connectWorkspace,
+    beginSendAction,
     startThreadForWorkspace,
     sendUserMessage,
     sendUserMessageToThread,

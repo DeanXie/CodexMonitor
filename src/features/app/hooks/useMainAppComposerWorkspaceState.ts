@@ -70,6 +70,7 @@ type UseMainAppComposerWorkspaceStateArgs = {
     addWorktreeAgent: Parameters<typeof useWorkspaceHome>[0]["addWorktreeAgent"];
     connectWorkspace: Parameters<typeof useComposerController>[0]["connectWorkspace"] &
       Parameters<typeof useWorkspaceHome>[0]["connectWorkspace"];
+    beginSendAction: Parameters<typeof useComposerController>[0]["beginSendAction"];
     startThreadForWorkspace: Parameters<typeof useComposerController>[0]["startThreadForWorkspace"] &
       Parameters<typeof useWorkspaceHome>[0]["startThreadForWorkspace"];
     sendUserMessage: Parameters<typeof useComposerController>[0]["sendUserMessage"];
@@ -134,6 +135,7 @@ export function useMainAppComposerWorkspaceState({
   const {
     addWorktreeAgent,
     connectWorkspace,
+    beginSendAction,
     startThreadForWorkspace,
     sendUserMessage,
     sendUserMessageToThread,
@@ -234,6 +236,7 @@ export function useMainAppComposerWorkspaceState({
     followUpMessageBehavior: settings.followUpMessageBehavior,
     appsEnabled: settings.experimentalAppsEnabled,
     connectWorkspace,
+    beginSendAction,
     startThreadForWorkspace,
     sendUserMessage,
     sendUserMessageToThread,

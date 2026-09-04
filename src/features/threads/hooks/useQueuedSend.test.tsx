@@ -4,6 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "@/types";
 import { useQueuedSend } from "./useQueuedSend";
 
+vi.mock("./creationAction", () => ({
+  createMonitorCreationAction: () => ({ creationIntent: Promise.resolve({ id: "creation-test", processEpoch: "epoch-test" }) }),
+  createMonitorFirstTurnAction: () => ({
+    creationIntent: Promise.resolve({ id: "creation-test", processEpoch: "epoch-test" }),
+    turnIntent: Promise.resolve({ id: "turn-test", processEpoch: "epoch-test" }),
+  }),
+}));
+
 const workspace: WorkspaceInfo = {
   id: "workspace-1",
   name: "CodexMonitor",
@@ -24,6 +32,12 @@ const makeOptions = (
   appsEnabled: true,
   activeWorkspace: workspace,
   connectWorkspace: vi.fn().mockResolvedValue(undefined),
+  beginSendAction: (forceCreation = false) => ({
+    ...(forceCreation
+      ? { creationAction: { creationIntent: Promise.resolve({ id: "creation-test", processEpoch: "epoch-test" }) } }
+      : {}),
+    turnIntent: Promise.resolve({ id: "turn-test", processEpoch: "epoch-test" }),
+  }),
   startThreadForWorkspace: vi.fn().mockResolvedValue("thread-1"),
   sendUserMessage: vi.fn().mockResolvedValue({ status: "sent" }),
   sendUserMessageToThread: vi.fn().mockResolvedValue(undefined),
@@ -57,7 +71,9 @@ describe("useQueuedSend", () => {
     });
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
-    expect(options.sendUserMessage).toHaveBeenCalledWith("First", []);
+    expect(options.sendUserMessage).toHaveBeenCalledWith(
+      "First", [], undefined, expect.objectContaining({ sendAction: expect.any(Object) }),
+    );
 
     await act(async () => {
       rerender({ ...options, isProcessing: true });
@@ -73,7 +89,9 @@ describe("useQueuedSend", () => {
     });
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(2);
-    expect(options.sendUserMessage).toHaveBeenLastCalledWith("Second", []);
+    expect(options.sendUserMessage).toHaveBeenLastCalledWith(
+      "Second", [], undefined, expect.objectContaining({ sendAction: expect.any(Object) }),
+    );
   });
 
   it("waits for processing to start before sending the next queued message", async () => {
@@ -92,7 +110,9 @@ describe("useQueuedSend", () => {
     });
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
-    expect(options.sendUserMessage).toHaveBeenCalledWith("Alpha", []);
+    expect(options.sendUserMessage).toHaveBeenCalledWith(
+      "Alpha", [], undefined, expect.objectContaining({ sendAction: expect.any(Object) }),
+    );
   });
 
   it("queues send while processing when steer is disabled", async () => {
@@ -129,7 +149,7 @@ describe("useQueuedSend", () => {
       "Steer",
       [],
       undefined,
-      { sendIntent: "steer" },
+      expect.objectContaining({ sendIntent: "steer", sendAction: expect.any(Object) }),
     );
     expect(result.current.activeQueue).toHaveLength(0);
   });
@@ -177,7 +197,7 @@ describe("useQueuedSend", () => {
       "Fallback to queue",
       [],
       undefined,
-      { sendIntent: "steer" },
+      expect.objectContaining({ sendIntent: "steer", sendAction: expect.any(Object) }),
     );
     expect(result.current.activeQueue).toHaveLength(1);
     expect(result.current.activeQueue[0]?.text).toBe("Fallback to queue");
@@ -198,6 +218,8 @@ describe("useQueuedSend", () => {
     expect(options.sendUserMessage).toHaveBeenLastCalledWith(
       "Fallback to queue",
       [],
+      undefined,
+      expect.objectContaining({ sendAction: expect.any(Object) }),
     );
   });
 
@@ -224,7 +246,9 @@ describe("useQueuedSend", () => {
     });
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(2);
-    expect(options.sendUserMessage).toHaveBeenLastCalledWith("Retry", []);
+    expect(options.sendUserMessage).toHaveBeenLastCalledWith(
+      "Retry", [], undefined, expect.objectContaining({ sendAction: expect.any(Object) }),
+    );
   });
 
   it("queues messages per thread and only flushes the active thread", async () => {
@@ -255,7 +279,9 @@ describe("useQueuedSend", () => {
     });
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
-    expect(options.sendUserMessage).toHaveBeenCalledWith("Thread-1", []);
+    expect(options.sendUserMessage).toHaveBeenCalledWith(
+      "Thread-1", [], undefined, expect.objectContaining({ sendAction: expect.any(Object) }),
+    );
   });
 
   it("connects workspace before sending when disconnected", async () => {
@@ -280,7 +306,7 @@ describe("useQueuedSend", () => {
       "Connect",
       [],
       undefined,
-      { sendIntent: "default" },
+      expect.objectContaining({ sendIntent: "default", sendAction: expect.any(Object) }),
     );
   });
 
@@ -321,7 +347,9 @@ describe("useQueuedSend", () => {
     });
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
-    expect(options.sendUserMessage).toHaveBeenCalledWith("After review", []);
+    expect(options.sendUserMessage).toHaveBeenCalledWith(
+      "After review", [], undefined, expect.objectContaining({ sendAction: expect.any(Object) }),
+    );
   });
 
   it("starts a new thread for /new and sends the remaining text there", async () => {
@@ -336,12 +364,16 @@ describe("useQueuedSend", () => {
       await result.current.handleSend("/new hello there", ["img-1"]);
     });
 
-    expect(startThreadForWorkspace).toHaveBeenCalledWith("workspace-1");
+    expect(startThreadForWorkspace).toHaveBeenCalledWith("workspace-1", expect.objectContaining({ creationAction: expect.any(Object) }));
     expect(sendUserMessageToThread).toHaveBeenCalledWith(
       workspace,
       "thread-2",
       "hello there",
       [],
+      expect.objectContaining({
+        creationIntent: expect.any(Object),
+        turnIntent: expect.any(Object),
+      }),
     );
     expect(options.sendUserMessage).not.toHaveBeenCalled();
   });
@@ -358,7 +390,7 @@ describe("useQueuedSend", () => {
       await result.current.handleSend("/new");
     });
 
-    expect(startThreadForWorkspace).toHaveBeenCalledWith("workspace-1");
+    expect(startThreadForWorkspace).toHaveBeenCalledWith("workspace-1", expect.objectContaining({ creationAction: expect.any(Object) }));
     expect(sendUserMessageToThread).not.toHaveBeenCalled();
     expect(options.sendUserMessage).not.toHaveBeenCalled();
   });
@@ -443,7 +475,10 @@ describe("useQueuedSend", () => {
       "/apps now",
       ["img-1"],
       undefined,
-      { sendIntent: "default" },
+      expect.objectContaining({
+        sendIntent: "default",
+        sendAction: expect.any(Object),
+      }),
     );
   });
 
@@ -527,7 +562,7 @@ describe("useQueuedSend", () => {
     expect(options.sendUserMessage).toHaveBeenCalledWith("Images", [
       "img-1",
       "img-2",
-    ]);
+    ], undefined, expect.objectContaining({ sendAction: expect.any(Object) }));
   });
 
   it("does not flush queued messages while response is required", async () => {
@@ -555,7 +590,9 @@ describe("useQueuedSend", () => {
     });
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
-    expect(options.sendUserMessage).toHaveBeenCalledWith("Held", []);
+    expect(options.sendUserMessage).toHaveBeenCalledWith(
+      "Held", [], undefined, expect.objectContaining({ sendAction: expect.any(Object) }),
+    );
   });
 
 });

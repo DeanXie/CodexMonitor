@@ -6,6 +6,7 @@ import type { useAppServerEvents } from "@app/hooks/useAppServerEvents";
 import { useThreadRows } from "@app/hooks/useThreadRows";
 import {
   archiveThread,
+  getCreationContext,
   interruptTurn,
   listThreads,
   readThread,
@@ -39,6 +40,7 @@ vi.mock("@services/tauri", () => ({
   steerTurn: vi.fn(),
   startReview: vi.fn(),
   startThread: vi.fn(),
+  getCreationContext: vi.fn(),
   listThreads: vi.fn(),
   resumeThread: vi.fn(),
   readThread: vi.fn(),
@@ -65,6 +67,7 @@ describe("useThreads UX integration", () => {
     handlers = null;
     localStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(getCreationContext).mockResolvedValue({ processEpoch: "test-process-epoch" });
     now = 1000;
     nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now++);
   });
@@ -88,13 +91,90 @@ describe("useThreads UX integration", () => {
     expect(result.current.activeThreadId).toBe(id);
 
     await act(async () => {
-      expect(await result.current.sendUserMessage("synthetic first turn")).toEqual({ status: "blocked" });
+      expect(await result.current.sendUserMessage("synthetic first turn", [], [], {
+        sendAction: result.current.beginSendAction(),
+      })).toEqual({ status: "blocked" });
     });
     expect(result.current.activeThreadId).toBe(id);
     expect(result.current.threadsByWorkspace[workspace.id].map(thread => thread.id)).toEqual([id]);
     expect(sendUserMessageService).toHaveBeenCalledWith(workspace.id, id, "synthetic first turn", expect.any(Object));
     expect(startThread).toHaveBeenCalledTimes(1);
     expect(setThreadName).not.toHaveBeenCalled();
+  });
+
+  it("shares the selected creation action with a simultaneous first send", async () => {
+    const id = "01a05de4-4098-7833-9deb-e3763e15f397";
+    let acknowledge: (value: Awaited<ReturnType<typeof startThread>>) => void = () => undefined;
+    vi.mocked(startThread).mockImplementationOnce(() => new Promise((resolve) => {
+      acknowledge = resolve;
+    }));
+    vi.mocked(sendUserMessageService).mockResolvedValue({ result: { turn: { id: "turn-1" } } });
+    const { result } = renderHook(() => useThreads({ activeWorkspace: workspace, onWorkspaceConnected: vi.fn() }));
+
+    let startPromise!: Promise<string | null>;
+    let sendPromise!: Promise<unknown>;
+    act(() => {
+      startPromise = result.current.startThread();
+      sendPromise = result.current.sendUserMessage("first message", [], [], {
+        sendAction: result.current.beginSendAction(),
+      });
+    });
+    await waitFor(() => expect(startThread).toHaveBeenCalledTimes(1));
+
+    acknowledge(acknowledgedCreation(id));
+    await act(async () => {
+      await Promise.all([startPromise, sendPromise]);
+    });
+
+    expect(startThread).toHaveBeenCalledTimes(1);
+    expect(sendUserMessageService).toHaveBeenCalledWith(
+      "ws-1",
+      id,
+      "first message",
+      expect.objectContaining({
+        creationIntent: expect.objectContaining({ processEpoch: "test-process-epoch" }),
+        turnIntent: expect.objectContaining({ processEpoch: "test-process-epoch" }),
+      }),
+    );
+  });
+
+  it("acknowledged empty thread retries with distinct Turn actions on the same Thread", async () => {
+    const id = "01a05de4-4098-7833-9deb-e3763e15f397";
+    vi.mocked(startThread).mockResolvedValue(acknowledgedCreation(id));
+    vi.mocked(sendUserMessageService).mockRejectedValueOnce(new Error("FIRST_TURN_FAILED: rejected"));
+    vi.mocked(sendUserMessageService).mockResolvedValueOnce({ result: { turn: { id: "turn-2" } } });
+    const { result } = renderHook(() => useThreads({ activeWorkspace: workspace, onWorkspaceConnected: vi.fn() }));
+    await act(async () => { await result.current.startThread(); });
+    const first = result.current.beginSendAction();
+    await act(async () => { await result.current.sendUserMessage("synthetic", [], [], { sendAction: first }); });
+    const retry = result.current.beginSendAction();
+    await act(async () => { await result.current.sendUserMessage("synthetic", [], [], { sendAction: retry }); });
+    const calls = vi.mocked(sendUserMessageService).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls.map(call => call[1])).toEqual([id, id]);
+    expect(calls[0][3]?.turnIntent?.id).toBeTruthy();
+    expect(calls[1][3]?.turnIntent?.id).not.toBe(calls[0][3]?.turnIntent?.id);
+    expect(calls[0][3]?.creationIntent).toEqual(calls[1][3]?.creationIntent);
+    expect(startThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("repeated callbacks carry the same action tokens without generating lower IDs", async () => {
+    const id = "01a05de4-4098-7833-9deb-e3763e15f397";
+    vi.mocked(startThread).mockResolvedValue(acknowledgedCreation(id));
+    vi.mocked(sendUserMessageService).mockRejectedValue(new Error("FIRST_TURN_OUTCOME_UNKNOWN"));
+    const { result } = renderHook(() => useThreads({ activeWorkspace: workspace, onWorkspaceConnected: vi.fn() }));
+    await act(async () => { await result.current.startThread(); });
+    const action = result.current.beginSendAction();
+    await act(async () => {
+      await result.current.sendUserMessage("synthetic", [], [], { sendAction: action });
+      await result.current.sendUserMessage("synthetic", [], [], { sendAction: action });
+    });
+    const calls = vi.mocked(sendUserMessageService).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][3]?.turnIntent?.id).toBeTruthy();
+    expect(calls[1][3]?.turnIntent).toEqual(calls[0][3]?.turnIntent);
+    expect(getCreationContext).toHaveBeenCalledTimes(1);
+    expect(startThread).toHaveBeenCalledTimes(1);
   });
 
   it("forwards each raw app-server notification to Runtime ingestion", () => {
@@ -218,7 +298,7 @@ describe("useThreads UX integration", () => {
     });
 
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", null);
-    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1");
+    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1", expect.objectContaining({ processEpoch: "test-process-epoch" }));
     const startEnsureCallOrder = ensureWorkspaceRuntimeCodexArgs.mock.invocationCallOrder[0];
     const startThreadCallOrder = vi.mocked(startThread).mock.invocationCallOrder[0];
     expect(startEnsureCallOrder).toBeLessThan(startThreadCallOrder);
@@ -250,11 +330,14 @@ describe("useThreads UX integration", () => {
     );
 
     await act(async () => {
-      await result.current.startThreadForWorkspace("ws-1", { activate: false });
+      await result.current.startThreadForWorkspace("ws-1", {
+        activate: false,
+        creationAction: { creationIntent: Promise.resolve({ id: "direct-creation", processEpoch: "test-process-epoch" }) },
+      });
     });
 
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", null);
-    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1");
+    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1", expect.objectContaining({ processEpoch: "test-process-epoch" }));
 
     const ensureCallOrder = ensureWorkspaceRuntimeCodexArgs.mock.invocationCallOrder[0];
     const startThreadCallOrder = vi.mocked(startThread).mock.invocationCallOrder[0];
@@ -464,7 +547,7 @@ describe("useThreads UX integration", () => {
     });
 
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", null);
-    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1");
+    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1", expect.objectContaining({ processEpoch: "test-process-epoch" }));
     expect(threadId).toBe("thread-new");
   });
 

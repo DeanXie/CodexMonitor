@@ -1,12 +1,13 @@
 import { useCallback, useState } from "react";
 import type { WorkspaceInfo } from "@/types";
+import { createMonitorCreationAction, type CreationAction } from "@threads/hooks/creationAction";
 
 type UseMainAppMobileThreadRefreshArgs = {
   activeWorkspace: WorkspaceInfo | null;
   activeThreadId: string | null;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean },
+    options?: { activate?: boolean; creationAction?: CreationAction },
   ) => Promise<string | null>;
   refreshThread: (workspaceId: string, threadId: string) => Promise<unknown>;
   reconnectLive: (
@@ -30,11 +31,13 @@ export function useMainAppMobileThreadRefresh({
       return;
     }
     setMobileThreadRefreshLoading(true);
+    const creationAction = activeThreadId ? undefined : createMonitorCreationAction();
     void (async () => {
       let threadId = activeThreadId;
       if (!threadId) {
         threadId = await startThreadForWorkspace(activeWorkspace.id, {
           activate: true,
+          creationAction,
         });
       }
       if (!threadId) {

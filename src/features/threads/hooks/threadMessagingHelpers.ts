@@ -8,6 +8,7 @@ import type {
 } from "@/types";
 import { clampThreadName } from "@threads/utils/threadNaming";
 import { formatRelativeTime } from "@utils/time";
+import type { CreationIntentContext } from "@services/tauri";
 
 export type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -18,6 +19,9 @@ export type SendMessageOptions = {
   accessMode?: AccessMode;
   appMentions?: AppMention[];
   sendIntent?: ComposerSendIntent;
+  turnIntent?: CreationIntentContext;
+  creationIntent?: CreationIntentContext;
+  coordinatedCreationAction?: import("./creationAction").CreationAction;
 };
 
 type FastCommandAction = "toggle" | "on" | "off" | "status" | "invalid";
@@ -56,6 +60,8 @@ export type TurnStartPayload = {
   accessMode?: AccessMode;
   images?: string[];
   appMentions?: AppMention[];
+  turnIntent?: CreationIntentContext;
+  creationIntent?: CreationIntentContext;
 };
 
 export function buildReviewThreadTitle(target: ReviewTarget): string | null {
@@ -161,6 +167,8 @@ export function buildTurnStartPayload({
   accessMode,
   images,
   appMentions,
+  turnIntent,
+  creationIntent,
 }: {
   model?: string | null;
   effort?: string | null;
@@ -169,6 +177,8 @@ export function buildTurnStartPayload({
   accessMode?: AccessMode;
   images: string[];
   appMentions: AppMention[];
+  turnIntent?: CreationIntentContext;
+  creationIntent?: CreationIntentContext;
 }): TurnStartPayload {
   const payload: TurnStartPayload = {
     model,
@@ -176,6 +186,8 @@ export function buildTurnStartPayload({
     collaborationMode,
     accessMode,
     images,
+    turnIntent,
+    creationIntent,
   };
   if (serviceTier !== undefined) {
     payload.serviceTier = serviceTier;

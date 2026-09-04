@@ -7,6 +7,7 @@ import { useWorkspaceHome } from "./useWorkspaceHome";
 
 vi.mock("../../../services/tauri", () => ({
   generateRunMetadata: vi.fn(),
+  getCreationContext: vi.fn().mockResolvedValue({ processEpoch: "epoch-test" }),
 }));
 
 const workspace: WorkspaceInfo = {

@@ -6,6 +6,7 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import { generateRunMetadata } from "../../../services/tauri";
+import { createMonitorCreationAction, createMonitorFirstTurnAction, type CreationAction } from "@threads/hooks/creationAction";
 
 export type WorkspaceRunMode = "local" | "worktree";
 
@@ -50,12 +51,12 @@ type UseWorkspaceHomeOptions = {
   addWorktreeAgent: (
     workspace: WorkspaceInfo,
     branch: string,
-    options?: { activate?: boolean },
+    options?: { activate?: boolean; creationAction?: CreationAction },
   ) => Promise<WorkspaceInfo | null>;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean },
+    options?: { activate?: boolean; creationAction?: CreationAction },
   ) => Promise<string | null>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
@@ -67,6 +68,8 @@ type UseWorkspaceHomeOptions = {
       effort?: string | null;
       serviceTier?: ServiceTier | null | undefined;
       collaborationMode?: Record<string, unknown> | null;
+      creationIntent?: import("@services/tauri").CreationIntentContext;
+      turnIntent?: import("@services/tauri").CreationIntentContext;
     },
   ) => Promise<void | SendMessageResult>;
   onWorktreeCreated?: (worktree: WorkspaceInfo, parent: WorkspaceInfo) => Promise<void> | void;
@@ -484,8 +487,11 @@ export function useWorkspaceHome({
           if (!activeWorkspace.connected) {
             await connectWorkspace(activeWorkspace);
           }
+          const creationAction = createMonitorCreationAction();
+          const firstTurnAction = createMonitorFirstTurnAction(creationAction);
           const threadId = await startThreadForWorkspace(activeWorkspace.id, {
             activate: false,
+            creationAction,
           });
           if (!threadId) {
             throw new Error("Failed to start a local thread.");
@@ -503,6 +509,8 @@ export function useWorkspaceHome({
             effort,
             serviceTier,
             collaborationMode,
+            creationIntent: await firstTurnAction.creationIntent,
+            turnIntent: await firstTurnAction.turnIntent,
           });
           const model =
             selectedModelId ? modelLookup.get(selectedModelId) ?? null : null;
@@ -551,8 +559,11 @@ export function useWorkspaceHome({
               } catch {
                 // Setup script errors are handled by the caller; runs should still proceed.
               }
+              const creationAction = createMonitorCreationAction();
+              const firstTurnAction = createMonitorFirstTurnAction(creationAction);
               const threadId = await startThreadForWorkspace(worktreeWorkspace.id, {
                 activate: false,
+                creationAction,
               });
               if (!threadId) {
                 throw new Error("Failed to start a worktree thread.");
@@ -572,6 +583,8 @@ export function useWorkspaceHome({
                   effort,
                   serviceTier,
                   collaborationMode,
+                  creationIntent: await firstTurnAction.creationIntent,
+                  turnIntent: await firstTurnAction.turnIntent,
                 },
               );
               instances.push({

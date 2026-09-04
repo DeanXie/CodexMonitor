@@ -11,6 +11,7 @@ import type {
 } from "@/types";
 import { pushErrorToast } from "@services/toasts";
 import { buildPullRequestReviewPrompt } from "@utils/pullRequestReviewPrompt";
+import { createMonitorCreationAction, type CreationAction } from "@threads/hooks/creationAction";
 
 const REVIEW_ACTIONS: PullRequestReviewAction[] = [
   { id: "pr-review-full", label: "Review PR", intent: "full" },
@@ -29,7 +30,7 @@ type UsePullRequestReviewActionsOptions = {
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean },
+    options?: { activate?: boolean; creationAction?: CreationAction },
   ) => Promise<string | null>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
@@ -90,6 +91,7 @@ export function usePullRequestReviewActions({
           ? activeThreadId
           : await startThreadForWorkspace(activeWorkspace.id, {
             activate: activateThread,
+            creationAction: createMonitorCreationAction(),
           });
         if (!reviewThreadId) {
           throw new Error("Failed to start a review thread.");

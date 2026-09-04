@@ -149,6 +149,7 @@ struct DaemonConfig {
 }
 
 struct DaemonState {
+    creation_coordinator: shared::codex_core::creation_coordination::CreationCoordinator,
     data_dir: PathBuf,
     workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -177,6 +178,7 @@ impl DaemonState {
             .and_then(|path| path.to_str().map(str::to_string));
         Self {
             data_dir: config.data_dir.clone(),
+            creation_coordinator: Default::default(),
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
             storage_path,
@@ -680,8 +682,19 @@ impl DaemonState {
         files_core::file_write_core(&self.workspaces, scope, kind, workspace_id, content).await
     }
 
-    async fn start_thread(&self, workspace_id: String) -> Result<Value, String> {
-        codex_core::start_thread_core(&self.sessions, &self.workspaces, workspace_id).await
+    async fn start_thread(
+        &self,
+        workspace_id: String,
+        creation_intent: shared::codex_core::creation_coordination::IntentId,
+    ) -> Result<Value, String> {
+        codex_core::start_thread_core(
+            &self.sessions,
+            &self.workspaces,
+            workspace_id,
+            &self.creation_coordinator,
+            creation_intent,
+        )
+        .await
     }
 
     async fn resume_thread(
@@ -689,11 +702,23 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        codex_core::resume_thread_core(&self.sessions, workspace_id, thread_id).await
+        codex_core::resume_thread_core(
+            &self.sessions,
+            workspace_id,
+            thread_id,
+            &self.creation_coordinator,
+        )
+        .await
     }
 
     async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
-        codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
+        codex_core::read_thread_core(
+            &self.sessions,
+            workspace_id,
+            thread_id,
+            &self.creation_coordinator,
+        )
+        .await
     }
 
     async fn thread_live_subscribe(
@@ -818,6 +843,7 @@ impl DaemonState {
         images: Option<Vec<String>>,
         app_mentions: Option<Vec<Value>>,
         collaboration_mode: Option<Value>,
+        turn_intent: Option<shared::codex_core::creation_coordination::TurnIntent>,
     ) -> Result<Value, String> {
         codex_core::send_user_message_core(
             &self.sessions,
@@ -832,6 +858,8 @@ impl DaemonState {
             images,
             app_mentions,
             collaboration_mode,
+            &self.creation_coordinator,
+            turn_intent,
         )
         .await
     }
@@ -1617,6 +1645,7 @@ mod tests {
         let (tx, _rx) = broadcast::channel::<DaemonEvent>(32);
         DaemonState {
             data_dir: data_dir.to_path_buf(),
+            creation_coordinator: Default::default(),
             workspaces: Mutex::new(HashMap::new()),
             sessions: Mutex::new(HashMap::new()),
             storage_path: data_dir.join("workspaces.json"),
@@ -1679,6 +1708,7 @@ mod tests {
         let stdin = child.stdin.take().expect("dummy child stdin");
 
         Arc::new(WorkspaceSession {
+            creation_coordinator: Mutex::new(None),
             codex_args: None,
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),
@@ -1696,6 +1726,50 @@ mod tests {
             workspace_ids: Mutex::new(HashSet::from([owner_workspace_id.clone()])),
             owner_workspace_id,
         })
+    }
+
+    #[test]
+    fn creation_coordination_reconnect_resume_reuses_process_observer_and_exact_id() {
+        run_async_test(async {
+            let state = test_state(&std::env::temp_dir());
+            let workspace = "coordination-reconnect-test";
+            let session = make_session(make_workspace_entry(workspace, "C:/synthetic"));
+            state
+                .sessions
+                .lock()
+                .await
+                .insert(workspace.into(), session.clone());
+            let thread = "01a05de4-4098-7833-9deb-e3763e15f397";
+            let reply = async {
+                tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                    loop {
+                        if let Some(sender) = session.pending.lock().await.remove(&0) {
+                            sender
+                                .send(json!({"result":{"thread":{"id":thread}}}))
+                                .unwrap();
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .unwrap();
+            };
+            let (response, ()) =
+                tokio::join!(state.resume_thread(workspace.into(), thread.into()), reply);
+            let observer = session.creation_coordinator.lock().await.clone();
+            let _ = session.child.lock().await.kill().await;
+            assert_eq!(response.unwrap()["result"]["thread"]["id"], thread);
+            assert_eq!(session.next_id.load(std::sync::atomic::Ordering::SeqCst), 1);
+            assert!(
+                observer.is_some(),
+                "resume must attach existing process observer after reconnect"
+            );
+            assert_eq!(
+                observer.unwrap().context(),
+                state.creation_coordinator.context()
+            );
+        });
     }
 
     #[test]

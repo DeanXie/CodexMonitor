@@ -14,6 +14,7 @@ import {
   resumeThread as resumeThreadService,
   startThread as startThreadService,
 } from "@services/tauri";
+import type { CreationIntentContext } from "@services/tauri";
 import {
   getThreadTimestamp,
 } from "@utils/threadItems";
@@ -148,7 +149,10 @@ export function useThreadActions({
   );
 
   const startThreadForWorkspace = useCallback(
-    async (workspaceId: string, options?: { activate?: boolean }) => {
+    async (
+      workspaceId: string,
+      options?: { activate?: boolean; creationIntent?: CreationIntentContext },
+    ) => {
       const shouldActivate = options?.activate !== false;
       onDebug?.({
         id: `${Date.now()}-client-thread-start`,
@@ -158,7 +162,10 @@ export function useThreadActions({
         payload: { workspaceId },
       });
       try {
-        const response = await startThreadService(workspaceId);
+        if (!options?.creationIntent) {
+          throw new Error("CREATION_FAILED: missing CreationIntent");
+        }
+        const response = await startThreadService(workspaceId, options.creationIntent);
         const capturedAtMs = Date.now();
         onRuntimeRecord?.({
           source: "SERVER",

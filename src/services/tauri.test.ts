@@ -29,6 +29,10 @@ import {
   respondToServerRequest,
   respondToUserInputRequest,
   sendUserMessage,
+  startThread,
+  getCreationContext,
+  getCreationIntentStatus,
+  getFirstTurnIntentStatus,
   steerTurn,
   sendNotification,
   setCodexFeatureFlag,
@@ -754,6 +758,39 @@ describe("tauri invoke wrappers", () => {
       effort: null,
       accessMode: "full-access",
       images: ["image.png"],
+    });
+  });
+
+  it("forwards nested creation and first-turn intent tokens", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue({});
+    const creationIntent = { id: "creation-1", processEpoch: "epoch-1" };
+    const turnIntent = { id: "turn-1", processEpoch: "epoch-1" };
+
+    await startThread("ws-4", creationIntent);
+    await sendUserMessage("ws-4", "thread-1", "hello", { creationIntent, turnIntent });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "start_thread", {
+      workspaceId: "ws-4",
+      creationIntent,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "send_user_message", expect.objectContaining({
+      turnIntent: { intent: turnIntent, creationIntent },
+    }));
+  });
+
+  it("maps creation coordination status wrappers", async () => {
+    const invokeMock = vi.mocked(invoke);
+    await getCreationContext();
+    await getCreationIntentStatus({ id: "creation-1", processEpoch: "epoch-1" });
+    await getFirstTurnIntentStatus({ id: "turn-1", processEpoch: "epoch-1" });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "get_creation_context");
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "get_creation_intent_status", {
+      intent: { id: "creation-1", processEpoch: "epoch-1" },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "get_first_turn_intent_status", {
+      intent: { id: "turn-1", processEpoch: "epoch-1" },
     });
   });
 

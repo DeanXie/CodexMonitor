@@ -5,6 +5,7 @@ Canonical navigation guide for CodexMonitor. Use this as: "if you need X, edit Y
 Related docs:
 
 - Setup/build/release: `README.md`
+- Creation-intent / first-Turn coordination: `docs/phase-3-3-2-creation-coordination.md`
 - iOS remote over Tailscale (TCP): `docs/mobile-ios-tailscale-blueprint.md`
 
 ## Start Here: How Changes Flow
@@ -66,6 +67,7 @@ Use TS/Vite aliases for refactor-safe imports:
 - Reducer slices: `src/features/threads/hooks/threadReducer/*`
 - Event-focused handlers: `src/features/threads/hooks/useThreadEventHandlers.ts`, `src/features/threads/hooks/useThreadTurnEvents.ts`, `src/features/threads/hooks/useThreadItemEvents.ts`, `src/features/threads/hooks/useThreadApprovalEvents.ts`, `src/features/threads/hooks/useThreadUserInputEvents.ts`
 - Message send/steer/interrupt: `src/features/threads/hooks/useThreadMessaging.ts`
+- Explicit creation/first-Turn action tokens: `src/features/threads/hooks/creationAction.ts`; process-local dispatch ownership: `src-tauri/src/shared/codex_core/creation_coordination.rs`
 - Persistence/local thread metadata: `src/features/threads/hooks/useThreadStorage.ts`, `src/features/threads/utils/threadStorage.ts`
 
 ### Workspaces

@@ -87,6 +87,13 @@ Primary outgoing request layer:
 - `src-tauri/src/codex/mod.rs`
 - `src-tauri/src/bin/codex_monitor_daemon.rs`
 
+Phase 3.3.2 wraps outgoing `thread/start` and first `turn/start` requests in a
+Monitor-owned, process-local coordination contract. It provides client-side
+at-most-once transport dispatch per explicit intent without adding an upstream
+idempotency field. `turn/completed` supplies exact correlated first-Turn outcome
+evidence when Thread and Turn IDs are already known; protocol rejection remains
+coordination state `FIRST_TURN_FAILED` with `failureReason = REJECTED`.
+
 ## Supported Notifications (Codex v2)
 
 These are the current Codex v2 `ServerNotification` methods that CodexMonitor

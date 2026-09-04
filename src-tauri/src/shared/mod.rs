@@ -4,6 +4,7 @@ pub(crate) mod codex_aux_core;
 pub(crate) mod codex_core;
 pub(crate) mod codex_update_core;
 pub(crate) mod config_toml_core;
+pub(crate) mod execution_settings_evidence;
 pub(crate) mod files_core;
 pub(crate) mod git_core;
 pub(crate) mod git_rpc;
@@ -18,3 +19,7 @@ pub(crate) mod workspace_interop_core;
 pub(crate) mod workspace_rpc;
 pub(crate) mod workspaces_core;
 pub(crate) mod worktree_core;
+
+#[cfg(test)]
+#[path = "execution_settings_evidence_tests.rs"]
+mod execution_settings_evidence_tests;

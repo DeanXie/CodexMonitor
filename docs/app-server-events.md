@@ -94,6 +94,19 @@ idempotency field. `turn/completed` supplies exact correlated first-Turn outcome
 evidence when Thread and Turn IDs are already known; protocol rejection remains
 coordination state `FIRST_TURN_FAILED` with `failureReason = REJECTED`.
 
+Phase 3.3.3b also sends execution-setting observations from the app-server
+transport into the shared evidence store. The app and daemon keep one
+process-level store across WorkspaceSession reconnects. A pending `thread/start`
+or `turn/start` request is correlated by its JSON-RPC request ID, but requested
+field evidence is not scoped until the response supplies the authoritative full
+Thread or Turn ID. `thread/start` response settings are `THREAD_DEFAULT`
+server-effective evidence. A `thread/settings/updated` notification without a
+full Turn ID is also only a `THREAD_DEFAULT` snapshot; it is never assigned to a
+nearby Turn. Rollout `turn_context` records provide `TURN_EXECUTION`
+persisted-observed evidence using their own full Thread and Turn IDs. Omitted,
+explicit-null, and concrete values remain distinct, and no source promotes one
+evidence layer into another.
+
 ## Supported Notifications (Codex v2)
 
 These are the current Codex v2 `ServerNotification` methods that CodexMonitor

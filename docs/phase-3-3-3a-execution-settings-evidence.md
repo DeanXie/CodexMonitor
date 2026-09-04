@@ -1,6 +1,6 @@
 # Phase 3.3.3a — Execution Settings Evidence Model
 
-Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**. Phase 3.3.3b Execution Settings Evidence Ingestion is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**. Phase 3.3.3b Execution Settings Evidence Ingestion is **PASS**. Phase 3.3.3c Focused Reconciliation / Effective Settings Acceptance is **GO / NOT STARTED**.
 
 ## Contract
 
@@ -83,4 +83,4 @@ No Monitor outgoing request capture, app-server ingestion, rollout ingestion, Th
 
 Implementation commit: `bf2f930 feat: model execution settings evidence`.
 
-Phase 3.3.3b is the next sole development starting point and remains not started.
+Phase 3.3.3b now supplies the bounded authoritative ingestion paths while preserving this frozen model. Phase 3.3.3c is the next sole development starting point and remains not started.

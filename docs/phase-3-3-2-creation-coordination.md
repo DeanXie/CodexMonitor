@@ -1,6 +1,6 @@
 # Phase 3.3.2 — Creation-intent / First-Turn Coordination
 
-Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**, Phase 3.3.3a Execution Settings Evidence Model is **PASS / FROZEN**, and Phase 3.3.3b Execution Settings Evidence Ingestion is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**, Phase 3.3.3a Execution Settings Evidence Model and Phase 3.3.3b Execution Settings Evidence Ingestion are **PASS**, and Phase 3.3.3c Focused Reconciliation / Effective Settings Acceptance is **GO / NOT STARTED**.
 
 ## Contract and ownership
 

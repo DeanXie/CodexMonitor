@@ -33,6 +33,8 @@ impl Default for TcpDaemonRuntime {
 pub(crate) struct AppState {
     pub(crate) creation_coordinator:
         crate::shared::codex_core::creation_coordination::CreationCoordinator,
+    pub(crate) execution_settings_evidence:
+        crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
     pub(crate) workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
     pub(crate) sessions: Mutex<HashMap<String, Arc<crate::codex::WorkspaceSession>>>,
     pub(crate) terminal_sessions: Mutex<HashMap<String, Arc<crate::terminal::TerminalSession>>>,
@@ -59,6 +61,7 @@ impl AppState {
         let app_settings = read_settings(&settings_path).unwrap_or_default();
         Self {
             creation_coordinator: Default::default(),
+            execution_settings_evidence: Default::default(),
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
             terminal_sessions: Mutex::new(HashMap::new()),

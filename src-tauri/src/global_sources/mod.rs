@@ -102,11 +102,19 @@ pub(crate) fn start(app: &AppHandle) -> Result<(), String> {
             );
             let result = service
                 .run_until(shutdown, commands, |mut event, registry| {
-                    let runtime = &snapshot_app.state::<AppState>().global_rollout_runtime;
+                    let app_state = snapshot_app.state::<AppState>();
+                    if let crate::shared::global_sources_core::rollout_watch_service::RolloutWatchEvent::Reconciled(report) = &event {
+                        app_state
+                            .execution_settings_evidence
+                            .observe_rollout_observations(
+                                report.execution_settings_turn_contexts.clone(),
+                            );
+                    }
+                    let runtime = &app_state.global_rollout_runtime;
                     let published_snapshot = runtime.publish_canonical_snapshot(
-                            registry.snapshot(),
-                            chrono::Utc::now().timestamp_millis(),
-                        );
+                        registry.snapshot(),
+                        chrono::Utc::now().timestamp_millis(),
+                    );
                     if let crate::shared::global_sources_core::rollout_watch_service::RolloutWatchEvent::DeletionReconciled(report) = &mut event {
                         report.snapshot_publication_revision = Some(runtime.snapshot().revision);
                     }

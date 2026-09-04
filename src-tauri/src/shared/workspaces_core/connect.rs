@@ -178,6 +178,7 @@ mod tests {
             workspace_reconciler: Mutex::new(
                 crate::backend::app_server::runtime_reconciler_for_home(None),
             ),
+            execution_settings_evidence: Default::default(),
             runtime_observation_keys: Mutex::new(std::collections::HashSet::new()),
             runtime_observation_clock: AtomicU64::new(0),
             hidden_thread_ids: Mutex::new(HashSet::new()),

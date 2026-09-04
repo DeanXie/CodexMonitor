@@ -955,6 +955,44 @@ fn periodic_reconciliation_recovers_a_missed_notification() {
 }
 
 #[test]
+fn rollout_reconciliation_emits_correlated_turn_context_settings_evidence() {
+    let root = temp_dir();
+    let path = rollout_path(&root, "settings-evidence");
+    let checkpoint = root.join("checkpoint.json");
+    write_lines(
+        &path,
+        &[
+            session_meta("thread-settings", "C:\\fixture"),
+            serde_json::json!({
+                "timestamp": "2026-08-25T13:57:18.463Z",
+                "type": "turn_context",
+                "payload": {
+                    "turn_id": "turn-settings",
+                    "model": "gpt-observed",
+                    "effort": "high",
+                    "approval_policy": "never",
+                    "cwd": "C:\\fixture"
+                }
+            })
+            .to_string(),
+        ],
+    );
+    let mut watcher = RolloutTailWatcher::new(config(&root, "home-settings", &checkpoint));
+
+    let report = watcher.reconcile(1_000).expect("settings reconciliation");
+
+    assert_eq!(report.execution_settings_turn_contexts.len(), 1);
+    let observation = &report.execution_settings_turn_contexts[0];
+    assert_eq!(
+        observation.thread_key,
+        CodexThreadKey::new("home-settings", "thread-settings")
+    );
+    assert_eq!(observation.turn_context["turn_id"], "turn-settings");
+    assert!(observation.observation_id.starts_with("rollout:"));
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn failed_delta_does_not_partially_commit_running_lifecycle_or_cursor() {
     let root = temp_dir();
     let path = rollout_path(&root, "transaction-rollback");

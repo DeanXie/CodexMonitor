@@ -61,6 +61,7 @@ pub(crate) enum ExecutionSettingField {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum ExecutionSettingValue {
+    Null,
     Text(String),
     Bool(bool),
     StringList(Vec<String>),

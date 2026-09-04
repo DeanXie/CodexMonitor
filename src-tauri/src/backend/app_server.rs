@@ -5,7 +5,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
@@ -15,6 +15,7 @@ use tokio::time::timeout;
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
+use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
 use crate::shared::workspace_interop_core::{
     ExecutionEnvironmentKey, RootLocatorPlatform, RuntimeOriginWorkspaceObservation,
@@ -389,6 +390,54 @@ pub(crate) struct RequestContext {
     params: Value,
 }
 
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or_default()
+}
+
+fn record_pending_settings_request(
+    evidence: &ExecutionSettingsEvidenceRuntime,
+    codex_home_identity: &str,
+    request_id: u64,
+    context: &RequestContext,
+    observed_at: u64,
+) -> bool {
+    evidence.observe_outgoing_request(
+        codex_home_identity,
+        request_id,
+        &context.method,
+        &context.params,
+        observed_at,
+    )
+}
+
+fn reconcile_execution_settings_message(
+    evidence: &ExecutionSettingsEvidenceRuntime,
+    codex_home_identity: &str,
+    completed_request: Option<(u64, &RequestContext)>,
+    message: &Value,
+    observation_id: &str,
+    observed_at: u64,
+) -> bool {
+    if let Some((request_id, context)) = completed_request {
+        return evidence.observe_app_server_response(
+            codex_home_identity,
+            request_id,
+            &context.method,
+            message,
+            observed_at,
+        );
+    }
+    evidence.observe_app_server_notification(
+        codex_home_identity,
+        message,
+        observation_id,
+        observed_at,
+    )
+}
+
 #[derive(Debug)]
 struct RuntimeRouteUpdate {
     thread_id: String,
@@ -618,6 +667,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) request_context: Mutex<HashMap<u64, RequestContext>>,
     pub(crate) thread_workspace: Mutex<HashMap<String, String>>,
     pub(crate) workspace_reconciler: Mutex<RuntimeWorkspaceReconciler>,
+    pub(crate) execution_settings_evidence: ExecutionSettingsEvidenceRuntime,
     // Shared process owner survives session reconnect; this is only an observer.
     pub(crate) creation_coordinator: Mutex<Option<CreationCoordinator>>,
     pub(crate) runtime_observation_keys: Mutex<HashSet<String>>,
@@ -704,13 +754,27 @@ impl WorkspaceSession {
         let (tx, rx) = oneshot::channel();
         self.register_workspace(workspace_id).await;
         self.pending.lock().await.insert(id, tx);
-        self.request_context.lock().await.insert(
+        let request_context = RequestContext {
+            workspace_id: workspace_id.to_string(),
+            method: method.to_string(),
+            params: params.clone(),
+        };
+        self.request_context
+            .lock()
+            .await
+            .insert(id, request_context.clone());
+        let codex_home_identity = self
+            .workspace_reconciler
+            .lock()
+            .await
+            .codex_home_identity()
+            .to_string();
+        record_pending_settings_request(
+            &self.execution_settings_evidence,
+            &codex_home_identity,
             id,
-            RequestContext {
-                workspace_id: workspace_id.to_string(),
-                method: method.to_string(),
-                params: params.clone(),
-            },
+            &request_context,
+            unix_timestamp_ms(),
         );
         if let Err(error) = write_message_to(
             &self.stdin,
@@ -721,14 +785,23 @@ impl WorkspaceSession {
         {
             self.pending.lock().await.remove(&id);
             self.request_context.lock().await.remove(&id);
+            self.execution_settings_evidence
+                .forget_outgoing_request(&codex_home_identity, id);
             return Err(error);
         }
         match timeout(REQUEST_TIMEOUT, rx).await {
             Ok(Ok(value)) => Ok(value),
-            Ok(Err(_)) => Err("request canceled".to_string()),
+            Ok(Err(_)) => {
+                self.execution_settings_evidence
+                    .forget_outgoing_request(&codex_home_identity, id);
+                self.request_context.lock().await.remove(&id);
+                Err("request canceled".to_string())
+            }
             Err(_) => {
                 self.pending.lock().await.remove(&id);
                 self.request_context.lock().await.remove(&id);
+                self.execution_settings_evidence
+                    .forget_outgoing_request(&codex_home_identity, id);
                 Err(format!(
                     "request timed out after {} seconds",
                     REQUEST_TIMEOUT.as_secs()
@@ -949,6 +1022,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     codex_home: Option<PathBuf>,
     client_version: String,
     event_sink: E,
+    execution_settings_evidence: ExecutionSettingsEvidenceRuntime,
 ) -> Result<Arc<WorkspaceSession>, String> {
     let codex_bin = default_codex_bin;
     let _ = check_codex_installation(codex_bin.clone()).await?;
@@ -985,6 +1059,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
         request_context: Mutex::new(HashMap::new()),
         thread_workspace: Mutex::new(HashMap::new()),
         workspace_reconciler: Mutex::new(workspace_reconciler),
+        execution_settings_evidence,
         creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),
@@ -1060,6 +1135,23 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                     }
                 }
             }
+
+            let settings_observation_key = runtime_message_observation_key(&value);
+            let settings_observed_at = unix_timestamp_ms();
+            let codex_home_identity = session_clone
+                .workspace_reconciler
+                .lock()
+                .await
+                .codex_home_identity()
+                .to_string();
+            reconcile_execution_settings_message(
+                &session_clone.execution_settings_evidence,
+                &codex_home_identity,
+                maybe_id.zip(completed_request.as_ref()),
+                &value,
+                &settings_observation_key,
+                settings_observed_at,
+            );
 
             let observation_key = runtime_message_observation_key(&value);
             let should_reconcile = session_clone
@@ -1338,9 +1430,15 @@ mod tests {
     use super::{
         apply_runtime_route_updates, build_initialize_params, extract_related_thread_ids,
         extract_thread_entries_from_thread_list_result, extract_thread_id,
-        reconcile_runtime_message, should_suppress_hidden_thread_event, source_subagent_kind,
+        reconcile_execution_settings_message, reconcile_runtime_message,
+        record_pending_settings_request, should_suppress_hidden_thread_event, source_subagent_kind,
         thread_started_is_memory_consolidation, RequestContext,
     };
+    use crate::shared::execution_settings_evidence::{
+        ExecutionSettingField, ExecutionSettingsAssessment, ExecutionSettingsObservationKey,
+    };
+    use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
+    use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
     use crate::shared::workspace_interop_core::{
         ExecutionEnvironmentKey, RootLocatorPlatform, RuntimeWorkspaceReconciler,
     };
@@ -1368,6 +1466,71 @@ mod tests {
             method: method.to_string(),
             params,
         }
+    }
+
+    #[test]
+    fn dispatched_turn_request_binds_to_response_full_turn_id() {
+        let evidence = ExecutionSettingsEvidenceRuntime::default();
+        let context = request_context(
+            "workspace-a",
+            "turn/start",
+            json!({ "threadId": "thread-a", "model": "gpt-requested" }),
+        );
+        assert!(record_pending_settings_request(
+            &evidence,
+            "codex-home-fixture",
+            71,
+            &context,
+            10,
+        ));
+        assert!(reconcile_execution_settings_message(
+            &evidence,
+            "codex-home-fixture",
+            Some((71, &context)),
+            &json!({ "result": { "turn": { "id": "full-turn-a" } } }),
+            "response-71",
+            20,
+        ));
+
+        let key = ExecutionSettingsObservationKey::turn(
+            CodexThreadKey::new("codex-home-fixture", "thread-a"),
+            "full-turn-a",
+        );
+        assert_eq!(
+            evidence
+                .select(&key, ExecutionSettingField::Model)
+                .assessment,
+            ExecutionSettingsAssessment::RequestedOnly
+        );
+    }
+
+    #[test]
+    fn thread_settings_notification_is_ingested_as_thread_default() {
+        let evidence = ExecutionSettingsEvidenceRuntime::default();
+        assert!(reconcile_execution_settings_message(
+            &evidence,
+            "codex-home-fixture",
+            None,
+            &json!({
+                "method": "thread/settings/updated",
+                "params": {
+                    "threadId": "thread-a",
+                    "threadSettings": { "model": "gpt-effective" }
+                }
+            }),
+            "notification-1",
+            20,
+        ));
+        let key = ExecutionSettingsObservationKey::thread_default(CodexThreadKey::new(
+            "codex-home-fixture",
+            "thread-a",
+        ));
+        assert_eq!(
+            evidence
+                .select(&key, ExecutionSettingField::Model)
+                .assessment,
+            ExecutionSettingsAssessment::EffectiveConfirmed
+        );
     }
 
     #[test]

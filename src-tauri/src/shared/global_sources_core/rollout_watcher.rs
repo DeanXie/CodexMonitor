@@ -111,6 +111,21 @@ pub(crate) struct ReconcileReport {
     pub read_failures: Vec<SourceReadFailure>,
     pub desktop_metadata_diagnostics: Vec<DesktopMetadataDiagnostic>,
     pub desktop_projection_observations: Vec<DesktopProjectionObservation>,
+    pub execution_settings_turn_contexts: Vec<RolloutTurnContextSettingsObservation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RolloutTurnContextSettingsObservation {
+    pub thread_key: super::rollout_identity::CodexThreadKey,
+    pub turn_context: Value,
+    pub observation_id: String,
+    pub observed_timestamp_ms: i64,
+}
+
+#[derive(Default)]
+struct ProcessedSource {
+    envelopes: Vec<SourceEnvelope<Value>>,
+    execution_settings_turn_contexts: Vec<RolloutTurnContextSettingsObservation>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -418,7 +433,7 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
                 source.tail.checkpoint().record_ordinal,
             );
             match self.process_source(&mut source, observed_timestamp_ms, observe_after_read) {
-                Ok(envelopes) => {
+                Ok(processed) => {
                     if source
                         .adapter
                         .thread_key
@@ -439,7 +454,10 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
                         report.processed_sources += 1;
                         checkpoint_dirty = true;
                     }
-                    report.envelopes.extend(envelopes);
+                    report.envelopes.extend(processed.envelopes);
+                    report
+                        .execution_settings_turn_contexts
+                        .extend(processed.execution_settings_turn_contexts);
                 }
                 Err(error) => {
                     source.health.consecutive_read_failures =
@@ -868,7 +886,7 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
         source: &mut WatchedSource,
         observed_timestamp_ms: i64,
         observe_after_read: bool,
-    ) -> io::Result<Vec<SourceEnvelope<Value>>> {
+    ) -> io::Result<ProcessedSource> {
         let original_file = source.source_file.clone();
         let original_tail = source.tail.clone();
         let original_parser = source.parser.clone();
@@ -897,6 +915,7 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
         }
 
         let mut envelopes = Vec::new();
+        let mut execution_settings_turn_contexts = Vec::new();
         let mut registry_batch = Vec::new();
         for record in delta.records {
             let value: Value = match serde_json::from_str(&record.text) {
@@ -961,6 +980,18 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
                 self.config.settled_after_ms,
                 Some(observed_timestamp_ms),
             );
+            if matches!(parsed, ParsedRolloutRecord::TurnContext(_)) {
+                if let (Some(update), Some(turn_context)) =
+                    (field_update.as_ref(), value.get("payload"))
+                {
+                    execution_settings_turn_contexts.push(RolloutTurnContextSettingsObservation {
+                        thread_key: update.thread_key.clone(),
+                        turn_context: turn_context.clone(),
+                        observation_id: observation_id.clone(),
+                        observed_timestamp_ms,
+                    });
+                }
+            }
             if let Some(update) = field_update {
                 let lane_update = SourceLaneUpdate {
                     observation_id: observation_id.clone(),
@@ -1037,7 +1068,10 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
                 error.to_string(),
             ));
         }
-        Ok(envelopes)
+        Ok(ProcessedSource {
+            envelopes,
+            execution_settings_turn_contexts,
+        })
     }
 
     fn read_with_retry(

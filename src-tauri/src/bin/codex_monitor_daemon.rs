@@ -99,6 +99,7 @@ const DAEMON_NAME: &str = "codex-monitor-daemon";
 fn spawn_with_client(
     event_sink: DaemonEventSink,
     client_version: String,
+    execution_settings_evidence: shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
     entry: WorkspaceEntry,
     default_bin: Option<String>,
     codex_args: Option<String>,
@@ -111,6 +112,7 @@ fn spawn_with_client(
         codex_home,
         client_version,
         event_sink,
+        execution_settings_evidence,
     )
 }
 
@@ -150,6 +152,8 @@ struct DaemonConfig {
 
 struct DaemonState {
     creation_coordinator: shared::codex_core::creation_coordination::CreationCoordinator,
+    execution_settings_evidence:
+        shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
     data_dir: PathBuf,
     workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -179,6 +183,7 @@ impl DaemonState {
         Self {
             data_dir: config.data_dir.clone(),
             creation_coordinator: Default::default(),
+            execution_settings_evidence: Default::default(),
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
             storage_path,
@@ -265,6 +270,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    self.execution_settings_evidence.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -295,6 +301,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    self.execution_settings_evidence.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -343,6 +350,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    self.execution_settings_evidence.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -444,6 +452,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    self.execution_settings_evidence.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -517,6 +526,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    self.execution_settings_evidence.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -545,6 +555,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    self.execution_settings_evidence.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -571,6 +582,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    self.execution_settings_evidence.clone(),
                     entry,
                     default_bin,
                     next_args,
@@ -1001,6 +1013,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    self.execution_settings_evidence.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -1646,6 +1659,7 @@ mod tests {
         DaemonState {
             data_dir: data_dir.to_path_buf(),
             creation_coordinator: Default::default(),
+            execution_settings_evidence: Default::default(),
             workspaces: Mutex::new(HashMap::new()),
             sessions: Mutex::new(HashMap::new()),
             storage_path: data_dir.join("workspaces.json"),
@@ -1709,6 +1723,7 @@ mod tests {
 
         Arc::new(WorkspaceSession {
             creation_coordinator: Mutex::new(None),
+            execution_settings_evidence: Default::default(),
             codex_args: None,
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),

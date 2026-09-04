@@ -1,6 +1,6 @@
 # Phase 3.3.2 — Creation-intent / First-Turn Coordination
 
-Status: **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**, Phase 3.3.3a Execution Settings Evidence Model is **PASS / FROZEN**, and Phase 3.3.3b Execution Settings Evidence Ingestion is **GO / NOT STARTED**.
 
 ## Contract and ownership
 
@@ -72,4 +72,4 @@ Process-local intent/result retention consumes memory for the process lifetime. 
 
 Tests cover duplicate/concurrent claims, distinct actions, cancellation and real write certainty, pending first Turns, independent persistence, unknown replay suppression, explicit retry, exact identity conflicts, early terminal evidence, stale epochs, and reconnect observer binding. No real user Thread is created or resumed by these synthetic tests.
 
-Phase 3.3.3 effective execution settings, cross-process recovery, and Desktop projection behavior are outside this implementation.
+Phase 3.3.3a now defines the independent shared-core evidence model. Execution-settings ingestion, cross-process recovery, and Desktop projection behavior remain outside this implementation.

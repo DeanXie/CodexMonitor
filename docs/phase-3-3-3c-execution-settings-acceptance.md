@@ -1,6 +1,6 @@
 # Phase 3.3.3c — Effective Execution Settings Acceptance
 
-Status: **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence is **PASS / COMPLETE**. Phase 3.3 Final Session Acceptance is **BLOCKED BY current/default naming mismatch**. Phase 3.4 remains **NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence is **PASS / COMPLETE**. The current/default naming mismatch is **RESOLVED**. Phase 3.3 Final Session Acceptance is **GO / NOT STARTED**. Phase 3.4 remains **NOT STARTED**.
 
 ## Accepted evidence chain
 
@@ -23,7 +23,7 @@ The tested app-server did not return Turn settings in `turn/start` responses. Tu
 | A3 omitted model/effort | Normal Monitor builder always emits null or concrete values | NOT TESTABLE on real Monitor path; fixture PASS |
 | B full-access | `never` + `danger-full-access`; model, effort, policy, sandbox, cwd matched | PASS |
 | B read-only | `on-request` + `read-only`; policy, sandbox, cwd matched | PASS |
-| B current/default | Actual request is fixed `on-request` + `workspace-write` + network true + workspace writable root | PRODUCT NAMING MISMATCH |
+| B current/default | Actual request is fixed `on-request` + `workspace-write` + network true + workspace writable root; UI names the fixed preset accurately | PASS |
 | C roots | Server thread settings reported `writableRoots=[]`; thread start separately reported `runtimeWorkspaceRoots=[workspace]` | PASS with relationship `UNKNOWN` |
 | D CLI continuation | Same full Thread ID; new full Turn ID; CLI model/effort/policy/sandbox persisted independently | PASS |
 | E settings notification | Real notification without Turn ID ingested as `THREAD_DEFAULT` | PASS |
@@ -52,14 +52,9 @@ No assessment-enum, scope, creation, Thread identity, Workspace, access-mode, or
 
 ## Current/default product boundary
 
-`current/default` does not inherit an existing Thread policy. It sends a fixed preset: approval `on-request`, sandbox `workspaceWrite`, network enabled, and the Monitor workspace as a requested writable root. The label is therefore a product naming mismatch.
+`current/default` does not inherit an existing Thread policy. It sends a fixed preset: approval `on-request`, sandbox `workspaceWrite`, network enabled, and the Monitor workspace as a requested writable root. Both user-visible access-mode entry points now name it `Workspace access (network enabled)` and describe those fixed semantics explicitly.
 
-Two bounded follow-up choices remain:
-
-- Implement true inherit/current semantics by omitting approval and sandbox overrides and accepting authoritative server/rollout evidence. This requires an explicit product contract for fallback behavior when no prior settings exist.
-- Rename the option to describe the fixed preset, such as `Workspace write (network enabled)`, while retaining the current request shape.
-
-Recommendation: rename the fixed preset. It is the lower-risk, protocol-accurate correction; true inheritance should be a separate contract slice if the product requires it. No current/default behavior is changed in Phase 3.3.3c.
+The internal access-mode value remains `current`. Persistence, shortcut/cycle semantics, the Rust request builder, and every outgoing request field are unchanged. True inheritance, if ever required, remains a separate product contract rather than an implication of this preset.
 
 ## Recovery and privacy boundaries
 
@@ -69,4 +64,4 @@ The stored acceptance evidence is sanitized and contains no user prompt, assista
 
 Canonical evidence: `docs/evidence/phase-3-3-3c/real-runtime.json`. Deterministic assessment fixture: `docs/fixtures/execution-settings/phase-3-3-3c-assessments.json`.
 
-The remaining Phase 3.3 work is the final integrated Standard Session acceptance across creation acknowledgement, creation/first-Turn at-most-once coordination, exact-ID continuation, Workspace relations, and execution-settings evidence. It remains blocked until current/default either implements true inheritance or is renamed as the fixed preset it actually sends. Phase 3.3.3c does not start that acceptance or Phase 3.4.
+The remaining Phase 3.3 work is the final integrated Standard Session acceptance across creation acknowledgement, creation/first-Turn at-most-once coordination, exact-ID continuation, Workspace relations, and execution-settings evidence. The naming blocker is resolved, so Phase 3.3 Final Session Acceptance is GO / NOT STARTED. Phase 3.4 remains not started.

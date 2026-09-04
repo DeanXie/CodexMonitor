@@ -28,3 +28,7 @@ mod execution_settings_evidence_tests;
 #[cfg(test)]
 #[path = "execution_settings_ingestion_tests.rs"]
 mod execution_settings_ingestion_tests;
+
+#[cfg(test)]
+#[path = "execution_settings_acceptance_tests.rs"]
+mod execution_settings_acceptance_tests;

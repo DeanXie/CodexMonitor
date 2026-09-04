@@ -357,17 +357,9 @@ fn extract_setting_fields(value: &Value) -> Vec<(ExecutionSettingField, Executio
                 ExecutionSettingValue::Null,
             ));
         } else if let Some(kind) = member(sandbox, &["type"]) {
-            push_value(
-                &mut fields,
-                ExecutionSettingField::SandboxPolicy,
-                Some(kind),
-            );
+            push_sandbox_policy(&mut fields, kind);
         } else if sandbox.is_string() {
-            push_value(
-                &mut fields,
-                ExecutionSettingField::SandboxPolicy,
-                Some(sandbox),
-            );
+            push_sandbox_policy(&mut fields, sandbox);
         }
     }
     push_value(
@@ -385,6 +377,23 @@ fn extract_setting_fields(value: &Value) -> Vec<(ExecutionSettingField, Executio
         }),
     );
     fields
+}
+
+fn push_sandbox_policy(
+    fields: &mut Vec<(ExecutionSettingField, ExecutionSettingValue)>,
+    value: &Value,
+) {
+    let Some(value) = value.as_str() else { return };
+    let canonical = match value {
+        "dangerFullAccess" | "danger-full-access" => "danger-full-access",
+        "readOnly" | "read-only" => "read-only",
+        "workspaceWrite" | "workspace-write" => "workspace-write",
+        other => other,
+    };
+    fields.push((
+        ExecutionSettingField::SandboxPolicy,
+        ExecutionSettingValue::Text(canonical.to_string()),
+    ));
 }
 
 fn member<'a>(value: &'a Value, names: &[&str]) -> Option<&'a Value> {

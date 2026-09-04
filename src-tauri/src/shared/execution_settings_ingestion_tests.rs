@@ -140,6 +140,40 @@ fn explicit_null_is_preserved_as_distinct_request_evidence() {
 }
 
 #[test]
+fn equivalent_sandbox_policy_protocol_spellings_match() {
+    let evidence = ExecutionSettingsEvidenceRuntime::default();
+    let key = ExecutionSettingsObservationKey::turn(
+        CodexThreadKey::new("codex-home-fixture", "thread-sandbox-spelling"),
+        "turn-sandbox-spelling",
+    );
+    let comparison_id = "turn:turn-sandbox-spelling";
+
+    evidence.observe_correlated_fields(
+        key.clone(),
+        ExecutionSettingsEvidenceLayer::Requested,
+        "monitor-request",
+        comparison_id,
+        &json!({ "sandboxPolicy": { "type": "workspaceWrite" } }),
+        10,
+    );
+    evidence.observe_correlated_fields(
+        key.clone(),
+        ExecutionSettingsEvidenceLayer::PersistedObserved,
+        "rollout-turn-context:fixture",
+        comparison_id,
+        &json!({ "sandbox_policy": { "type": "workspace-write" } }),
+        20,
+    );
+
+    assert_eq!(
+        evidence
+            .select(&key, ExecutionSettingField::SandboxPolicy)
+            .assessment,
+        ExecutionSettingsAssessment::Match
+    );
+}
+
+#[test]
 fn thread_start_response_records_thread_default_effective_settings() {
     let runtime = ExecutionSettingsEvidenceRuntime::default();
     runtime.observe_outgoing_request(

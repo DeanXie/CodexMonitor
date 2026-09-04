@@ -1,0 +1,146 @@
+{
+  "evidenceVersion": 1,
+  "capturedDate": "2026-09-05",
+  "codexCliVersion": "0.153.1",
+  "capturePath": "Monitor production shared core plus exact-ID CLI continuation",
+  "sanitization": [
+    "prompts and assistant output omitted",
+    "workspace path replaced with <isolated-worktree>",
+    "credentials, tokens, cookies, and private file contents omitted",
+    "provenance observation hashes retained only where required"
+  ],
+  "thread": {
+    "fullThreadId": "01a06e19-3ac9-74e0-a3d9-c92aca48303d",
+    "codexHomeIdentity": "codex-home:76c92e1eaaa451ef02c92f75f12738ea3337e69b890333a72cd14ec778cac75f"
+  },
+  "threadStart": {
+    "requested": {
+      "cwd": "<isolated-worktree>",
+      "approvalPolicy": "on-request"
+    },
+    "serverEffective": {
+      "model": "gpt-5.6-sol",
+      "effort": "medium",
+      "approvalPolicy": "on-request",
+      "cwd": "<isolated-worktree>",
+      "sandboxPolicy": "workspace-write",
+      "networkAccess": false,
+      "writableRoots": [],
+      "runtimeWorkspaceRoots": ["<isolated-worktree>"]
+    }
+  },
+  "monitorTurns": [
+    {
+      "name": "full-access-explicit",
+      "fullTurnId": "01a06e19-3b3a-7553-a380-1e5deacf66f0",
+      "requested": {
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "approvalPolicy": "never",
+        "sandboxPolicy": "danger-full-access",
+        "cwd": "<isolated-worktree>"
+      },
+      "persistedObserved": {
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "approvalPolicy": "never",
+        "sandboxPolicy": "danger-full-access",
+        "cwd": "<isolated-worktree>"
+      },
+      "assessment": "MATCH",
+      "unknownFields": ["networkAccess", "writableRoots"]
+    },
+    {
+      "name": "read-only-explicit-null",
+      "fullTurnId": "01a06e19-56b1-77c1-b6fc-901d4abbb196",
+      "requested": {
+        "model": null,
+        "effort": null,
+        "approvalPolicy": "on-request",
+        "sandboxPolicy": "read-only",
+        "cwd": "<isolated-worktree>"
+      },
+      "persistedObserved": {
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "approvalPolicy": "on-request",
+        "sandboxPolicy": "read-only",
+        "cwd": "<isolated-worktree>"
+      },
+      "assessmentByField": {
+        "model": "MISMATCH",
+        "effort": "MISMATCH",
+        "approvalPolicy": "MATCH",
+        "sandboxPolicy": "MATCH",
+        "cwd": "MATCH"
+      },
+      "unknownFields": ["networkAccess", "writableRoots"]
+    },
+    {
+      "name": "current-default-fixed-preset",
+      "fullTurnId": "01a06e19-6246-7782-8dd5-194bba02242d",
+      "requested": {
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "approvalPolicy": "on-request",
+        "sandboxPolicy": "workspace-write",
+        "networkAccess": true,
+        "writableRoots": ["<isolated-worktree>"],
+        "cwd": "<isolated-worktree>"
+      },
+      "persistedObserved": {
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "approvalPolicy": "on-request",
+        "sandboxPolicy": "workspace-write",
+        "networkAccess": true,
+        "cwd": "<isolated-worktree>"
+      },
+      "assessmentByField": {
+        "model": "MATCH",
+        "effort": "MATCH",
+        "approvalPolicy": "MATCH",
+        "sandboxPolicy": "MATCH",
+        "networkAccess": "MATCH",
+        "writableRoots": "REQUESTED_ONLY",
+        "cwd": "MATCH"
+      }
+    }
+  ],
+  "threadSettingsUpdated": {
+    "observed": true,
+    "fullTurnIdPresent": false,
+    "scope": "THREAD_DEFAULT",
+    "serverEffective": {
+      "model": "gpt-5.6-terra",
+      "effort": "low",
+      "approvalPolicy": "on-request",
+      "sandboxPolicy": "workspace-write",
+      "networkAccess": true,
+      "writableRoots": [],
+      "cwd": "<isolated-worktree>"
+    }
+  },
+  "cliContinuation": {
+    "sameFullThreadId": "01a06e19-3ac9-74e0-a3d9-c92aca48303d",
+    "newFullTurnId": "01a06e1a-ea3b-78d1-8293-1fbeadfd652f",
+    "persistedObserved": {
+      "model": "gpt-5.6-terra",
+      "effort": "medium",
+      "approvalPolicy": "never",
+      "sandboxPolicy": "read-only",
+      "cwd": "<isolated-worktree>"
+    },
+    "unknownFields": ["networkAccess", "writableRoots"]
+  },
+  "reconstruction": {
+    "persistedObserved": "RECOVERABLE_FROM_ROLLOUT_TURN_CONTEXT",
+    "requested": "NOT_RECOVERABLE_PROCESS_LOCAL",
+    "serverEffectiveNotification": "NOT_RECOVERABLE_PROCESS_LOCAL"
+  },
+  "limitations": {
+    "normalMonitorModelEffortOmitted": "NOT_TESTABLE_REQUEST_BUILDER_ALWAYS_EMITS_NULL_OR_CONCRETE",
+    "turnStartServerEffective": "NOT_OBSERVED_RESPONSE_DID_NOT_CONTAIN_SETTINGS",
+    "writableRootsVsRuntimeWorkspaceRootsRelationship": "UNKNOWN_DISTINCT_PROTOCOL_FIELDS"
+  }
+}

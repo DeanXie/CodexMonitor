@@ -1,0 +1,60 @@
+{
+  "fixtureVersion": 1,
+  "purpose": "Phase 3.3.3c deterministic assessment acceptance",
+  "sanitization": [
+    "synthetic Thread and Turn identifiers",
+    "no prompts, credentials, tokens, cookies, or private file contents"
+  ],
+  "cases": [
+    {
+      "name": "unknown",
+      "expected": "UNKNOWN",
+      "records": []
+    },
+    {
+      "name": "requested-only",
+      "expected": "REQUESTED_ONLY",
+      "records": [
+        { "layer": "requested", "value": "model-a", "comparisonId": "turn:requested-only", "observedAt": 10 }
+      ]
+    },
+    {
+      "name": "effective-confirmed",
+      "expected": "EFFECTIVE_CONFIRMED",
+      "records": [
+        { "layer": "serverEffective", "value": "model-a", "comparisonId": "turn:effective-confirmed", "observedAt": 20 }
+      ]
+    },
+    {
+      "name": "observed-confirmed",
+      "expected": "OBSERVED_CONFIRMED",
+      "records": [
+        { "layer": "persistedObserved", "value": "model-a", "comparisonId": "turn:observed-confirmed", "observedAt": 30 }
+      ]
+    },
+    {
+      "name": "match",
+      "expected": "MATCH",
+      "records": [
+        { "layer": "requested", "value": "model-a", "comparisonId": "turn:match", "observedAt": 40 },
+        { "layer": "persistedObserved", "value": "model-a", "comparisonId": "turn:match", "observedAt": 42 }
+      ]
+    },
+    {
+      "name": "mismatch",
+      "expected": "MISMATCH",
+      "records": [
+        { "layer": "requested", "value": "model-a", "comparisonId": "turn:mismatch", "observedAt": 50 },
+        { "layer": "persistedObserved", "value": "model-b", "comparisonId": "turn:mismatch", "observedAt": 52 }
+      ]
+    },
+    {
+      "name": "conflict",
+      "expected": "CONFLICT",
+      "records": [
+        { "layer": "serverEffective", "value": "model-a", "comparisonId": "turn:conflict", "observedAt": 60 },
+        { "layer": "persistedObserved", "value": "model-b", "comparisonId": "turn:conflict", "observedAt": 62 }
+      ]
+    }
+  ]
+}

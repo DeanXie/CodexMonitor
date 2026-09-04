@@ -1,6 +1,6 @@
 # Phase 3.3.3b — Execution Settings Evidence Ingestion
 
-Status: **PASS**. Phase 3.3.3a remains **PASS / FROZEN**. Phase 3.3.3c Focused Reconciliation / Effective Settings Acceptance is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.3.3a and Phase 3.3.3c remain **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence is **PASS / COMPLETE**. Phase 3.3 Final Session Acceptance is **BLOCKED BY current/default naming mismatch**.
 
 ## Authoritative inputs
 
@@ -28,7 +28,7 @@ The app and daemon own the ingestion runtime at process scope and pass it into W
 
 Ingestion does not change `CodexThreadKey`, `WorkspaceKey`, scoped workspace relations, creation acknowledgement, creation-intent coordination, `ThreadCodexParams`, frontend current/default settings, access mode, or UI. It does not read or write Desktop private state. The rollout watcher emits a supplemental settings observation alongside its existing reconciliation report without changing Phase 2 canonical source-lane semantics.
 
-Phase 3.3.3c remains the next possible slice and is not implemented here.
+Phase 3.3.3c acceptance is recorded in `docs/phase-3-3-3c-execution-settings-acceptance.md`. Phase 3.3 Final Session Acceptance remains blocked until current/default either implements true inheritance or is renamed as the fixed preset it actually sends. Phase 3.4 remains not started.
 
 ## Verification
 

@@ -107,6 +107,15 @@ persisted-observed evidence using their own full Thread and Turn IDs. Omitted,
 explicit-null, and concrete values remain distinct, and no source promotes one
 evidence layer into another.
 
+Phase 3.3.3c real acceptance confirmed that current app-server request enums use
+camelCase sandbox values while rollout `turn_context` uses equivalent kebab-case
+values. The evidence ingestion boundary canonicalizes only the confirmed
+`workspaceWrite`/`workspace-write`, `readOnly`/`read-only`, and
+`dangerFullAccess`/`danger-full-access` aliases before comparison. It does not
+normalize unrelated or unknown values. The same acceptance observed
+`writableRoots=[]` and a separate `runtimeWorkspaceRoots=[workspace]`; their
+relationship remains unknown and is not inferred as a conflict.
+
 ## Supported Notifications (Codex v2)
 
 These are the current Codex v2 `ServerNotification` methods that CodexMonitor

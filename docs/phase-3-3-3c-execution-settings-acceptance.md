@@ -1,6 +1,6 @@
 # Phase 3.3.3c — Effective Execution Settings Acceptance
 
-Status: **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence is **PASS / COMPLETE**. The current/default naming mismatch is **RESOLVED**. Phase 3.3 Final Session Acceptance is **GO / NOT STARTED**. Phase 3.4 remains **NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence and Phase 3.3 Monitor-created Standard Sessions are **PASS / COMPLETE**. The current/default naming mismatch is **RESOLVED**. Phase 3.4 remains **NOT STARTED**.
 
 ## Accepted evidence chain
 
@@ -64,4 +64,4 @@ The stored acceptance evidence is sanitized and contains no user prompt, assista
 
 Canonical evidence: `docs/evidence/phase-3-3-3c/real-runtime.json`. Deterministic assessment fixture: `docs/fixtures/execution-settings/phase-3-3-3c-assessments.json`.
 
-The remaining Phase 3.3 work is the final integrated Standard Session acceptance across creation acknowledgement, creation/first-Turn at-most-once coordination, exact-ID continuation, Workspace relations, and execution-settings evidence. The naming blocker is resolved, so Phase 3.3 Final Session Acceptance is GO / NOT STARTED. Phase 3.4 remains not started.
+The integrated Standard Session acceptance across creation acknowledgement, creation/first-Turn at-most-once coordination, exact-ID continuation, Workspace relations, and execution-settings evidence is PASS / COMPLETE. Phase 3.4 remains not started.

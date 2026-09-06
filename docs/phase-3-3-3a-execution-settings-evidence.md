@@ -1,6 +1,6 @@
 # Phase 3.3.3a — Execution Settings Evidence Model
 
-Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**. Phase 3.3.3b Execution Settings Evidence Ingestion and Phase 3.3.3c Focused Reconciliation / Effective Settings Acceptance are **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence is **PASS / COMPLETE**. The current/default naming mismatch is **RESOLVED**. Phase 3.3 Final Session Acceptance is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**. Phase 3.3.3b Execution Settings Evidence Ingestion and Phase 3.3.3c Focused Reconciliation / Effective Settings Acceptance are **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence and Phase 3.3 Monitor-created Standard Sessions are **PASS / COMPLETE**. The current/default naming mismatch is **RESOLVED**. Phase 3.4 remains **NOT STARTED**.
 
 ## Contract
 
@@ -83,4 +83,4 @@ No Monitor outgoing request capture, app-server ingestion, rollout ingestion, Th
 
 Implementation commit: `bf2f930 feat: model execution settings evidence`.
 
-Phase 3.3.3b supplies the bounded authoritative ingestion paths while preserving this frozen model. Phase 3.3.3c has accepted the integrated contract. The fixed preset is now presented as `Workspace access (network enabled)` while its internal `current` value and request behavior remain unchanged. Phase 3.3 Final Session Acceptance is GO / NOT STARTED. Phase 3.4 remains not started.
+Phase 3.3.3b supplies the bounded authoritative ingestion paths while preserving this frozen model. Phase 3.3.3c has accepted the integrated contract. The fixed preset is now presented as `Workspace access (network enabled)` while its internal `current` value and request behavior remain unchanged. Phase 3.3 Final Session Acceptance is PASS / COMPLETE. Phase 3.4 remains not started.

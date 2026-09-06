@@ -1,6 +1,6 @@
 # Phase 3.3.2 — Creation-intent / First-Turn Coordination
 
-Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**; Phase 3.3.3a, Phase 3.3.3b, and Phase 3.3.3c are **PASS / FROZEN**; Phase 3.3.3 Effective Execution Settings Evidence is **PASS / COMPLETE**. The current/default naming mismatch is **RESOLVED**. Phase 3.3 Final Session Acceptance is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.3.3 Forensics / Contract is **COMPLETE**; Phase 3.3.3a, Phase 3.3.3b, and Phase 3.3.3c are **PASS / FROZEN**; Phase 3.3.3 Effective Execution Settings Evidence and Phase 3.3 Monitor-created Standard Sessions are **PASS / COMPLETE**. The current/default naming mismatch is **RESOLVED**. Phase 3.4 remains **NOT STARTED**.
 
 ## Contract and ownership
 

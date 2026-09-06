@@ -1,8 +1,8 @@
 # Phase 3.3.1 — Creation Acknowledgement Contract
 
 Phase 3.2 is PASS / COMPLETE. Phase 3.3.0 is FORENSICS COMPLETE.
-Phase 3.3.1 is PASS / FROZEN. Phase 3.3.2 Creation-intent / First-Turn
-Coordination is GO / NOT STARTED. No coordination or recovery is implemented.
+Phase 3.3.1 and Phase 3.3.2 Creation-intent / First-Turn Coordination are PASS / FROZEN.
+Phase 3.3 Monitor-created Standard Sessions is PASS / COMPLETE. Phase 3.4 remains NOT STARTED.
 Implementation commit: `ab4d9d7 feat: define standard session creation acknowledgement`.
 
 ## Independent facts
@@ -126,6 +126,6 @@ pre-existing, non-blocking; new Phase 3.3.1 regressions = 0.
 | npm run typecheck | PASS |
 | git diff --check | PASS |
 
-Phase 3.3.1 is accepted and frozen with the approved baseline waiver; this is not
-a claim that the unrelated full frontend baseline is green. Phase 3.3.2 remains
-GO / NOT STARTED and requires a separate implementation authorization.
+Phase 3.3.1 remains accepted and frozen with the approved baseline waiver; this is not
+a claim that the unrelated full frontend baseline is green. Phase 3.3 Final Standard
+Session Acceptance is PASS / COMPLETE. Phase 3.4 remains not started.

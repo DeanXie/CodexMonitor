@@ -1,6 +1,6 @@
 # Phase 3.3 — Final Standard Session Acceptance
 
-Status: **PASS / COMPLETE**. Phase 3.3.0 is **FORENSICS COMPLETE**; Phase 3.3.1, Phase 3.3.2, Phase 3.3.3a, Phase 3.3.3b, and Phase 3.3.3c are **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence is **PASS / COMPLETE**. Phase 3.4 remains **NOT STARTED**.
+Status: **PASS / COMPLETE**. Phase 3.3.0 is **FORENSICS COMPLETE**; Phase 3.3.1, Phase 3.3.2, Phase 3.3.3a, Phase 3.3.3b, and Phase 3.3.3c are **PASS / FROZEN**. Phase 3.3.3 Effective Execution Settings Evidence is **PASS / COMPLETE**. Phase 3.4.0 is **FORENSICS COMPLETE**, Phase 3.4.1 is **PASS / FROZEN**, and Phase 3.4.2 is **GO / NOT STARTED**.
 
 The sanitized authoritative evidence is `docs/evidence/phase-3-3-final/standard-session.json`. Raw rollout observations remain only in the ignored `.codexmonitor/phase-3-3-final-acceptance/` run directory.
 

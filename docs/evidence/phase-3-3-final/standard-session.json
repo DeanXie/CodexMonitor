@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "phase": "3.3-final",
+  "capturedAt": "2026-09-06T16:20:52.166Z",
+  "runIdHash": "86312af579179cecb25c081b860da68d3d2ba684809e48bee91eeb3ad1a27586",
+  "environment": {
+    "codexCliAtPrepare": "codex-cli 0.153.3",
+    "codexCliAtCliContinuation": "codex-cli 0.153.4",
+    "nodeVersion": "v24.16.0"
+  },
+  "identity": {
+    "fullThreadId": "01a0771c-ecc9-7f70-9779-18722d535b06",
+    "canonicalThreadCount": 1,
+    "duplicateCanonicalThreadCount": 0,
+    "sourceRolloutRecordCount": 1,
+    "monitorWorkspaceEntryIdEntersIdentity": false
+  },
+  "creation": {
+    "threadAcknowledged": "CONFIRMED",
+    "acknowledgementBasis": "MONITOR_PRODUCTION_ACKNOWLEDGEMENT_GATE_ACCEPTED_EXACT_SERVER_ID",
+    "persistenceConfirmed": "CONFIRMED",
+    "persistenceBasis": "AUTHORITATIVE_SESSION_META",
+    "firstTurnAccepted": "CONFIRMED",
+    "firstTurnOutcome": "COMPLETED",
+    "firstTurnId": "01a0771c-ed7b-74e3-950e-9161500e22bc",
+    "ephemeral": "UNKNOWN",
+    "dispatchCount": "NOT DIRECTLY OBSERVED; ONE USER ACTION AND ONE CANONICAL THREAD OBSERVED"
+  },
+  "workspace": {
+    "origin": {
+      "scope": "ORIGIN",
+      "workspacePath": "<workspace>",
+      "basis": "session_meta.cwd after Monitor thread/start.cwd"
+    },
+    "turnExecution": [
+      {
+        "scope": "TURN_EXECUTION",
+        "fullTurnId": "01a0771c-ed7b-74e3-950e-9161500e22bc",
+        "workspacePath": "<workspace>",
+        "basis": "persisted turn_context.cwd"
+      },
+      {
+        "scope": "TURN_EXECUTION",
+        "fullTurnId": "01a07734-7b09-7ab2-8be9-8e3e892f25e2",
+        "workspacePath": "<workspace>",
+        "basis": "persisted turn_context.cwd"
+      },
+      {
+        "scope": "TURN_EXECUTION",
+        "fullTurnId": "01a0776c-d023-7852-8cd3-393b420804ff",
+        "workspacePath": "<workspace>",
+        "basis": "persisted turn_context.cwd"
+      }
+    ]
+  },
+  "executionSettings": {
+    "monitor": {
+      "fullTurnId": "01a0771c-ed7b-74e3-950e-9161500e22bc",
+      "cwd": "<workspace>",
+      "model": "gpt-5.6-terra",
+      "effort": "medium",
+      "approvalPolicy": "on-request",
+      "sandboxPolicy": "workspace-write",
+      "networkAccess": true,
+      "writableRoots": "NOT OBSERVED"
+    },
+    "desktop": {
+      "fullTurnId": "01a07734-7b09-7ab2-8be9-8e3e892f25e2",
+      "cwd": "<workspace>",
+      "model": "gpt-5.6-terra",
+      "effort": "medium",
+      "approvalPolicy": "on-request",
+      "sandboxPolicy": "workspace-write",
+      "networkAccess": false,
+      "writableRoots": [
+        "<codex-home>\\visualizations\\2026\\09\\06\\01a0771c-ecc9-7f70-9779-18722d535b06"
+      ]
+    },
+    "cli": {
+      "fullTurnId": "01a0776c-d023-7852-8cd3-393b420804ff",
+      "cwd": "<workspace>",
+      "model": "gpt-5.6-terra",
+      "effort": "medium",
+      "approvalPolicy": "on-request",
+      "sandboxPolicy": "workspace-write",
+      "networkAccess": false,
+      "writableRoots": "NOT OBSERVED"
+    },
+    "sameThreadAllowsDistinctTurnSettings": true
+  },
+  "continuation": {
+    "monitorToDesktopIdle": {
+      "result": "PASS",
+      "fullThreadId": "01a0771c-ecc9-7f70-9779-18722d535b06",
+      "fullTurnId": "01a07734-7b09-7ab2-8be9-8e3e892f25e2"
+    },
+    "desktopToCliIdleAfterRelease": {
+      "result": "PASS",
+      "fullThreadId": "01a0771c-ecc9-7f70-9779-18722d535b06",
+      "fullTurnId": "01a0776c-d023-7852-8cd3-393b420804ff"
+    },
+    "priorSurfaceHistoryVisibleInCli": "USER_CONFIRMED",
+    "distinctTurnIds": true
+  },
+  "occupancy": {
+    "result": "BLOCKED_BY_ACTIVE_WRITER",
+    "fullThreadId": "01a0771c-ecc9-7f70-9779-18722d535b06",
+    "errorCode": -32600,
+    "errorClass": "ACTIVE_WRITER",
+    "producerSurface": "DESKTOP",
+    "consumerSurface": "CLI",
+    "consumerVersion": "codex-cli 0.153.4",
+    "provenance": "USER_REPORTED_EXACT_ID_RESUME"
+  },
+  "postReleaseExactId": {
+    "result": "SUCCESS",
+    "fullThreadId": "01a0771c-ecc9-7f70-9779-18722d535b06",
+    "method": "thread/resume"
+  },
+  "reconstruction": {
+    "result": "SUCCESS",
+    "fullThreadId": "01a0771c-ecc9-7f70-9779-18722d535b06",
+    "method": "thread/read",
+    "monitorUiReconstruction": "USER_CONFIRMED",
+    "priorSurfaceHistoryVisible": [
+      "MONITOR",
+      "DESKTOP",
+      "CLI"
+    ],
+    "persistedObserved": "RECOVERABLE_FROM_ROLLOUT_TURN_CONTEXT",
+    "processLocalRequestedAndNotificationEvidence": "NOT RECOVERABLE BY CURRENT CONTRACT"
+  },
+  "projections": {
+    "desktopProjectAssigned": "UNKNOWN",
+    "desktopSidebarVisible": "NOT OBSERVED",
+    "monitorListVisibleAfterRestart": "CONFIRMED",
+    "remoteDiscoverable": "UNKNOWN / NOT TESTED"
+  },
+  "boundaries": {
+    "correlation": "EXACT_IDS_AND_EXPLICIT_STAGE_BOUNDARIES_ONLY",
+    "rawEvidenceCommitted": false,
+    "userContentStored": false,
+    "desktopPrivateStateWrittenByHarness": false,
+    "normalContinuationRequiresReleasedWriter": true,
+    "activeWriterProtectionIsNotCapabilityFailure": true
+  }
+}

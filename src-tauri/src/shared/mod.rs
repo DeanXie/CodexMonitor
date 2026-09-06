@@ -16,6 +16,7 @@ pub(crate) mod local_usage_core;
 pub(crate) mod process_core;
 pub(crate) mod prompts_core;
 pub(crate) mod settings_core;
+pub(crate) mod surface_projection_core;
 pub(crate) mod workspace_interop_core;
 pub(crate) mod workspace_rpc;
 pub(crate) mod workspaces_core;
@@ -32,3 +33,7 @@ mod execution_settings_ingestion_tests;
 #[cfg(test)]
 #[path = "execution_settings_acceptance_tests.rs"]
 mod execution_settings_acceptance_tests;
+
+#[cfg(test)]
+#[path = "surface_projection_core_tests.rs"]
+mod surface_projection_core_tests;

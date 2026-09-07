@@ -26,6 +26,12 @@
 .agent-monitor-filters select { min-width: 220px; }
 .agent-monitor-session-details { display: flex; flex-wrap: wrap; gap: 10px; color: var(--text-subtle); font-size: 12px; }
 .agent-monitor-session-details strong { color: var(--text-stronger); }
+.agent-monitor-projection-details { flex-basis: 100%; border: 1px solid var(--border-subtle); border-radius: 10px; padding: 8px 10px; background: var(--surface-card); }
+.agent-monitor-projection-details summary { cursor: pointer; color: var(--text-stronger); font-weight: 650; }
+.agent-monitor-projection-details ul, .agent-monitor-projection-issues ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.agent-monitor-projection-details li, .agent-monitor-projection-issues li { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.agent-monitor-projection-details li > strong, .agent-monitor-projection-issues li > strong { flex-basis: 100%; }
+.agent-monitor-projection-issues { border: 1px solid color-mix(in srgb, var(--status-warning) 38%, var(--border-subtle)); background: color-mix(in srgb, var(--status-warning) 8%, var(--surface-card)); border-radius: 14px; padding: 14px; color: var(--text-subtle); font-size: 12px; }
 .agent-monitor-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .agent-monitor-summary-card, .agent-monitor-call-tree, .agent-monitor-models { border: 1px solid var(--border-subtle); background: var(--surface-card); border-radius: 14px; }
 .agent-monitor-summary-card { padding: 12px; display: flex; flex-direction: column; gap: 6px; }

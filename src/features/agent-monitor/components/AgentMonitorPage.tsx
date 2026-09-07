@@ -15,9 +15,14 @@ import {
   type AgentMonitorProducerFilter,
   type AgentMonitorSourceFilter,
 } from "../utils/globalSourceSelector";
+import {
+  selectSurfaceProjectionView,
+  surfaceProjectionThreadKey,
+} from "../utils/surfaceProjectionSelector";
 import { AgentCallTree } from "./AgentCallTree";
 import { AgentMonitorSummary } from "./AgentMonitorSummary";
 import { ModelUsageBreakdown } from "./ModelUsageBreakdown";
+import { ProjectionIssues, ProjectionStatusDetails } from "./ProjectionStatus";
 
 type AgentMonitorPageProps = {
   runtimeState: AgentRuntimeStore;
@@ -99,6 +104,27 @@ export function AgentMonitorPage({
     () => unfilteredView.threads.find((thread) => thread.threadId === sessionId) ?? null,
     [sessionId, unfilteredView.threads],
   );
+  const projectionView = useMemo(
+    () => selectSurfaceProjectionView(globalSourceSnapshot),
+    [globalSourceSnapshot],
+  );
+  const selectedProjections = useMemo(() => {
+    if (!selectedSession?.codexHomeIdentity) return [];
+    return projectionView.byThreadKey.get(surfaceProjectionThreadKey({
+      codexHomeIdentity: selectedSession.codexHomeIdentity,
+      threadId: selectedSession.threadId,
+    })) ?? [];
+  }, [projectionView, selectedSession]);
+  const projectionIssues = useMemo(() => {
+    const canonicalKeys = new Set(unfilteredView.threads
+      .filter((thread) => thread.codexHomeIdentity)
+      .map((thread) => surfaceProjectionThreadKey({
+        codexHomeIdentity: thread.codexHomeIdentity!,
+        threadId: thread.threadId,
+      })));
+    return projectionView.issues.filter((observation) =>
+      !canonicalKeys.has(surfaceProjectionThreadKey(observation.key.threadKey)));
+  }, [projectionView.issues, unfilteredView.threads]);
   const { snapshot: sessionUsageSnapshot } = useLocalUsage(
     Boolean(historySessionId),
     historicalWorkspace?.path ?? null,
@@ -171,7 +197,16 @@ export function AgentMonitorPage({
       <label>Session<select aria-label="Session" value={sessionId ?? ""} onChange={(event) => { const nextSessionId = event.target.value || null; setSessionId(nextSessionId); setHistorySessionId(nextSessionId); manualSessionSelectionRef.current = true; }}><option value="">All Sessions</option>{sessionOptions.map((option) => <option key={option.threadId} value={option.threadId}>{option.label}</option>)}</select></label>
     </section>
     {currentThreadId && !sessionSelection.currentObserved ? <div className="agent-monitor-current-unobserved">Current session not observed yet</div> : null}
-    {selectedSession ? <div className="agent-monitor-session-details"><strong>{selectedSession.name}</strong><span>Created: {selectedSession.createdAtMs ? new Date(selectedSession.createdAtMs).toLocaleString() : "unavailable"}</span>{sessionUsageSnapshot?.sessionLinked === false ? <span>History: not linked</span> : null}</div> : null}
+    {selectedSession ? <div className="agent-monitor-session-details">
+      <strong>{selectedSession.name}</strong>
+      {selectedSession.source.sourceTimestampMs !== null || selectedSession.source.observedTimestampMs !== null
+        ? <span>Latest activity: {new Date(selectedSession.source.sourceTimestampMs ?? selectedSession.source.observedTimestampMs!).toLocaleString()}</span>
+        : null}
+      <span>Created: {selectedSession.createdAtMs ? new Date(selectedSession.createdAtMs).toLocaleString() : "unavailable"}</span>
+      {sessionUsageSnapshot?.sessionLinked === false ? <span>History: not linked</span> : null}
+      <ProjectionStatusDetails observations={selectedProjections} />
+    </div> : null}
+    <ProjectionIssues observations={projectionIssues} />
     <AgentMonitorSummary summary={summary} />
     <section className="agent-monitor-call-tree" aria-label="Live Agent Runtime"><div className="agent-monitor-section-heading"><h2>Live agent call tree</h2><span>{summary.totalAgents} visible</span></div><AgentCallTree roots={forest} /></section>
     <ModelUsageBreakdown snapshot={usageSnapshot} models={filteredModels} />

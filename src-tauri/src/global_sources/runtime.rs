@@ -4,6 +4,7 @@ use std::sync::{Mutex, RwLock};
 
 use crate::global_sources::app_server_live::normalize_app_server_live;
 use crate::global_sources::snapshot::GlobalSourceSnapshot;
+use crate::global_sources::snapshot::SurfaceProjectionSnapshotEntry;
 use crate::shared::global_sources_core::deletion_tombstone::DeletionTombstone;
 use crate::shared::global_sources_core::desktop_projection::ThreadReadStatus;
 use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
@@ -39,6 +40,17 @@ impl GlobalRolloutRuntime {
         canonical: CanonicalSourceSnapshot,
         generated_at_ms: i64,
     ) -> Option<GlobalSourceSnapshot> {
+        self.publish_snapshot(canonical, Vec::new(), generated_at_ms)
+    }
+
+    pub(crate) fn publish_snapshot(
+        &self,
+        canonical: CanonicalSourceSnapshot,
+        surface_projection_updates: Vec<
+            crate::shared::surface_projection_core::SurfaceProjectionObservation,
+        >,
+        generated_at_ms: i64,
+    ) -> Option<GlobalSourceSnapshot> {
         let workspace_codex_home_identities = self
             .live_sources
             .read()
@@ -48,8 +60,39 @@ impl GlobalRolloutRuntime {
             .map(|(workspace_id, home)| (workspace_id.clone(), home.identity.clone()))
             .collect::<HashMap<_, _>>();
         let mut current = self.snapshot.write().expect("global source snapshot lock");
+        let mut surface_projections = current.surface_projections.clone();
+        for update in surface_projection_updates
+            .into_iter()
+            .map(SurfaceProjectionSnapshotEntry::from)
+        {
+            if let Some(existing) = surface_projections
+                .iter_mut()
+                .find(|existing| existing.key == update.key)
+            {
+                if update.observed_at >= existing.observed_at {
+                    *existing = update;
+                }
+            } else {
+                surface_projections.push(update);
+            }
+        }
+        surface_projections.sort_by(|left, right| {
+            left.key
+                .thread_key
+                .codex_home_identity
+                .cmp(&right.key.thread_key.codex_home_identity)
+                .then_with(|| {
+                    left.key
+                        .thread_key
+                        .thread_id
+                        .cmp(&right.key.thread_key.thread_id)
+                })
+                .then_with(|| left.key.surface.cmp(&right.key.surface))
+                .then_with(|| left.key.projection_kind.cmp(&right.key.projection_kind))
+        });
         if current.workspace_codex_home_identities == workspace_codex_home_identities
             && current.threads == canonical.threads
+            && current.surface_projections == surface_projections
         {
             return None;
         }
@@ -58,6 +101,7 @@ impl GlobalRolloutRuntime {
             generated_at_ms,
             workspace_codex_home_identities,
             threads: canonical.threads,
+            surface_projections,
         };
         *current = next.clone();
         Some(next)
@@ -590,5 +634,46 @@ mod tests {
         let mut detached = read;
         detached.threads.clear();
         assert_eq!(runtime.snapshot().threads.len(), 1);
+    }
+
+    #[test]
+    fn projection_observations_are_published_separately_from_canonical_threads() {
+        use crate::shared::global_sources_core::source_registry::SourceAuthorityRegistry;
+        use crate::shared::surface_projection_core::{
+            ObservationCoverage, ProjectionActionCapability, ProjectionMembershipExpectation,
+            SurfaceProjectionKey, SurfaceProjectionKind, SurfaceProjectionObservation,
+            SurfaceProjectionSurface,
+        };
+
+        let runtime = GlobalRolloutRuntime::default();
+        let thread_key = CodexThreadKey::new("codex-home:fixture", "deleted-thread");
+        let observation = SurfaceProjectionObservation::membership(
+            SurfaceProjectionKey::new(
+                thread_key,
+                SurfaceProjectionSurface::Desktop,
+                SurfaceProjectionKind::Catalog,
+            ),
+            true,
+            ObservationCoverage::Complete,
+            1_000,
+            vec!["fixture".to_string()],
+            ProjectionActionCapability::ObserveOnly,
+            ProjectionMembershipExpectation::Optional,
+        );
+
+        let published = runtime
+            .publish_snapshot(
+                SourceAuthorityRegistry::default().snapshot(),
+                vec![observation],
+                1_100,
+            )
+            .expect("projection publication");
+
+        assert!(published.threads.is_empty());
+        assert_eq!(published.surface_projections.len(), 1);
+        assert_eq!(
+            published.surface_projections[0].key.thread_key.thread_id,
+            "deleted-thread"
+        );
     }
 }

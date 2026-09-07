@@ -4,7 +4,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { applyRuntimeRecords, createRuntimeState, type RuntimeProtocolRecord } from "../runtime";
-import type { GlobalSourceSnapshot } from "../global-source/types";
+import type {
+  GlobalSourceSnapshot,
+  SurfaceProjectionObservation,
+} from "../global-source/types";
 import { AgentMonitorPage } from "./AgentMonitorPage";
 
 vi.mock("@/features/home/hooks/useLocalUsage", () => ({
@@ -108,6 +111,28 @@ function runtimeWithRootThreads(threadIds: string[]) {
     })),
     1_000,
   );
+}
+
+function surfaceProjection(
+  threadId: string,
+  overrides: Partial<SurfaceProjectionObservation> = {},
+): SurfaceProjectionObservation {
+  return {
+    key: {
+      threadKey: { codexHomeIdentity: "home-1", threadId },
+      surface: "DESKTOP",
+      projectionKind: "CATALOG",
+    },
+    state: "PRESENT",
+    coverage: "COMPLETE",
+    observedAt: 1_000,
+    provenance: ["fixture"],
+    diagnostics: [],
+    reconciliationState: "NOT_REQUIRED",
+    actionCapability: "OBSERVE_ONLY",
+    membershipExpectation: "OPTIONAL",
+    ...overrides,
+  };
 }
 
 describe("AgentMonitorPage", () => {
@@ -541,5 +566,154 @@ describe("AgentMonitorPage", () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("main").classList.contains("is-split")).toBe(true);
+  });
+
+  it("projection_status_does_not_change_current_session", async () => {
+    const snapshot: GlobalSourceSnapshot = {
+      revision: 1,
+      generatedAtMs: 1_000,
+      workspaceCodexHomeIdentities: { codex: "home-1" },
+      threads: [],
+      surfaceProjections: [surfaceProjection("main", { state: "ABSENT" })],
+    };
+    render(
+      <AgentMonitorPage
+        runtimeState={runtimeWithLiveEvidence()}
+        globalSourceSnapshot={snapshot}
+        localUsageSnapshot={historicalSnapshot}
+        currentThreadId="main"
+        now={6_000}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Session") as HTMLSelectElement).value).toBe("main");
+    });
+    expect(screen.getByText("Projection status · Observed")).toBeTruthy();
+    expect(screen.getByText("Not present in this surface")).toBeTruthy();
+  });
+
+  it("projection_status_does_not_change_token_or_runtime_semantics", async () => {
+    const snapshot: GlobalSourceSnapshot = {
+      revision: 1,
+      generatedAtMs: 1_000,
+      workspaceCodexHomeIdentities: { codex: "home-1" },
+      threads: [],
+      surfaceProjections: [surfaceProjection("main")],
+    };
+    render(
+      <AgentMonitorPage
+        runtimeState={runtimeWithLiveEvidence()}
+        globalSourceSnapshot={snapshot}
+        localUsageSnapshot={historicalSnapshot}
+        currentThreadId="main"
+        now={6_000}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Session") as HTMLSelectElement).value).toBe("main");
+    });
+    const tree = screen.getByRole("region", { name: "Live Agent Runtime" });
+    expect(within(tree).getByText("25")).toBeTruthy();
+    expect(within(tree).getByText("—")).toBeTruthy();
+  });
+
+  it("projection_only_stale_orphan_renders_as_an_issue_without_a_session_or_agent_node", () => {
+    const snapshot: GlobalSourceSnapshot = {
+      revision: 1,
+      generatedAtMs: 1_000,
+      workspaceCodexHomeIdentities: {},
+      threads: [],
+      surfaceProjections: [surfaceProjection("deleted-thread", {
+        state: "STALE",
+        diagnostics: ["DESKTOP_STALE_ORPHAN"],
+        reconciliationState: "PENDING",
+      })],
+    };
+    render(
+      <AgentMonitorPage
+        runtimeState={createRuntimeState()}
+        globalSourceSnapshot={snapshot}
+        localUsageSnapshot={historicalSnapshot}
+        now={6_000}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Projection Issues" })).toBeTruthy();
+    expect(within(screen.getByLabelText("Session")).getAllByRole("option")).toHaveLength(1);
+    expect(screen.getByText("No agent threads are available yet.")).toBeTruthy();
+  });
+
+  it("latest_activity_is_preferred_over_creation_time_but_created_is_preserved", async () => {
+    render(
+      <AgentMonitorPage
+        runtimeState={runtimeWithLiveEvidence()}
+        localUsageSnapshot={historicalSnapshot}
+        currentThreadId="main"
+        now={6_000}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Session") as HTMLSelectElement).value).toBe("main");
+    });
+    expect(screen.getByText(/^Latest activity:/)).toBeTruthy();
+    expect(screen.getByText(/^Created:/)).toBeTruthy();
+  });
+
+  it("created_is_not_mislabeled_as_latest_activity_when_activity_evidence_is_unavailable", () => {
+    const createdProvenance = {
+      sourceKind: "historical-rollout-scan" as const,
+      temporalClass: "HISTORICAL" as const,
+      sourceInstanceId: "history:fixture",
+      sourceGeneration: "fixture:1",
+      sourceTimestampMs: 100_000,
+      observedTimestampMs: 101_000,
+      freshness: {
+        state: "settled" as const,
+        lastCompleteRecordObservedAtMs: 101_000,
+        reason: "creation record only",
+      },
+    };
+    const snapshot: GlobalSourceSnapshot = {
+      revision: 1,
+      generatedAtMs: 102_000,
+      workspaceCodexHomeIdentities: {},
+      threads: [{
+        key: { codexHomeIdentity: "home-1", threadId: "creation-only" },
+        parentThreadKey: null,
+        agentPath: null,
+        currentTurn: {
+          key: {
+            threadKey: { codexHomeIdentity: "home-1", threadId: "creation-only" },
+            turnId: "turn-1",
+          },
+          lifecycle: null,
+          startedAt: createdProvenance,
+          completedAt: null,
+        },
+        lifecycle: null,
+        observedModel: null,
+        tokenSnapshot: null,
+        authorityProvenance: null,
+        liveLaneCount: 0,
+        nearLiveLaneCount: 1,
+        historicalLaneCount: 0,
+      }],
+    };
+    render(
+      <AgentMonitorPage
+        runtimeState={createRuntimeState()}
+        globalSourceSnapshot={snapshot}
+        localUsageSnapshot={historicalSnapshot}
+        now={102_000}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Activity"), { target: { value: "all" } });
+    fireEvent.change(screen.getByLabelText("Session"), { target: { value: "creation-only" } });
+    expect(screen.queryByText(/^Latest activity:/)).toBeNull();
+    expect(screen.getByText(/^Created:/)).toBeTruthy();
   });
 });

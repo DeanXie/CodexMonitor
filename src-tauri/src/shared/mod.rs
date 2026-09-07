@@ -4,6 +4,7 @@ pub(crate) mod codex_aux_core;
 pub(crate) mod codex_core;
 pub(crate) mod codex_update_core;
 pub(crate) mod config_toml_core;
+pub(crate) mod desktop_projection_handling;
 pub(crate) mod execution_settings_evidence;
 pub(crate) mod execution_settings_ingestion;
 pub(crate) mod files_core;
@@ -42,3 +43,7 @@ mod surface_projection_core_tests;
 #[cfg(test)]
 #[path = "surface_projection_engine_tests.rs"]
 mod surface_projection_engine_tests;
+
+#[cfg(test)]
+#[path = "desktop_projection_handling_tests.rs"]
+mod desktop_projection_handling_tests;

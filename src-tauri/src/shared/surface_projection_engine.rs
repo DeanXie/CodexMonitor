@@ -157,6 +157,22 @@ pub(crate) fn desktop_catalog_observation(
     assessment: Option<&DesktopProjectionAssessment>,
     observed_at: u64,
 ) -> SurfaceProjectionObservation {
+    desktop_catalog_observation_with_expectation(
+        thread_key,
+        snapshot,
+        assessment,
+        observed_at,
+        ProjectionMembershipExpectation::Optional,
+    )
+}
+
+pub(crate) fn desktop_catalog_observation_with_expectation(
+    thread_key: CodexThreadKey,
+    snapshot: &DesktopMetadataSnapshot,
+    assessment: Option<&DesktopProjectionAssessment>,
+    observed_at: u64,
+    membership_expectation: ProjectionMembershipExpectation,
+) -> SurfaceProjectionObservation {
     if snapshot.codex_home_identity != thread_key.codex_home_identity {
         return SurfaceProjectionObservation::membership(
             SurfaceProjectionKey::new(
@@ -168,8 +184,8 @@ pub(crate) fn desktop_catalog_observation(
             ObservationCoverage::Failed,
             observed_at,
             vec!["desktop.metadata.local-thread-catalog".to_string()],
-            ProjectionActionCapability::Refreshable,
-            ProjectionMembershipExpectation::Optional,
+            ProjectionActionCapability::ObserveOnly,
+            membership_expectation,
         )
         .with_diagnostic("desktop metadata CODEX_HOME identity mismatch");
     }
@@ -195,8 +211,8 @@ pub(crate) fn desktop_catalog_observation(
         coverage,
         observed_at,
         "desktop.metadata.local-thread-catalog",
-        ProjectionActionCapability::Refreshable,
-        ProjectionMembershipExpectation::Optional,
+        ProjectionActionCapability::ObserveOnly,
+        membership_expectation,
         &thread_key.thread_id,
     );
     for diagnostic in &snapshot.diagnostics {

@@ -1,6 +1,6 @@
 # Phase 3.4.1 — Surface Projection Observation Model
 
-Status: **PASS / FROZEN**. Phase 3.4.0 is **FORENSICS COMPLETE**, and Phase 3.4.2 and Phase 3.4.3 are **PASS / FROZEN**. Phase 3.4.4 Monitor Projection Status UI is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.4.0 is **FORENSICS COMPLETE**, and Phase 3.4.2 through Phase 3.4.4 are **PASS / FROZEN**. Phase 3.4.5 Focused Cross-Surface E2E is **GO / NOT STARTED**.
 
 ## Contract
 
@@ -40,4 +40,4 @@ This Slice is pure shared-core state and selection logic. It does not ingest Des
 - `npm run typecheck`: PASS.
 - `git diff --check`: PASS.
 
-Phase 3.4.2 and Phase 3.4.3 are implemented and frozen. Phase 3.4.4 Monitor Projection Status UI is the next and only development start point.
+Phase 3.4.2 through Phase 3.4.4 are implemented and frozen. Phase 3.4.5 Focused Cross-Surface E2E is the next and only development start point.

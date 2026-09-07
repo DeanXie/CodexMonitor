@@ -1,6 +1,6 @@
 # Phase 3.4.2 — Projection Observation Engine
 
-Status: **PASS / FROZEN**. Phase 3.4.0 is **FORENSICS COMPLETE**, and Phase 3.4.1 through Phase 3.4.3 are **PASS / FROZEN**. Phase 3.4.4 Monitor Projection Status UI is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.4.0 is **FORENSICS COMPLETE**, and Phase 3.4.1 through Phase 3.4.4 are **PASS / FROZEN**. Phase 3.4.5 Focused Cross-Surface E2E is **GO / NOT STARTED**.
 
 ## Engine boundary
 
@@ -41,4 +41,4 @@ Surface observations cannot revive tombstoned Threads. Phase 2.5 `DESKTOP_STALE_
 - daemon tests: 445 passed / 3 ignored.
 - `cargo check --all-targets`, `cargo fmt --all -- --check`, `npm run typecheck`, and `git diff --check`: PASS.
 
-Phase 3.4.4 Monitor Projection Status UI is the next and only development start point.
+Phase 3.4.5 Focused Cross-Surface E2E is the next and only development start point.

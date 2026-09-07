@@ -1,6 +1,6 @@
 # Phase 3.4.1 — Surface Projection Observation Model
 
-Status: **PASS / FROZEN**. Phase 3.4.0 is **FORENSICS COMPLETE**. Phase 3.4.2 Projection Observation Engine is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.4.0 is **FORENSICS COMPLETE**. Phase 3.4.2 Projection Observation Engine is **PASS / FROZEN**. Phase 3.4.3 Desktop Stale/Missing Projection Handling is **GO / NOT STARTED**.
 
 ## Contract
 
@@ -40,4 +40,4 @@ This Slice is pure shared-core state and selection logic. It does not ingest Des
 - `npm run typecheck`: PASS.
 - `git diff --check`: PASS.
 
-Phase 3.4.2 Projection Observation Engine is the next and only development start point.
+Phase 3.4.2 is implemented and frozen. Phase 3.4.3 Desktop Stale/Missing Projection Handling is the next and only development start point.

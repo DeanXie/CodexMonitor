@@ -17,6 +17,13 @@ use crate::codex::args::parse_codex_args;
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
 use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
+use crate::shared::surface_projection_core::{
+    ObservationCoverage, SurfaceProjectionKind, SurfaceProjectionSurface,
+};
+use crate::shared::surface_projection_engine::{
+    monitor_exact_read_observation, monitor_list_observation, ExactIdProjectionResult,
+    ProjectionObservationEngine,
+};
 use crate::shared::workspace_interop_core::{
     ExecutionEnvironmentKey, RootLocatorPlatform, RuntimeOriginWorkspaceObservation,
     RuntimeTurnWorkspaceObservation, RuntimeWorkspaceReconciler, RuntimeWorkspaceRoute,
@@ -438,6 +445,125 @@ fn reconcile_execution_settings_message(
     )
 }
 
+fn reconcile_surface_projection_message(
+    engine: &ProjectionObservationEngine,
+    codex_home_identity: &str,
+    completed_request: Option<&RequestContext>,
+    message: &Value,
+    observed_at: u64,
+) -> usize {
+    let Some(request) = completed_request else {
+        return 0;
+    };
+    match request.method.as_str() {
+        "thread/read" => {
+            let Some(thread_id) = request
+                .params
+                .get("threadId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                return 0;
+            };
+            let result = classify_exact_thread_read_result(thread_id, message);
+            usize::from(engine.observe(monitor_exact_read_observation(
+                crate::shared::global_sources_core::rollout_identity::CodexThreadKey::new(
+                    codex_home_identity,
+                    thread_id,
+                ),
+                result,
+                observed_at,
+            )))
+        }
+        "thread/list" => {
+            let entries = extract_thread_entries_from_thread_list_result(message);
+            let observed_ids = entries
+                .iter()
+                .filter(|entry| !entry.is_memory_consolidation)
+                .map(|entry| entry.thread_id.clone())
+                .collect::<Vec<_>>();
+            let coverage = if message.get("error").is_some()
+                || !thread_list_inventory_shape_is_valid(message)
+            {
+                ObservationCoverage::Failed
+            } else {
+                // Monitor thread/list always carries sourceKinds and may carry cursor/limit.
+                // It is therefore a bounded projection inventory, never complete authority.
+                ObservationCoverage::Bounded
+            };
+            let mut keys = engine.known_keys(
+                codex_home_identity,
+                SurfaceProjectionSurface::Monitor,
+                SurfaceProjectionKind::SessionList,
+            );
+            for thread_id in &observed_ids {
+                let key = crate::shared::surface_projection_core::SurfaceProjectionKey::new(
+                    crate::shared::global_sources_core::rollout_identity::CodexThreadKey::new(
+                        codex_home_identity,
+                        thread_id,
+                    ),
+                    SurfaceProjectionSurface::Monitor,
+                    SurfaceProjectionKind::SessionList,
+                );
+                if !keys.contains(&key) {
+                    keys.push(key);
+                }
+            }
+            keys.into_iter()
+                .filter(|key| {
+                    engine.observe(monitor_list_observation(
+                        key.thread_key.clone(),
+                        &observed_ids,
+                        coverage,
+                        observed_at,
+                    ))
+                })
+                .count()
+        }
+        _ => 0,
+    }
+}
+
+fn classify_exact_thread_read_result(
+    requested_thread_id: &str,
+    message: &Value,
+) -> ExactIdProjectionResult {
+    if let Some(error) = message.get("error") {
+        let detail = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("thread/read failed");
+        let normalized = detail.to_ascii_lowercase();
+        return if normalized.contains("thread not loaded")
+            || normalized.contains("thread not found")
+            || normalized.contains("no rollout found")
+        {
+            ExactIdProjectionResult::AuthoritativeNotFound
+        } else {
+            ExactIdProjectionResult::Failed(detail.to_string())
+        };
+    }
+    match message.pointer("/result/thread/id").and_then(Value::as_str) {
+        Some(thread_id) if thread_id == requested_thread_id => ExactIdProjectionResult::Present,
+        Some(thread_id) => ExactIdProjectionResult::Failed(format!(
+            "thread/read returned mismatched thread id {thread_id}"
+        )),
+        None => ExactIdProjectionResult::Failed(
+            "thread/read response is missing result.thread.id".to_string(),
+        ),
+    }
+}
+
+fn thread_list_inventory_shape_is_valid(message: &Value) -> bool {
+    ["data", "threads", "items", "results"].iter().any(|key| {
+        message
+            .get("result")
+            .and_then(|result| result.get(*key))
+            .is_some_and(Value::is_array)
+    })
+}
+
 #[derive(Debug)]
 struct RuntimeRouteUpdate {
     thread_id: String,
@@ -668,6 +794,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) thread_workspace: Mutex<HashMap<String, String>>,
     pub(crate) workspace_reconciler: Mutex<RuntimeWorkspaceReconciler>,
     pub(crate) execution_settings_evidence: ExecutionSettingsEvidenceRuntime,
+    pub(crate) projection_observations: ProjectionObservationEngine,
     // Shared process owner survives session reconnect; this is only an observer.
     pub(crate) creation_coordinator: Mutex<Option<CreationCoordinator>>,
     pub(crate) runtime_observation_keys: Mutex<HashSet<String>>,
@@ -1060,6 +1187,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
         thread_workspace: Mutex::new(HashMap::new()),
         workspace_reconciler: Mutex::new(workspace_reconciler),
         execution_settings_evidence,
+        projection_observations: Default::default(),
         creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),
@@ -1150,6 +1278,13 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                 maybe_id.zip(completed_request.as_ref()),
                 &value,
                 &settings_observation_key,
+                settings_observed_at,
+            );
+            reconcile_surface_projection_message(
+                &session_clone.projection_observations,
+                &codex_home_identity,
+                completed_request.as_ref(),
+                &value,
                 settings_observed_at,
             );
 
@@ -1431,7 +1566,8 @@ mod tests {
         apply_runtime_route_updates, build_initialize_params, extract_related_thread_ids,
         extract_thread_entries_from_thread_list_result, extract_thread_id,
         reconcile_execution_settings_message, reconcile_runtime_message,
-        record_pending_settings_request, should_suppress_hidden_thread_event, source_subagent_kind,
+        reconcile_surface_projection_message, record_pending_settings_request,
+        should_suppress_hidden_thread_event, source_subagent_kind,
         thread_started_is_memory_consolidation, RequestContext,
     };
     use crate::shared::execution_settings_evidence::{
@@ -1439,6 +1575,13 @@ mod tests {
     };
     use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
     use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
+    use crate::shared::surface_projection_core::{
+        CanonicalThreadProjectionState, SurfaceProjectionKey, SurfaceProjectionKind,
+        SurfaceProjectionState, SurfaceProjectionSurface,
+    };
+    use crate::shared::surface_projection_engine::{
+        monitor_list_observation, ProjectionObservationEngine,
+    };
     use crate::shared::workspace_interop_core::{
         ExecutionEnvironmentKey, RootLocatorPlatform, RuntimeWorkspaceReconciler,
     };
@@ -1466,6 +1609,106 @@ mod tests {
             method: method.to_string(),
             params,
         }
+    }
+
+    fn monitor_projection_key(
+        thread_id: &str,
+        kind: SurfaceProjectionKind,
+    ) -> SurfaceProjectionKey {
+        SurfaceProjectionKey::new(
+            CodexThreadKey::new("codex-home-fixture", thread_id),
+            SurfaceProjectionSurface::Monitor,
+            kind,
+        )
+    }
+
+    #[test]
+    fn exact_monitor_read_response_is_ingested_at_app_server_boundary() {
+        let engine = ProjectionObservationEngine::default();
+        let context = request_context(
+            "workspace-a",
+            "thread/read",
+            json!({ "threadId": "thread-a" }),
+        );
+
+        assert_eq!(
+            reconcile_surface_projection_message(
+                &engine,
+                "codex-home-fixture",
+                Some(&context),
+                &json!({ "result": { "thread": { "id": "thread-a" } } }),
+                10,
+            ),
+            1
+        );
+        let effective = engine
+            .effective(
+                &monitor_projection_key("thread-a", SurfaceProjectionKind::CurrentSession),
+                CanonicalThreadProjectionState::Present,
+            )
+            .unwrap();
+        assert_eq!(effective.state, SurfaceProjectionState::Present);
+    }
+
+    #[test]
+    fn authoritative_monitor_read_not_found_is_ingested_as_absent() {
+        let engine = ProjectionObservationEngine::default();
+        let context = request_context(
+            "workspace-a",
+            "thread/read",
+            json!({ "threadId": "thread-a" }),
+        );
+
+        reconcile_surface_projection_message(
+            &engine,
+            "codex-home-fixture",
+            Some(&context),
+            &json!({
+                "error": {
+                    "code": -32600,
+                    "message": "thread not loaded: thread-a"
+                }
+            }),
+            10,
+        );
+        let effective = engine
+            .effective(
+                &monitor_projection_key("thread-a", SurfaceProjectionKind::CurrentSession),
+                CanonicalThreadProjectionState::Absent,
+            )
+            .unwrap();
+        assert_eq!(effective.state, SurfaceProjectionState::Absent);
+    }
+
+    #[test]
+    fn filtered_monitor_list_miss_updates_known_projection_as_unknown() {
+        let engine = ProjectionObservationEngine::default();
+        engine.observe(monitor_list_observation(
+            CodexThreadKey::new("codex-home-fixture", "thread-a"),
+            &["thread-a".to_string()],
+            crate::shared::surface_projection_core::ObservationCoverage::Bounded,
+            5,
+        ));
+        let context = request_context(
+            "workspace-a",
+            "thread/list",
+            json!({ "sourceKinds": ["cli", "appServer"], "limit": 20 }),
+        );
+
+        reconcile_surface_projection_message(
+            &engine,
+            "codex-home-fixture",
+            Some(&context),
+            &json!({ "result": { "data": [{ "id": "thread-other" }] } }),
+            10,
+        );
+        let effective = engine
+            .effective(
+                &monitor_projection_key("thread-a", SurfaceProjectionKind::SessionList),
+                CanonicalThreadProjectionState::Present,
+            )
+            .unwrap();
+        assert_eq!(effective.state, SurfaceProjectionState::Unknown);
     }
 
     #[test]

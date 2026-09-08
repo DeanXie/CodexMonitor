@@ -3,7 +3,7 @@ mod tcp_transport;
 mod transport;
 
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,8 +11,12 @@ use tauri::AppHandle;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
+use crate::shared::remote_host_identity::{
+    validate_daemon_info, RemoteDaemonInfo, RemoteHostIdentity,
+};
 use crate::state::AppState;
-use crate::types::BackendMode;
+use crate::storage::write_settings_atomic;
+use crate::types::{BackendMode, RemoteBackendProvider, RemoteBackendTarget};
 
 use self::protocol::{build_request_line, DEFAULT_REMOTE_HOST, DISCONNECTED_MESSAGE};
 use self::tcp_transport::TcpTransport;
@@ -65,10 +69,24 @@ struct RemoteBackendInner {
     pending: Arc<Mutex<PendingMap>>,
     next_id: AtomicU64,
     connected: Arc<std::sync::atomic::AtomicBool>,
+    ready: AtomicBool,
 }
 
 impl RemoteBackend {
     pub(crate) async fn call(&self, method: &str, params: Value) -> Result<Value, String> {
+        if !self.inner.ready.load(Ordering::SeqCst) {
+            return Err(
+                "remote backend is not routable before authenticated host handshake".to_string(),
+            );
+        }
+        self.call_inner(method, params).await
+    }
+
+    async fn call_during_handshake(&self, method: &str, params: Value) -> Result<Value, String> {
+        self.call_inner(method, params).await
+    }
+
+    async fn call_inner(&self, method: &str, params: Value) -> Result<Value, String> {
         if !self.inner.connected.load(Ordering::SeqCst) {
             return Err(DISCONNECTED_MESSAGE.to_string());
         }
@@ -104,6 +122,10 @@ impl RemoteBackend {
                 ))
             }
         }
+    }
+
+    fn mark_ready(&self) {
+        self.inner.ready.store(true, Ordering::SeqCst);
     }
 }
 
@@ -197,7 +219,14 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
         resolve_transport_config(&settings)?
     };
     let transport_kind = transport_config.kind();
-    let auth_token = transport_config.auth_token().map(|value| value.to_string());
+    let auth_token = transport_config
+        .auth_token()
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            "remote backend requires token authentication before host identity handshake"
+                .to_string()
+        })?;
 
     let transport: Box<dyn RemoteTransport> = match transport_config.kind() {
         RemoteTransportKind::Tcp => Box::new(TcpTransport),
@@ -210,17 +239,25 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
             pending: connection.pending,
             next_id: AtomicU64::new(1),
             connected: connection.connected,
+            ready: AtomicBool::new(false),
         }),
     };
 
     if matches!(transport_kind, RemoteTransportKind::Tcp) {
-        if let Some(token) = auth_token {
-            client
-                .call("auth", json!({ "token": token }))
-                .await
-                .map(|_| ())?;
-        }
+        client
+            .call_during_handshake("auth", json!({ "token": auth_token }))
+            .await
+            .map(|_| ())?;
     }
+
+    let daemon_info_value = client
+        .call_during_handshake("daemon_info", json!({}))
+        .await?;
+    let daemon_info: RemoteDaemonInfo = serde_json::from_value(daemon_info_value)
+        .map_err(|error| format!("invalid remote daemon identity response: {error}"))?;
+    validate_daemon_info(&daemon_info)?;
+    persist_or_validate_remote_host_pin(state, &daemon_info.remote_host_identity, true).await?;
+    client.mark_ready();
 
     {
         let mut guard = state.remote_backend.lock().await;
@@ -228,6 +265,85 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
     }
 
     Ok(client)
+}
+
+async fn persist_or_validate_remote_host_pin(
+    state: &AppState,
+    remote_host_identity: &RemoteHostIdentity,
+    authenticated: bool,
+) -> Result<(), String> {
+    let mut current = state.app_settings.lock().await;
+    let mut next = current.clone();
+    let changed = reconcile_remote_host_pin(&mut next, remote_host_identity, authenticated)?;
+    if changed {
+        write_settings_atomic(&state.settings_path, &next)?;
+        *current = next;
+    }
+    Ok(())
+}
+
+fn reconcile_remote_host_pin(
+    settings: &mut crate::types::AppSettings,
+    remote_host_identity: &RemoteHostIdentity,
+    authenticated: bool,
+) -> Result<bool, String> {
+    let active_index = settings
+        .active_remote_backend_id
+        .as_deref()
+        .and_then(|id| {
+            settings
+                .remote_backends
+                .iter()
+                .position(|target| target.id == id)
+        })
+        .or_else(|| (!settings.remote_backends.is_empty()).then_some(0));
+
+    if let Some(index) = active_index {
+        if let Some(expected) = settings.remote_backends[index]
+            .remote_host_identity
+            .as_deref()
+        {
+            let expected = RemoteHostIdentity::parse(expected)
+                .map_err(|error| format!("configured remote host identity is invalid: {error}"))?;
+            if expected != *remote_host_identity {
+                return Err(format!(
+                    "remote host identity mismatch: expected {}, received {}",
+                    expected.as_str(),
+                    remote_host_identity.as_str()
+                ));
+            }
+            return Ok(false);
+        }
+        if !authenticated {
+            return Err(
+                "cannot learn remote host identity from an unauthenticated connection".to_string(),
+            );
+        }
+        settings.remote_backends[index].remote_host_identity =
+            Some(remote_host_identity.as_str().to_string());
+        return Ok(true);
+    }
+
+    if !authenticated {
+        return Err(
+            "cannot learn remote host identity from an unauthenticated connection".to_string(),
+        );
+    }
+    let id = settings
+        .active_remote_backend_id
+        .clone()
+        .unwrap_or_else(|| "remote-default".to_string());
+    settings.remote_backends.push(RemoteBackendTarget {
+        id: id.clone(),
+        name: "Primary remote".to_string(),
+        provider: RemoteBackendProvider::Tcp,
+        host: settings.remote_backend_host.clone(),
+        token: settings.remote_backend_token.clone(),
+        remote_host_identity: Some(remote_host_identity.as_str().to_string()),
+        last_connected_at_ms: None,
+    });
+    settings.active_remote_backend_id = Some(id);
+    Ok(true)
 }
 
 fn resolve_transport_config(
@@ -246,9 +362,16 @@ fn resolve_transport_config(
 
 #[cfg(test)]
 mod tests {
-    use super::{can_retry_after_disconnect, resolve_transport_config};
+    use super::{
+        can_retry_after_disconnect, reconcile_remote_host_pin, resolve_transport_config,
+        RemoteBackend, RemoteBackendInner,
+    };
     use crate::remote_backend::transport::RemoteTransportConfig;
+    use crate::shared::remote_host_identity::RemoteHostIdentity;
     use crate::types::AppSettings;
+    use std::sync::atomic::{AtomicBool, AtomicU64};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
     #[test]
     fn resolve_tcp_transport_uses_remote_host() {
@@ -270,5 +393,118 @@ mod tests {
         assert!(!can_retry_after_disconnect("send_user_message"));
         assert!(!can_retry_after_disconnect("start_thread"));
         assert!(!can_retry_after_disconnect("remove_workspace"));
+    }
+
+    fn host(value: &str) -> RemoteHostIdentity {
+        RemoteHostIdentity::parse(value).unwrap()
+    }
+
+    #[test]
+    fn legacy_unpinned_target_tofu_pins_once() {
+        let mut settings = AppSettings::default();
+        assert!(reconcile_remote_host_pin(
+            &mut settings,
+            &host("6ba7b810-9dad-41d1-80b4-00c04fd430c8"),
+            true,
+        )
+        .unwrap());
+        assert_eq!(
+            settings.remote_backends[0].remote_host_identity.as_deref(),
+            Some("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+        );
+        assert!(!reconcile_remote_host_pin(
+            &mut settings,
+            &host("6ba7b810-9dad-41d1-80b4-00c04fd430c8"),
+            true,
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn pinned_identity_mismatch_fails_closed_and_never_overwrites_pin() {
+        let mut settings = AppSettings::default();
+        reconcile_remote_host_pin(
+            &mut settings,
+            &host("6ba7b810-9dad-41d1-80b4-00c04fd430c8"),
+            true,
+        )
+        .unwrap();
+        let result = reconcile_remote_host_pin(
+            &mut settings,
+            &host("6ba7b811-9dad-41d1-80b4-00c04fd430c8"),
+            true,
+        );
+        assert!(result.is_err());
+        assert_eq!(
+            settings.remote_backends[0].remote_host_identity.as_deref(),
+            Some("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+        );
+    }
+
+    #[test]
+    fn pinned_identity_match_succeeds() {
+        let mut settings = AppSettings::default();
+        let identity = host("6ba7b810-9dad-41d1-80b4-00c04fd430c8");
+        reconcile_remote_host_pin(&mut settings, &identity, true).unwrap();
+        assert!(!reconcile_remote_host_pin(&mut settings, &identity, true).unwrap());
+    }
+
+    #[test]
+    fn endpoint_change_with_same_identity_succeeds() {
+        let mut settings = AppSettings::default();
+        reconcile_remote_host_pin(
+            &mut settings,
+            &host("6ba7b810-9dad-41d1-80b4-00c04fd430c8"),
+            true,
+        )
+        .unwrap();
+        settings.remote_backend_host = "new-endpoint.example:4732".to_string();
+        settings.remote_backends[0].host = settings.remote_backend_host.clone();
+        assert!(!reconcile_remote_host_pin(
+            &mut settings,
+            &host("6ba7b810-9dad-41d1-80b4-00c04fd430c8"),
+            true,
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn display_name_change_does_not_change_identity() {
+        let mut settings = AppSettings::default();
+        let identity = host("baf44dc3-9d14-43fd-a2a8-2f3fc58c8d37");
+        reconcile_remote_host_pin(&mut settings, &identity, true).unwrap();
+        settings.remote_backends[0].name = "Office Desktop".to_string();
+        assert!(!reconcile_remote_host_pin(&mut settings, &identity, true).unwrap());
+    }
+
+    #[test]
+    fn unpinned_identity_requires_authenticated_tofu() {
+        let mut settings = AppSettings::default();
+        assert!(reconcile_remote_host_pin(
+            &mut settings,
+            &host("6ba7b810-9dad-41d1-80b4-00c04fd430c8"),
+            false,
+        )
+        .is_err());
+        assert!(settings.remote_backends.is_empty());
+    }
+
+    #[tokio::test]
+    async fn remote_backend_is_not_routable_before_handshake() {
+        let (out_tx, _out_rx) = tokio::sync::mpsc::channel(1);
+        let client = RemoteBackend {
+            inner: Arc::new(RemoteBackendInner {
+                out_tx,
+                pending: Arc::new(Mutex::new(Default::default())),
+                next_id: AtomicU64::new(1),
+                connected: Arc::new(AtomicBool::new(true)),
+                ready: AtomicBool::new(false),
+            }),
+        };
+        let error = client
+            .call("list_workspaces", serde_json::json!({}))
+            .await
+            .unwrap_err();
+        assert!(error.contains("not routable before authenticated host handshake"));
     }
 }

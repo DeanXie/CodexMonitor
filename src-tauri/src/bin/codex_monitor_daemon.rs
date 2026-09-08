@@ -75,11 +75,16 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
 
-use backend::app_server::{spawn_workspace_session, WorkspaceSession};
+use backend::app_server::{spawn_workspace_session_in_environment, WorkspaceSession};
 use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
 use shared::process_core::kill_child_process_tree;
 use shared::prompts_core::{self, CustomPromptEntry};
+use shared::remote_host_identity::{
+    load_or_initialize_remote_host_identity, RemoteDaemonCapabilities, RemoteDaemonInfo,
+    RemoteHostIdentity, REMOTE_DAEMON_PROTOCOL_VERSION,
+};
+use shared::workspace_interop_core::{remote_execution_environment_key, ExecutionEnvironmentKey};
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
     local_usage_core, settings_core, workspaces_core, worktree_core,
@@ -100,12 +105,13 @@ fn spawn_with_client(
     event_sink: DaemonEventSink,
     client_version: String,
     execution_settings_evidence: shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
+    execution_environment_key: ExecutionEnvironmentKey,
     entry: WorkspaceEntry,
     default_bin: Option<String>,
     codex_args: Option<String>,
     codex_home: Option<PathBuf>,
 ) -> impl std::future::Future<Output = Result<Arc<WorkspaceSession>, String>> {
-    spawn_workspace_session(
+    spawn_workspace_session_in_environment(
         entry,
         default_bin,
         codex_args,
@@ -113,6 +119,7 @@ fn spawn_with_client(
         client_version,
         event_sink,
         execution_settings_evidence,
+        Some(execution_environment_key),
     )
 }
 
@@ -155,6 +162,8 @@ struct DaemonState {
     execution_settings_evidence:
         shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
     data_dir: PathBuf,
+    remote_host_identity: RemoteHostIdentity,
+    execution_environment_key: ExecutionEnvironmentKey,
     workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     storage_path: PathBuf,
@@ -172,7 +181,7 @@ struct WorkspaceFileResponse {
 }
 
 impl DaemonState {
-    fn load(config: &DaemonConfig, event_sink: DaemonEventSink) -> Self {
+    fn load(config: &DaemonConfig, event_sink: DaemonEventSink) -> Result<Self, String> {
         let storage_path = config.data_dir.join("workspaces.json");
         let settings_path = config.data_dir.join("settings.json");
         let workspaces = read_workspaces(&storage_path).unwrap_or_default();
@@ -180,8 +189,12 @@ impl DaemonState {
         let daemon_binary_path = std::env::current_exe()
             .ok()
             .and_then(|path| path.to_str().map(str::to_string));
-        Self {
+        let remote_host_identity = load_or_initialize_remote_host_identity(&config.data_dir)?;
+        let execution_environment_key = remote_execution_environment_key(&remote_host_identity);
+        Ok(Self {
             data_dir: config.data_dir.clone(),
+            remote_host_identity,
+            execution_environment_key,
             creation_coordinator: Default::default(),
             execution_settings_evidence: Default::default(),
             workspaces: Mutex::new(workspaces),
@@ -192,17 +205,25 @@ impl DaemonState {
             event_sink,
             codex_login_cancels: Mutex::new(HashMap::new()),
             daemon_binary_path,
-        }
+        })
     }
 
     fn daemon_info(&self) -> Value {
-        json!({
-            "name": DAEMON_NAME,
-            "version": env!("CARGO_PKG_VERSION"),
-            "pid": std::process::id(),
-            "mode": "tcp",
-            "binaryPath": self.daemon_binary_path,
+        let mut value = serde_json::to_value(RemoteDaemonInfo {
+            name: DAEMON_NAME.to_string(),
+            remote_host_identity: self.remote_host_identity.clone(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            protocol_version: REMOTE_DAEMON_PROTOCOL_VERSION,
+            mode: "tcp".to_string(),
+            display_name: None,
+            capabilities: RemoteDaemonCapabilities::default(),
         })
+        .expect("remote daemon info is serializable");
+        if let Value::Object(object) = &mut value {
+            object.insert("pid".to_string(), json!(std::process::id()));
+            object.insert("binaryPath".to_string(), json!(self.daemon_binary_path));
+        }
+        value
     }
 
     async fn sync_workspaces_from_storage(&self) {
@@ -271,6 +292,7 @@ impl DaemonState {
                     self.event_sink.clone(),
                     client_version.clone(),
                     self.execution_settings_evidence.clone(),
+                    self.execution_environment_key.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -302,6 +324,7 @@ impl DaemonState {
                     self.event_sink.clone(),
                     client_version.clone(),
                     self.execution_settings_evidence.clone(),
+                    self.execution_environment_key.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -351,6 +374,7 @@ impl DaemonState {
                     self.event_sink.clone(),
                     client_version.clone(),
                     self.execution_settings_evidence.clone(),
+                    self.execution_environment_key.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -453,6 +477,7 @@ impl DaemonState {
                     self.event_sink.clone(),
                     client_version.clone(),
                     self.execution_settings_evidence.clone(),
+                    self.execution_environment_key.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -527,6 +552,7 @@ impl DaemonState {
                     self.event_sink.clone(),
                     client_version.clone(),
                     self.execution_settings_evidence.clone(),
+                    self.execution_environment_key.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -556,6 +582,7 @@ impl DaemonState {
                     self.event_sink.clone(),
                     client_version.clone(),
                     self.execution_settings_evidence.clone(),
+                    self.execution_environment_key.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -583,6 +610,7 @@ impl DaemonState {
                     self.event_sink.clone(),
                     client_version.clone(),
                     self.execution_settings_evidence.clone(),
+                    self.execution_environment_key.clone(),
                     entry,
                     default_bin,
                     next_args,
@@ -1014,6 +1042,7 @@ impl DaemonState {
                     self.event_sink.clone(),
                     client_version.clone(),
                     self.execution_settings_evidence.clone(),
+                    self.execution_environment_key.clone(),
                     entry,
                     default_bin,
                     codex_args,
@@ -1658,6 +1687,12 @@ mod tests {
         let (tx, _rx) = broadcast::channel::<DaemonEvent>(32);
         DaemonState {
             data_dir: data_dir.to_path_buf(),
+            remote_host_identity: RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+                .expect("test remote host identity"),
+            execution_environment_key: ExecutionEnvironmentKey::new(
+                "remote:6ba7b810-9dad-41d1-80b4-00c04fd430c8",
+            )
+            .expect("test execution environment"),
             creation_coordinator: Default::default(),
             execution_settings_evidence: Default::default(),
             workspaces: Mutex::new(HashMap::new()),
@@ -1892,10 +1927,96 @@ mod tests {
             );
             assert_eq!(result.get("mode").and_then(Value::as_str), Some("tcp"));
             assert_eq!(
+                result.get("remoteHostIdentity").and_then(Value::as_str),
+                Some("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+            );
+            assert_eq!(
+                result.get("protocolVersion").and_then(Value::as_u64),
+                Some(REMOTE_DAEMON_PROTOCOL_VERSION as u64)
+            );
+            assert!(result.get("capabilities").is_some());
+            assert_eq!(
                 result.get("version").and_then(Value::as_str),
                 Some(env!("CARGO_PKG_VERSION"))
             );
             let _ = std::fs::remove_dir_all(&tmp);
+        });
+    }
+
+    #[test]
+    fn daemon_state_restart_preserves_host_identity_and_corruption_fails_closed() {
+        let tmp = make_temp_dir("daemon-host-identity-restart");
+        let config = DaemonConfig {
+            listen: "127.0.0.1:0".parse().unwrap(),
+            token: Some("token".to_string()),
+            data_dir: tmp.clone(),
+        };
+        let (events, _) = broadcast::channel(16);
+        let first = DaemonState::load(&config, DaemonEventSink { tx: events.clone() }).unwrap();
+        let second = DaemonState::load(&config, DaemonEventSink { tx: events.clone() }).unwrap();
+        assert_eq!(first.remote_host_identity, second.remote_host_identity);
+        std::fs::write(tmp.join("remote-host-identity.json"), "malformed").unwrap();
+        assert!(DaemonState::load(&config, DaemonEventSink { tx: events }).is_err());
+        let _ = std::fs::remove_dir_all(tmp);
+    }
+
+    #[test]
+    fn authenticated_daemon_info_returns_identity() {
+        run_async_test(async {
+            let tmp = make_temp_dir("authenticated-daemon-info");
+            let state = Arc::new(test_state(&tmp));
+            let (events, _) = broadcast::channel(16);
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let config = Arc::new(DaemonConfig {
+                listen: address,
+                token: Some("secret-token".to_string()),
+                data_dir: tmp.clone(),
+            });
+            let server = tokio::spawn(async move {
+                let (socket, _) = listener.accept().await.unwrap();
+                transport::handle_client(socket, config, state, events).await;
+            });
+
+            let stream = TcpStream::connect(address).await.unwrap();
+            let (reader, mut writer) = stream.into_split();
+            let mut lines = BufReader::new(reader).lines();
+            writer
+                .write_all(b"{\"id\":1,\"method\":\"daemon_info\",\"params\":{}}\n")
+                .await
+                .unwrap();
+            let unauthorized: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(
+                unauthorized
+                    .pointer("/error/message")
+                    .and_then(Value::as_str),
+                Some("unauthorized")
+            );
+
+            writer
+                .write_all(
+                    b"{\"id\":2,\"method\":\"auth\",\"params\":{\"token\":\"secret-token\"}}\n",
+                )
+                .await
+                .unwrap();
+            let _: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            writer
+                .write_all(b"{\"id\":3,\"method\":\"daemon_info\",\"params\":{}}\n")
+                .await
+                .unwrap();
+            let response: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(
+                response
+                    .pointer("/result/remoteHostIdentity")
+                    .and_then(Value::as_str),
+                Some("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+            );
+            drop(writer);
+            server.await.unwrap();
+            let _ = std::fs::remove_dir_all(tmp);
         });
     }
     #[test]
@@ -2033,7 +2154,13 @@ fn main() {
         let event_sink = DaemonEventSink {
             tx: events_tx.clone(),
         };
-        let state = Arc::new(DaemonState::load(&config, event_sink));
+        let state = match DaemonState::load(&config, event_sink) {
+            Ok(state) => Arc::new(state),
+            Err(error) => {
+                eprintln!("failed to initialize daemon identity: {error}");
+                std::process::exit(2);
+            }
+        };
         let config = Arc::new(config);
 
         let listener = match TcpListener::bind(config.listen).await {

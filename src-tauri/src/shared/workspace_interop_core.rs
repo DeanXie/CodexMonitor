@@ -30,7 +30,9 @@ pub(crate) use runtime_reconciliation::{
     RuntimeOriginWorkspaceObservation, RuntimeTurnWorkspaceObservation, RuntimeWorkspaceReconciler,
     RuntimeWorkspaceRoute,
 };
-pub(crate) use value_types::{ExecutionEnvironmentKey, WorkspaceKey};
+pub(crate) use value_types::{
+    remote_execution_environment_key, ExecutionEnvironmentKey, WorkspaceKey,
+};
 
 #[cfg(test)]
 #[path = "workspace_interop_core/tests.rs"]

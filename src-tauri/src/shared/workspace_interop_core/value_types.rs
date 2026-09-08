@@ -18,6 +18,13 @@ impl ExecutionEnvironmentKey {
     }
 }
 
+pub(crate) fn remote_execution_environment_key(
+    remote_host_identity: &crate::shared::remote_host_identity::RemoteHostIdentity,
+) -> ExecutionEnvironmentKey {
+    ExecutionEnvironmentKey::new(format!("remote:{}", remote_host_identity.as_str()))
+        .expect("canonical remote host identity produces a valid execution environment key")
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct WorkspaceKey {
     pub execution_environment_key: ExecutionEnvironmentKey,

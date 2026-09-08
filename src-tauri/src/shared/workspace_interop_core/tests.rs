@@ -5,6 +5,31 @@ fn environment(value: &str) -> ExecutionEnvironmentKey {
     ExecutionEnvironmentKey::new(value).expect("valid execution environment key")
 }
 
+#[test]
+fn remote_execution_environment_is_host_qualified() {
+    let identity = crate::shared::remote_host_identity::RemoteHostIdentity::parse(
+        "6ba7b810-9dad-41d1-80b4-00c04fd430c8",
+    )
+    .unwrap();
+    let environment = remote_execution_environment_key(&identity);
+    assert_eq!(
+        environment.as_str(),
+        "remote:6ba7b810-9dad-41d1-80b4-00c04fd430c8"
+    );
+}
+
+#[test]
+fn local_execution_environment_semantics_unchanged() {
+    assert_eq!(
+        environment("monitor-local-windows").as_str(),
+        "monitor-local-windows"
+    );
+    assert_eq!(
+        environment("monitor-local-posix").as_str(),
+        "monitor-local-posix"
+    );
+}
+
 fn resolve(
     cwd: &str,
     platform: RootLocatorPlatform,

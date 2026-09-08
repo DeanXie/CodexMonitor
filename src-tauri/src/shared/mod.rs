@@ -19,6 +19,7 @@ pub(crate) mod local_usage_core;
 pub(crate) mod mobile_thread_routing;
 pub(crate) mod process_core;
 pub(crate) mod prompts_core;
+pub(crate) mod remote_host_identity;
 pub(crate) mod settings_core;
 pub(crate) mod surface_projection_core;
 pub(crate) mod surface_projection_engine;

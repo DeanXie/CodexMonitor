@@ -73,6 +73,31 @@ describe("useAppSettings", () => {
     expect(result.current.settings.interruptShortcut).toBeTruthy();
   });
 
+  it("preserves a learned remote host identity while normalizing settings", async () => {
+    getAppSettingsMock.mockResolvedValue({
+      remoteBackendHost: "host.example:4732",
+      remoteBackendToken: "token",
+      remoteBackends: [
+        {
+          id: "remote-a",
+          name: "Remote A",
+          provider: "tcp",
+          host: "host.example:4732",
+          token: "token",
+          remoteHostIdentity: "6ba7b810-9dad-41d1-80b4-00c04fd430c8",
+        },
+      ],
+      activeRemoteBackendId: "remote-a",
+    } as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.remoteBackends[0]?.remoteHostIdentity).toBe(
+      "6ba7b810-9dad-41d1-80b4-00c04fd430c8",
+    );
+  });
+
   it("persists settings via updateAppSettings and updates local state", async () => {
     getAppSettingsMock.mockResolvedValue({} as AppSettings);
     const { result } = renderHook(() => useAppSettings());

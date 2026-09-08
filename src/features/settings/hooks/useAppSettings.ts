@@ -74,6 +74,7 @@ function normalizeRemoteBackends(settings: AppSettings): {
       provider: normalizeRemoteProvider(entry.provider),
       host: normalizeRemoteHost(entry.host),
       token: normalizeRemoteToken(entry.token),
+      remoteHostIdentity: entry.remoteHostIdentity?.trim() || null,
       lastConnectedAtMs:
         typeof entry.lastConnectedAtMs === "number" && Number.isFinite(entry.lastConnectedAtMs)
           ? entry.lastConnectedAtMs
@@ -88,6 +89,7 @@ function normalizeRemoteBackends(settings: AppSettings): {
       provider: legacyProvider,
       host: legacyHost,
       token: legacyToken,
+      remoteHostIdentity: null,
       lastConnectedAtMs: null,
     };
     return {
@@ -131,6 +133,7 @@ function buildDefaultSettings(): AppSettings {
     provider: DEFAULT_REMOTE_PROVIDER,
     host: DEFAULT_REMOTE_BACKEND_HOST,
     token: null,
+    remoteHostIdentity: null,
     lastConnectedAtMs: null,
   };
   return {

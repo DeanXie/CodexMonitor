@@ -179,6 +179,33 @@ pub(crate) fn write_settings(path: &PathBuf, settings: &AppSettings) -> Result<(
     std::fs::write(path, data).map_err(|e| e.to_string())
 }
 
+pub(crate) fn write_settings_atomic(path: &PathBuf, settings: &AppSettings) -> Result<(), String> {
+    use std::io::Write;
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| "settings path has no parent directory".to_string())?;
+    std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let (settings, _) = normalize_app_settings(settings.clone());
+    let data = serde_json::to_vec_pretty(&settings).map_err(|error| error.to_string())?;
+    let temp = parent.join(format!(".settings.{}.tmp", uuid::Uuid::new_v4()));
+    let result = (|| {
+        let mut file = std::fs::File::create(&temp).map_err(|error| error.to_string())?;
+        file.write_all(&data).map_err(|error| error.to_string())?;
+        file.sync_all().map_err(|error| error.to_string())?;
+        std::fs::rename(&temp, path).map_err(|error| error.to_string())?;
+        std::fs::File::open(parent)
+            .and_then(|directory| directory.sync_all())
+            .or_else(|error| if cfg!(windows) { Ok(()) } else { Err(error) })
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
+}
+
 fn finalize_loaded_settings(path: &PathBuf, settings: AppSettings) -> AppSettings {
     let (settings, changed) = normalize_app_settings(settings);
     if changed {
@@ -204,7 +231,12 @@ fn sanitize_remote_settings_for_tcp_only(value: &mut Value) {
             entry_obj.retain(|key, _| {
                 matches!(
                     key.as_str(),
-                    "id" | "name" | "provider" | "host" | "token" | "lastConnectedAtMs"
+                    "id" | "name"
+                        | "provider"
+                        | "host"
+                        | "token"
+                        | "remoteHostIdentity"
+                        | "lastConnectedAtMs"
                 )
             });
         }
@@ -232,7 +264,9 @@ fn migrate_follow_up_message_behavior(value: &mut Value) {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_settings, read_workspaces, write_settings, write_workspaces};
+    use super::{
+        read_settings, read_workspaces, write_settings, write_settings_atomic, write_workspaces,
+    };
     use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
     use uuid::Uuid;
 
@@ -345,6 +379,7 @@ mod tests {
       "provider": "legacy-provider",
       "host": "example:4732",
       "token": "token-1",
+      "remoteHostIdentity": "6ba7b810-9dad-41d1-80b4-00c04fd430c8",
       "legacyWsUrl": "wss://example/ws"
     }
   ],
@@ -363,6 +398,10 @@ mod tests {
             settings.remote_backends[0].provider,
             crate::types::RemoteBackendProvider::Tcp
         ));
+        assert_eq!(
+            settings.remote_backends[0].remote_host_identity.as_deref(),
+            Some("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+        );
         assert_eq!(settings.theme, "dark");
     }
 
@@ -421,6 +460,20 @@ mod tests {
             read.global_worktrees_folder.as_deref(),
             Some(r"I:\gpt-projects\worktrees")
         );
+    }
+
+    #[test]
+    fn atomic_settings_write_replaces_existing_file() {
+        let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+        std::fs::write(&path, "{}").expect("seed settings");
+        let mut settings = AppSettings::default();
+        settings.remote_backend_host = "remote.example:4732".to_string();
+        write_settings_atomic(&path, &settings).expect("atomic settings write");
+        let loaded = read_settings(&path).expect("read replaced settings");
+        assert_eq!(loaded.remote_backend_host, "remote.example:4732");
+        let _ = std::fs::remove_dir_all(temp_dir);
     }
 
     #[test]

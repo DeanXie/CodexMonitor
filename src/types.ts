@@ -203,6 +203,7 @@ export type RemoteBackendTarget = {
   provider: RemoteBackendProvider;
   host: string;
   token: string | null;
+  remoteHostIdentity?: string | null;
   lastConnectedAtMs?: number | null;
 };
 export type ThemePreference = "system" | "light" | "dark" | "dim";

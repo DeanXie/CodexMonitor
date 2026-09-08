@@ -53,8 +53,18 @@ pub(crate) async fn update_app_settings_core(
     let _ = codex_config::write_unified_exec_enabled(settings.unified_exec_enabled);
     let _ = codex_config::write_apps_enabled(settings.experimental_apps_enabled);
     let _ = codex_config::write_personality(settings.personality.as_str());
-    write_settings(settings_path, &settings)?;
     let mut current = app_settings.lock().await;
+    for target in &mut settings.remote_backends {
+        if let Some(existing) = current
+            .remote_backends
+            .iter()
+            .find(|existing| existing.id == target.id)
+            .and_then(|existing| existing.remote_host_identity.clone())
+        {
+            target.remote_host_identity = Some(existing);
+        }
+    }
+    write_settings(settings_path, &settings)?;
     *current = settings.clone();
     Ok(settings)
 }

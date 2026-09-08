@@ -748,6 +748,14 @@ fn runtime_message_observation_key(value: &Value) -> String {
 
 #[cfg(desktop)]
 pub(crate) fn runtime_reconciler_for_home(codex_home: Option<&Path>) -> RuntimeWorkspaceReconciler {
+    runtime_reconciler_for_home_with_environment(codex_home, None)
+}
+
+#[cfg(desktop)]
+fn runtime_reconciler_for_home_with_environment(
+    codex_home: Option<&Path>,
+    execution_environment_key: Option<ExecutionEnvironmentKey>,
+) -> RuntimeWorkspaceReconciler {
     let codex_home_identity =
         crate::shared::global_sources_core::runtime_config::discover_runtime_codex_homes(
             codex_home.map(Path::to_path_buf),
@@ -762,24 +770,31 @@ pub(crate) fn runtime_reconciler_for_home(codex_home: Option<&Path>) -> RuntimeW
     } else {
         RootLocatorPlatform::Posix
     };
-    let execution_environment_key = ExecutionEnvironmentKey::new(match platform {
-        RootLocatorPlatform::Windows => "monitor-local-windows",
-        RootLocatorPlatform::Posix => "monitor-local-posix",
-    })
-    .expect("runtime execution environment key is non-empty");
+    let execution_environment_key = execution_environment_key.unwrap_or_else(|| {
+        ExecutionEnvironmentKey::new(match platform {
+            RootLocatorPlatform::Windows => "monitor-local-windows",
+            RootLocatorPlatform::Posix => "monitor-local-posix",
+        })
+        .expect("runtime execution environment key is non-empty")
+    });
     RuntimeWorkspaceReconciler::new(codex_home_identity, execution_environment_key, platform)
 }
 
 #[cfg(desktop)]
 fn runtime_reconciler_for_session(
     codex_home: Option<&Path>,
+    execution_environment_key: Option<ExecutionEnvironmentKey>,
 ) -> Result<RuntimeWorkspaceReconciler, String> {
-    Ok(runtime_reconciler_for_home(codex_home))
+    Ok(runtime_reconciler_for_home_with_environment(
+        codex_home,
+        execution_environment_key,
+    ))
 }
 
 #[cfg(not(desktop))]
 fn runtime_reconciler_for_session(
     _codex_home: Option<&Path>,
+    _execution_environment_key: Option<ExecutionEnvironmentKey>,
 ) -> Result<RuntimeWorkspaceReconciler, String> {
     Err(
         "local Codex runtime is unavailable on mobile; connect through the remote backend"
@@ -1168,6 +1183,29 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     event_sink: E,
     execution_settings_evidence: ExecutionSettingsEvidenceRuntime,
 ) -> Result<Arc<WorkspaceSession>, String> {
+    spawn_workspace_session_in_environment(
+        entry,
+        default_codex_bin,
+        codex_args,
+        codex_home,
+        client_version,
+        event_sink,
+        execution_settings_evidence,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
+    entry: WorkspaceEntry,
+    default_codex_bin: Option<String>,
+    codex_args: Option<String>,
+    codex_home: Option<PathBuf>,
+    client_version: String,
+    event_sink: E,
+    execution_settings_evidence: ExecutionSettingsEvidenceRuntime,
+    execution_environment_key: Option<ExecutionEnvironmentKey>,
+) -> Result<Arc<WorkspaceSession>, String> {
     let codex_bin = default_codex_bin;
     let _ = check_codex_installation(codex_bin.clone()).await?;
 
@@ -1192,7 +1230,8 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     let resolved_codex_home = codex_home
         .clone()
         .or_else(crate::codex::home::resolve_default_codex_home);
-    let mut workspace_reconciler = runtime_reconciler_for_session(resolved_codex_home.as_deref())?;
+    let mut workspace_reconciler =
+        runtime_reconciler_for_session(resolved_codex_home.as_deref(), execution_environment_key)?;
     workspace_reconciler.register_workspace(&entry.id, &entry.path);
 
     let session = Arc::new(WorkspaceSession {

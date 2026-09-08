@@ -373,6 +373,8 @@ pub(crate) struct RemoteBackendTarget {
     pub(crate) host: String,
     #[serde(default)]
     pub(crate) token: Option<String>,
+    #[serde(default, rename = "remoteHostIdentity")]
+    pub(crate) remote_host_identity: Option<String>,
     #[serde(default, rename = "lastConnectedAtMs")]
     pub(crate) last_connected_at_ms: Option<i64>,
 }

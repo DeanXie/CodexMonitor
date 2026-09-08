@@ -100,6 +100,7 @@ const buildFallbackRemoteBackend = (settings: AppSettings): RemoteBackendTarget 
   provider: "tcp",
   host: settings.remoteBackendHost,
   token: settings.remoteBackendToken,
+  remoteHostIdentity: null,
   lastConnectedAtMs: null,
 });
 
@@ -200,6 +201,7 @@ export const useSettingsServerSection = ({
     provider: "tcp",
     host: entry.host?.trim() || DEFAULT_REMOTE_HOST,
     token: entry.token?.trim() ? entry.token.trim() : null,
+    remoteHostIdentity: entry.remoteHostIdentity?.trim() || null,
     lastConnectedAtMs:
       typeof entry.lastConnectedAtMs === "number" && Number.isFinite(entry.lastConnectedAtMs)
         ? entry.lastConnectedAtMs

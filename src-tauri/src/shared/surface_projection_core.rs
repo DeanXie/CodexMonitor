@@ -9,7 +9,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use super::global_sources_core::rollout_identity::CodexThreadKey;
+use super::codex_identity::CodexThreadKey;
 
 pub(crate) const DESKTOP_STALE_ORPHAN_DIAGNOSTIC: &str = "DESKTOP_STALE_ORPHAN";
 pub(crate) const MISSING_PROJECTION_DIAGNOSTIC: &str = "MISSING_PROJECTION";

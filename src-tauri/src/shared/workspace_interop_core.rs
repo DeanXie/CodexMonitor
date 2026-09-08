@@ -1,5 +1,6 @@
 #![allow(dead_code, unused_imports)]
 
+#[cfg(desktop)]
 mod desktop_project_projection;
 mod locator;
 mod relation;
@@ -7,6 +8,7 @@ mod resolver;
 mod runtime_reconciliation;
 mod value_types;
 
+#[cfg(desktop)]
 pub(crate) use desktop_project_projection::{
     resolve_desktop_project_projection, DesktopDirectProjectAssignment, DesktopProjectCandidate,
     DesktopProjectMigrationMappingState, DesktopProjectProjection, DesktopProjectProjectionInput,
@@ -34,10 +36,10 @@ pub(crate) use value_types::{ExecutionEnvironmentKey, WorkspaceKey};
 #[path = "workspace_interop_core/tests.rs"]
 mod tests;
 
-#[cfg(test)]
+#[cfg(all(test, desktop))]
 #[path = "workspace_interop_core/desktop_project_projection_tests.rs"]
 mod desktop_project_projection_tests;
 
-#[cfg(test)]
+#[cfg(all(test, desktop))]
 #[path = "workspace_interop_core/contract_fixture_tests.rs"]
 mod contract_fixture_tests;

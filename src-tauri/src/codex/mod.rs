@@ -184,6 +184,17 @@ pub(crate) async fn read_thread(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
+    #[cfg(not(desktop))]
+    {
+        return crate::shared::mobile_thread_routing::read_thread(
+            &workspace_id,
+            &thread_id,
+            |method, params| remote_backend::call_remote(&*state, app, method, params),
+        )
+        .await;
+    }
+
+    #[cfg(desktop)]
     let response = if remote_backend::is_remote_mode(&*state).await {
         remote_backend::call_remote(
             &*state,
@@ -202,13 +213,17 @@ pub(crate) async fn read_thread(
         .await
     };
 
+    #[cfg(desktop)]
     let status = classify_thread_read_response(&response);
+    #[cfg(desktop)]
     state
         .global_rollout_runtime
         .observe_desktop_thread_read(&workspace_id, &thread_id, status);
+    #[cfg(desktop)]
     response
 }
 
+#[cfg(desktop)]
 fn classify_thread_read_response(
     response: &Result<Value, String>,
 ) -> crate::shared::global_sources_core::desktop_projection::ThreadReadStatus {
@@ -228,6 +243,7 @@ fn classify_thread_read_response(
     }
 }
 
+#[cfg(desktop)]
 fn is_thread_not_found_message(message: &str) -> bool {
     let normalized = message.to_ascii_lowercase();
     normalized.contains("thread not loaded")
@@ -408,6 +424,18 @@ pub(crate) async fn delete_thread(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
+    #[cfg(not(desktop))]
+    {
+        let _ = (descendant_thread_ids, monitor_delete_operation_id);
+        return crate::shared::mobile_thread_routing::delete_thread(
+            &workspace_id,
+            &thread_id,
+            |method, params| remote_backend::call_remote(&*state, app, method, params),
+        )
+        .await;
+    }
+
+    #[cfg(desktop)]
     let delete_result = if remote_backend::is_remote_mode(&*state).await {
         remote_backend::call_remote(
             &*state,
@@ -420,6 +448,7 @@ pub(crate) async fn delete_thread(
         codex_core::delete_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone())
             .await
     };
+    #[cfg(desktop)]
     reconcile_after_confirmed_delete(
         delete_result,
         state.global_rollout_runtime.reconcile_confirmed_deletion(
@@ -433,6 +462,7 @@ pub(crate) async fn delete_thread(
     .await
 }
 
+#[cfg(desktop)]
 async fn reconcile_after_confirmed_delete<F>(
     delete_result: Result<Value, String>,
     reconciliation: F,

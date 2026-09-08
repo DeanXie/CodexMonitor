@@ -1,11 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct CodexHomeIdentity {
-    pub normalized_path: String,
-    pub identity: String,
-}
+pub(crate) use crate::shared::codex_identity::CodexHomeIdentity;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -15,7 +15,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use super::global_sources_core::rollout_identity::CodexThreadKey;
+use super::codex_identity::CodexThreadKey;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum ExecutionSettingsScope {

@@ -1,41 +1,6 @@
 use super::rollout_record::SessionMetaRecord;
 use super::source_envelope::CodexHomeIdentity;
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct CodexThreadKey {
-    pub codex_home_identity: String,
-    pub thread_id: String,
-}
-
-impl CodexThreadKey {
-    pub(crate) fn new(
-        codex_home_identity: impl Into<String>,
-        thread_id: impl Into<String>,
-    ) -> Self {
-        Self {
-            codex_home_identity: codex_home_identity.into(),
-            thread_id: thread_id.into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct CodexTurnKey {
-    pub thread_key: CodexThreadKey,
-    pub turn_id: String,
-}
-
-impl CodexTurnKey {
-    pub(crate) fn new(thread_key: CodexThreadKey, turn_id: impl Into<String>) -> Self {
-        Self {
-            thread_key,
-            turn_id: turn_id.into(),
-        }
-    }
-}
+pub(crate) use crate::shared::codex_identity::{CodexThreadKey, CodexTurnKey};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RolloutIdentity {

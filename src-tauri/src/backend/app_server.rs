@@ -24,9 +24,11 @@ use crate::shared::surface_projection_engine::{
     monitor_exact_read_observation, monitor_list_observation, ExactIdProjectionResult,
     ProjectionObservationEngine,
 };
+#[cfg(desktop)]
+use crate::shared::workspace_interop_core::{ExecutionEnvironmentKey, RootLocatorPlatform};
 use crate::shared::workspace_interop_core::{
-    ExecutionEnvironmentKey, RootLocatorPlatform, RuntimeOriginWorkspaceObservation,
-    RuntimeTurnWorkspaceObservation, RuntimeWorkspaceReconciler, RuntimeWorkspaceRoute,
+    RuntimeOriginWorkspaceObservation, RuntimeTurnWorkspaceObservation, RuntimeWorkspaceReconciler,
+    RuntimeWorkspaceRoute,
 };
 use crate::types::WorkspaceEntry;
 
@@ -468,10 +470,7 @@ fn reconcile_surface_projection_message(
             };
             let result = classify_exact_thread_read_result(thread_id, message);
             usize::from(engine.observe(monitor_exact_read_observation(
-                crate::shared::global_sources_core::rollout_identity::CodexThreadKey::new(
-                    codex_home_identity,
-                    thread_id,
-                ),
+                crate::shared::codex_identity::CodexThreadKey::new(codex_home_identity, thread_id),
                 result,
                 observed_at,
             )))
@@ -499,7 +498,7 @@ fn reconcile_surface_projection_message(
             );
             for thread_id in &observed_ids {
                 let key = crate::shared::surface_projection_core::SurfaceProjectionKey::new(
-                    crate::shared::global_sources_core::rollout_identity::CodexThreadKey::new(
+                    crate::shared::codex_identity::CodexThreadKey::new(
                         codex_home_identity,
                         thread_id,
                     ),
@@ -747,6 +746,7 @@ fn runtime_message_observation_key(value: &Value) -> String {
     value.to_string()
 }
 
+#[cfg(desktop)]
 pub(crate) fn runtime_reconciler_for_home(codex_home: Option<&Path>) -> RuntimeWorkspaceReconciler {
     let codex_home_identity =
         crate::shared::global_sources_core::runtime_config::discover_runtime_codex_homes(
@@ -768,6 +768,23 @@ pub(crate) fn runtime_reconciler_for_home(codex_home: Option<&Path>) -> RuntimeW
     })
     .expect("runtime execution environment key is non-empty");
     RuntimeWorkspaceReconciler::new(codex_home_identity, execution_environment_key, platform)
+}
+
+#[cfg(desktop)]
+fn runtime_reconciler_for_session(
+    codex_home: Option<&Path>,
+) -> Result<RuntimeWorkspaceReconciler, String> {
+    Ok(runtime_reconciler_for_home(codex_home))
+}
+
+#[cfg(not(desktop))]
+fn runtime_reconciler_for_session(
+    _codex_home: Option<&Path>,
+) -> Result<RuntimeWorkspaceReconciler, String> {
+    Err(
+        "local Codex runtime is unavailable on mobile; connect through the remote backend"
+            .to_string(),
+    )
 }
 
 fn build_initialize_params(client_version: &str) -> Value {
@@ -1175,7 +1192,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     let resolved_codex_home = codex_home
         .clone()
         .or_else(crate::codex::home::resolve_default_codex_home);
-    let mut workspace_reconciler = runtime_reconciler_for_home(resolved_codex_home.as_deref());
+    let mut workspace_reconciler = runtime_reconciler_for_session(resolved_codex_home.as_deref())?;
     workspace_reconciler.register_workspace(&entry.id, &entry.path);
 
     let session = Arc::new(WorkspaceSession {
@@ -1242,8 +1259,9 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                             .codex_home_identity()
                             .to_string();
                         observer.observe_known_turn_outcome(
-                            &crate::shared::global_sources_core::rollout_identity::CodexThreadKey::new(home,thread),
-                            turn,outcome,
+                            &crate::shared::codex_identity::CodexThreadKey::new(home, thread),
+                            turn,
+                            outcome,
                         );
                     }
                 }
@@ -1570,11 +1588,11 @@ mod tests {
         should_suppress_hidden_thread_event, source_subagent_kind,
         thread_started_is_memory_consolidation, RequestContext,
     };
+    use crate::shared::codex_identity::CodexThreadKey;
     use crate::shared::execution_settings_evidence::{
         ExecutionSettingField, ExecutionSettingsAssessment, ExecutionSettingsObservationKey,
     };
     use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
-    use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
     use crate::shared::surface_projection_core::{
         CanonicalThreadProjectionState, SurfaceProjectionKey, SurfaceProjectionKind,
         SurfaceProjectionState, SurfaceProjectionSurface,

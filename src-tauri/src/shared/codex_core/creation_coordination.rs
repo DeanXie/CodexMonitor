@@ -1,6 +1,6 @@
 //! Process-local Phase 3 operation coordination; not canonical Thread storage.
 use super::creation_acknowledgement::acknowledge_thread_start;
-use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
+use crate::shared::codex_identity::CodexThreadKey;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::Value;

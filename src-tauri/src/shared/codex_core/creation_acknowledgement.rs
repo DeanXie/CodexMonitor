@@ -1,9 +1,9 @@
 //! Creation acknowledgement facts, not a creation-intent registry or recovery engine.
 #![allow(dead_code)]
 
-use crate::shared::global_sources_core::rollout_identity::{CodexThreadKey, CodexTurnKey};
+use crate::shared::codex_identity::{CodexHomeIdentity, CodexThreadKey, CodexTurnKey};
+#[cfg(desktop)]
 use crate::shared::global_sources_core::rollout_record::SessionMetaRecord;
-use crate::shared::global_sources_core::source_envelope::CodexHomeIdentity;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::future::Future;
@@ -97,6 +97,7 @@ impl CreationAcknowledgement {
 
     /// Input must come from the existing persisted rollout reader, not a start
     /// response, a filename, or Desktop projection metadata. No I/O is performed.
+    #[cfg(desktop)]
     pub(crate) fn observe_persisted_session_meta(
         &mut self,
         home: &CodexHomeIdentity,

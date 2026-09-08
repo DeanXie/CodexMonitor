@@ -601,9 +601,7 @@ pub(crate) async fn send_user_message_core(
             .await
             .codex_home_identity()
             .to_string();
-        let thread_key = crate::shared::global_sources_core::rollout_identity::CodexThreadKey::new(
-            home, &thread_id,
-        );
+        let thread_key = crate::shared::codex_identity::CodexThreadKey::new(home, &thread_id);
         if let Some(intent) = target_intent.as_ref() {
             coordinator.validate_turn_target(intent, &thread_key)?;
         }

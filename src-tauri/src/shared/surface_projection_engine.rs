@@ -6,11 +6,14 @@
 
 use std::sync::{Arc, Mutex};
 
+use super::codex_identity::CodexThreadKey;
+#[cfg(desktop)]
 use super::global_sources_core::desktop_metadata::DesktopMetadataSnapshot;
+#[cfg(desktop)]
 use super::global_sources_core::desktop_projection::{
     DesktopProjectionAssessment, DesktopProjectionState,
 };
-use super::global_sources_core::rollout_identity::CodexThreadKey;
+#[cfg(desktop)]
 use super::global_sources_core::source_registry::CanonicalSourceSnapshot;
 use super::surface_projection_core::{
     CanonicalThreadProjectionState, ObservationCoverage, ProjectionActionCapability,
@@ -18,6 +21,7 @@ use super::surface_projection_core::{
     SurfaceProjectionObservation, SurfaceProjectionStore, SurfaceProjectionSurface,
     DESKTOP_STALE_ORPHAN_DIAGNOSTIC,
 };
+#[cfg(desktop)]
 use super::workspace_interop_core::{DesktopProjectProjection, WorkspaceResolutionState};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -128,6 +132,7 @@ pub(crate) fn monitor_list_observation(
     )
 }
 
+#[cfg(desktop)]
 pub(crate) fn global_source_snapshot_observation(
     thread_key: CodexThreadKey,
     snapshot: &CanonicalSourceSnapshot,
@@ -151,6 +156,7 @@ pub(crate) fn global_source_snapshot_observation(
     )
 }
 
+#[cfg(desktop)]
 pub(crate) fn desktop_catalog_observation(
     thread_key: CodexThreadKey,
     snapshot: &DesktopMetadataSnapshot,
@@ -166,6 +172,7 @@ pub(crate) fn desktop_catalog_observation(
     )
 }
 
+#[cfg(desktop)]
 pub(crate) fn desktop_catalog_observation_with_expectation(
     thread_key: CodexThreadKey,
     snapshot: &DesktopMetadataSnapshot,
@@ -250,6 +257,7 @@ pub(crate) fn desktop_inventory_observation(
     )
 }
 
+#[cfg(desktop)]
 pub(crate) fn desktop_project_observation(
     projection: &DesktopProjectProjection,
     observed_at: u64,

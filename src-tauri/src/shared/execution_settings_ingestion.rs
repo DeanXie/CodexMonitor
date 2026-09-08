@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 
+use super::codex_identity::CodexThreadKey;
 #[cfg(test)]
 use super::execution_settings_evidence::SettingEvidence;
 use super::execution_settings_evidence::{
@@ -17,7 +18,7 @@ use super::execution_settings_evidence::{
     ExecutionSettingsEvidenceRecord, ExecutionSettingsEvidenceStore,
     ExecutionSettingsObservationKey, ExecutionSettingsProvenance,
 };
-use super::global_sources_core::rollout_identity::CodexThreadKey;
+#[cfg(desktop)]
 use super::global_sources_core::rollout_watcher::RolloutTurnContextSettingsObservation;
 
 const MONITOR_REQUEST: &str = "monitor-request";
@@ -50,6 +51,7 @@ pub(crate) struct ExecutionSettingsEvidenceRuntime {
 }
 
 impl ExecutionSettingsEvidenceRuntime {
+    #[cfg(desktop)]
     pub(crate) fn observe_rollout_observations(
         &self,
         observations: impl IntoIterator<Item = RolloutTurnContextSettingsObservation>,

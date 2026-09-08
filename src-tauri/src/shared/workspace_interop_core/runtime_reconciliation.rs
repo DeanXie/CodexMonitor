@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::shared::global_sources_core::rollout_identity::{CodexThreadKey, CodexTurnKey};
+use crate::shared::codex_identity::{CodexThreadKey, CodexTurnKey};
 
 use super::{
     resolve_origin_workspace_relation, resolve_turn_execution_workspace_relation,

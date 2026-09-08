@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::shared::global_sources_core::rollout_identity::{CodexThreadKey, CodexTurnKey};
+use crate::shared::codex_identity::{CodexThreadKey, CodexTurnKey};
 
 use super::{
     resolve_workspace_root, ConfiguredWorkspaceRoot, ExecutionEnvironmentKey, RootLocatorPlatform,

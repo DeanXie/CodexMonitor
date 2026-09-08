@@ -11,6 +11,7 @@ use tauri::AppHandle;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
+use crate::shared::remote_host_availability::{AvailabilityEvent, RemoteHostAvailabilitySnapshot};
 use crate::shared::remote_host_identity::{
     validate_daemon_info, RemoteDaemonInfo, RemoteHostIdentity,
 };
@@ -18,9 +19,12 @@ use crate::state::AppState;
 use crate::storage::write_settings_atomic;
 use crate::types::{BackendMode, RemoteBackendProvider, RemoteBackendTarget};
 
-use self::protocol::{build_request_line, DEFAULT_REMOTE_HOST, DISCONNECTED_MESSAGE};
+use self::protocol::{build_request_line, RemoteCallError, DEFAULT_REMOTE_HOST};
 use self::tcp_transport::TcpTransport;
-use self::transport::{PendingMap, RemoteTransport, RemoteTransportConfig, RemoteTransportKind};
+use self::transport::{
+    PendingMap, RemoteTransport, RemoteTransportConfig, RemoteTransportKind,
+    TransportAvailabilityObserver,
+};
 
 const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 const REMOTE_SEND_TIMEOUT: Duration = Duration::from_secs(15);
@@ -70,25 +74,69 @@ struct RemoteBackendInner {
     next_id: AtomicU64,
     connected: Arc<std::sync::atomic::AtomicBool>,
     ready: AtomicBool,
+    availability: TransportAvailabilityObserver,
 }
 
 impl RemoteBackend {
-    pub(crate) async fn call(&self, method: &str, params: Value) -> Result<Value, String> {
+    pub(crate) async fn call(&self, method: &str, params: Value) -> Result<Value, RemoteCallError> {
         if !self.inner.ready.load(Ordering::SeqCst) {
-            return Err(
-                "remote backend is not routable before authenticated host handshake".to_string(),
-            );
+            return Err(RemoteCallError::Protocol {
+                message: "remote backend is not routable before authenticated host handshake"
+                    .to_string(),
+            });
         }
+        let runtime_workspace = (method == "connect_workspace")
+            .then(|| extract_workspace_id(&params))
+            .flatten();
+        if let Some(workspace_id) = runtime_workspace.clone() {
+            self.observe(AvailabilityEvent::RuntimeStarted { workspace_id });
+        }
+        let result = self.call_inner(method, params).await;
+        match &result {
+            Err(RemoteCallError::Disconnected) => {
+                self.observe(AvailabilityEvent::Disconnected {
+                    diagnostic: RemoteCallError::Disconnected.to_string(),
+                });
+            }
+            Err(
+                error @ (RemoteCallError::DispatchTimeout { .. }
+                | RemoteCallError::ResponseTimeout { .. }),
+            ) => {
+                self.observe(AvailabilityEvent::TransportUnknown {
+                    diagnostic: error.to_string(),
+                });
+            }
+            _ => {}
+        }
+        if let Some(workspace_id) = runtime_workspace {
+            match &result {
+                Ok(_) => self.observe(AvailabilityEvent::RuntimeReady { workspace_id }),
+                Err(RemoteCallError::RpcRejected { message }) => {
+                    self.observe(AvailabilityEvent::RuntimeUnavailable {
+                        workspace_id,
+                        diagnostic: message.clone(),
+                    });
+                }
+                Err(error) => self.observe(AvailabilityEvent::RuntimeUnknown {
+                    workspace_id,
+                    diagnostic: error.to_string(),
+                }),
+            }
+        }
+        result
+    }
+
+    async fn call_during_handshake(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, RemoteCallError> {
         self.call_inner(method, params).await
     }
 
-    async fn call_during_handshake(&self, method: &str, params: Value) -> Result<Value, String> {
-        self.call_inner(method, params).await
-    }
-
-    async fn call_inner(&self, method: &str, params: Value) -> Result<Value, String> {
+    async fn call_inner(&self, method: &str, params: Value) -> Result<Value, RemoteCallError> {
         if !self.inner.connected.load(Ordering::SeqCst) {
-            return Err(DISCONNECTED_MESSAGE.to_string());
+            return Err(RemoteCallError::Disconnected);
         }
 
         let id = self.inner.next_id.fetch_add(1, Ordering::SeqCst);
@@ -100,26 +148,24 @@ impl RemoteBackend {
             Ok(Ok(())) => {}
             Ok(Err(_)) => {
                 self.inner.pending.lock().await.remove(&id);
-                return Err(DISCONNECTED_MESSAGE.to_string());
+                return Err(RemoteCallError::Disconnected);
             }
             Err(_) => {
                 self.inner.pending.lock().await.remove(&id);
-                return Err(format!(
-                    "remote backend request dispatch timed out after {} seconds",
-                    REMOTE_SEND_TIMEOUT.as_secs()
-                ));
+                return Err(RemoteCallError::DispatchTimeout {
+                    seconds: REMOTE_SEND_TIMEOUT.as_secs(),
+                });
             }
         }
 
         match timeout(REMOTE_REQUEST_TIMEOUT, rx).await {
             Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err(DISCONNECTED_MESSAGE.to_string()),
+            Ok(Err(_)) => Err(RemoteCallError::Disconnected),
             Err(_) => {
                 self.inner.pending.lock().await.remove(&id);
-                Err(format!(
-                    "remote backend request timed out after {} seconds",
-                    REMOTE_REQUEST_TIMEOUT.as_secs()
-                ))
+                Err(RemoteCallError::ResponseTimeout {
+                    seconds: REMOTE_REQUEST_TIMEOUT.as_secs(),
+                })
             }
         }
     }
@@ -127,6 +173,24 @@ impl RemoteBackend {
     fn mark_ready(&self) {
         self.inner.ready.store(true, Ordering::SeqCst);
     }
+
+    fn observe(&self, event: AvailabilityEvent) {
+        self.inner.availability.runtime.observe(
+            self.inner.availability.attempt.clone(),
+            chrono::Utc::now().timestamp_millis(),
+            event,
+        );
+    }
+}
+
+fn extract_workspace_id(params: &Value) -> Option<String> {
+    params
+        .get("workspaceId")
+        .or_else(|| params.get("id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 pub(crate) async fn is_remote_mode(state: &AppState) -> bool {
@@ -143,24 +207,51 @@ pub(crate) async fn call_remote(
     let client = ensure_remote_backend(state, app.clone()).await?;
     match client.call(method, params.clone()).await {
         Ok(value) => Ok(value),
-        Err(err) if err == DISCONNECTED_MESSAGE => {
+        Err(RemoteCallError::Disconnected) => {
             *state.remote_backend.lock().await = None;
             if !can_retry_after_disconnect(method) {
-                return Err(err);
+                return Err(RemoteCallError::Disconnected.to_string());
             }
             let retry_client = ensure_remote_backend(state, app).await?;
             match retry_client.call(method, params).await {
                 Ok(value) => Ok(value),
                 Err(retry_err) => {
                     *state.remote_backend.lock().await = None;
-                    Err(retry_err)
+                    Err(retry_err.to_string())
                 }
             }
         }
         Err(err) => {
             *state.remote_backend.lock().await = None;
-            Err(err)
+            Err(err.to_string())
         }
+    }
+}
+
+pub(crate) fn invalidate_availability_for_settings(
+    state: &AppState,
+    previous: &crate::types::AppSettings,
+    updated: &crate::types::AppSettings,
+) {
+    let observed_at = chrono::Utc::now().timestamp_millis();
+    let previous_target_id = active_remote_target_id(previous);
+    state
+        .remote_host_availability
+        .invalidate_for_settings_change(
+            previous_target_id.clone(),
+            active_remote_host_identity(previous).ok().flatten(),
+            observed_at,
+        );
+
+    let updated_target_id = active_remote_target_id(updated);
+    if updated_target_id != previous_target_id {
+        state
+            .remote_host_availability
+            .invalidate_for_settings_change(
+                updated_target_id,
+                active_remote_host_identity(updated).ok().flatten(),
+                observed_at,
+            );
     }
 }
 
@@ -214,24 +305,80 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
         }
     }
 
-    let transport_config = {
+    let (target_id, expected_identity, transport_config) = {
         let settings = state.app_settings.lock().await;
-        resolve_transport_config(&settings)?
+        let target_id = active_remote_target_id(&settings);
+        let expected_identity = match active_remote_host_identity(&settings) {
+            Ok(identity) => identity,
+            Err(error) => {
+                state.remote_host_availability.observe_unconfigured(
+                    target_id,
+                    chrono::Utc::now().timestamp_millis(),
+                    error.clone(),
+                );
+                return Err(error);
+            }
+        };
+        (
+            target_id,
+            expected_identity,
+            resolve_transport_config(&settings)?,
+        )
     };
     let transport_kind = transport_config.kind();
-    let auth_token = transport_config
+    let auth_token = match transport_config
         .auth_token()
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
-        .ok_or_else(|| {
-            "remote backend requires token authentication before host identity handshake"
-                .to_string()
-        })?;
+    {
+        Some(token) => token,
+        None => {
+            let error =
+                "remote backend requires token authentication before host identity handshake"
+                    .to_string();
+            state.remote_host_availability.observe_unconfigured(
+                target_id,
+                chrono::Utc::now().timestamp_millis(),
+                error.clone(),
+            );
+            return Err(error);
+        }
+    };
+
+    let attempt = state.remote_host_availability.begin_attempt(
+        target_id,
+        expected_identity,
+        chrono::Utc::now().timestamp_millis(),
+    );
+    let availability = TransportAvailabilityObserver {
+        runtime: Arc::clone(&state.remote_host_availability),
+        attempt,
+    };
 
     let transport: Box<dyn RemoteTransport> = match transport_config.kind() {
         RemoteTransportKind::Tcp => Box::new(TcpTransport),
     };
-    let connection = transport.connect(app, transport_config).await?;
+    let connection = match transport
+        .connect(app, transport_config, availability.clone())
+        .await
+    {
+        Ok(connection) => connection,
+        Err(error) => {
+            availability.runtime.observe(
+                availability.attempt.clone(),
+                chrono::Utc::now().timestamp_millis(),
+                AvailabilityEvent::EndpointUnreachable {
+                    diagnostic: error.message.clone(),
+                },
+            );
+            return Err(error.message);
+        }
+    };
+    availability.runtime.observe(
+        availability.attempt.clone(),
+        chrono::Utc::now().timestamp_millis(),
+        AvailabilityEvent::TransportConnected,
+    );
 
     let client = RemoteBackend {
         inner: Arc::new(RemoteBackendInner {
@@ -240,23 +387,77 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
             next_id: AtomicU64::new(1),
             connected: connection.connected,
             ready: AtomicBool::new(false),
+            availability,
         }),
     };
 
     if matches!(transport_kind, RemoteTransportKind::Tcp) {
-        client
+        client.observe(AvailabilityEvent::AuthStarted);
+        match client
             .call_during_handshake("auth", json!({ "token": auth_token }))
             .await
-            .map(|_| ())?;
+        {
+            Ok(_) => client.observe(AvailabilityEvent::AuthSucceeded),
+            Err(RemoteCallError::RpcRejected { message }) => {
+                client.observe(AvailabilityEvent::AuthRejected {
+                    diagnostic: message.clone(),
+                });
+                return Err(message);
+            }
+            Err(error) => {
+                client.observe(AvailabilityEvent::AuthUnknown {
+                    diagnostic: error.to_string(),
+                });
+                return Err(error.to_string());
+            }
+        }
     }
 
-    let daemon_info_value = client
-        .call_during_handshake("daemon_info", json!({}))
-        .await?;
-    let daemon_info: RemoteDaemonInfo = serde_json::from_value(daemon_info_value)
-        .map_err(|error| format!("invalid remote daemon identity response: {error}"))?;
-    validate_daemon_info(&daemon_info)?;
-    persist_or_validate_remote_host_pin(state, &daemon_info.remote_host_identity, true).await?;
+    client.observe(AvailabilityEvent::DaemonValidationStarted);
+    let daemon_info_value = match client.call_during_handshake("daemon_info", json!({})).await {
+        Ok(value) => value,
+        Err(error) => {
+            client.observe(AvailabilityEvent::DaemonUnknown {
+                diagnostic: error.to_string(),
+            });
+            return Err(error.to_string());
+        }
+    };
+    let daemon_info: RemoteDaemonInfo = match serde_json::from_value(daemon_info_value) {
+        Ok(info) => info,
+        Err(error) => {
+            let error = format!("invalid remote daemon identity response: {error}");
+            client.observe(AvailabilityEvent::DaemonInvalidResponse {
+                diagnostic: error.clone(),
+            });
+            return Err(error);
+        }
+    };
+    if daemon_info.name != "codex-monitor-daemon" || daemon_info.mode != "tcp" {
+        let error = validate_daemon_info(&daemon_info).unwrap_err();
+        client.observe(AvailabilityEvent::ServiceMismatch {
+            diagnostic: error.clone(),
+        });
+        return Err(error);
+    }
+    if let Err(error) = validate_daemon_info(&daemon_info) {
+        client.observe(AvailabilityEvent::ProtocolUnsupported {
+            diagnostic: error.clone(),
+        });
+        return Err(error);
+    }
+    if let Err(error) =
+        persist_or_validate_remote_host_pin(state, &daemon_info.remote_host_identity, true).await
+    {
+        client.observe(AvailabilityEvent::IdentityMismatch {
+            observed_identity: daemon_info.remote_host_identity.clone(),
+            diagnostic: error.clone(),
+        });
+        return Err(error);
+    }
+    client.observe(AvailabilityEvent::DaemonAvailable {
+        identity: daemon_info.remote_host_identity.clone(),
+    });
     client.mark_ready();
 
     {
@@ -265,6 +466,13 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
     }
 
     Ok(client)
+}
+
+#[tauri::command]
+pub(crate) async fn get_remote_host_availability(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<RemoteHostAvailabilitySnapshot>, String> {
+    Ok(state.remote_host_availability.snapshots())
 }
 
 async fn persist_or_validate_remote_host_pin(
@@ -360,13 +568,46 @@ fn resolve_transport_config(
     })
 }
 
+fn active_remote_target_id(settings: &crate::types::AppSettings) -> String {
+    settings
+        .active_remote_backend_id
+        .clone()
+        .or_else(|| {
+            settings
+                .remote_backends
+                .first()
+                .map(|target| target.id.clone())
+        })
+        .unwrap_or_else(|| "remote-default".to_string())
+}
+
+fn active_remote_host_identity(
+    settings: &crate::types::AppSettings,
+) -> Result<Option<RemoteHostIdentity>, String> {
+    let active_id = settings.active_remote_backend_id.as_deref();
+    let target = active_id
+        .and_then(|id| {
+            settings
+                .remote_backends
+                .iter()
+                .find(|target| target.id == id)
+        })
+        .or_else(|| settings.remote_backends.first());
+    target
+        .and_then(|target| target.remote_host_identity.as_deref())
+        .map(RemoteHostIdentity::parse)
+        .transpose()
+        .map_err(|error| format!("configured remote host identity is invalid: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         can_retry_after_disconnect, reconcile_remote_host_pin, resolve_transport_config,
         RemoteBackend, RemoteBackendInner,
     };
-    use crate::remote_backend::transport::RemoteTransportConfig;
+    use crate::remote_backend::transport::{RemoteTransportConfig, TransportAvailabilityObserver};
+    use crate::shared::remote_host_availability::RemoteHostAvailabilityRuntime;
     use crate::shared::remote_host_identity::RemoteHostIdentity;
     use crate::types::AppSettings;
     use std::sync::atomic::{AtomicBool, AtomicU64};
@@ -492,6 +733,8 @@ mod tests {
     #[tokio::test]
     async fn remote_backend_is_not_routable_before_handshake() {
         let (out_tx, _out_rx) = tokio::sync::mpsc::channel(1);
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let attempt = availability.begin_attempt("test", None, 1);
         let client = RemoteBackend {
             inner: Arc::new(RemoteBackendInner {
                 out_tx,
@@ -499,12 +742,18 @@ mod tests {
                 next_id: AtomicU64::new(1),
                 connected: Arc::new(AtomicBool::new(true)),
                 ready: AtomicBool::new(false),
+                availability: TransportAvailabilityObserver {
+                    runtime: availability,
+                    attempt,
+                },
             }),
         };
         let error = client
             .call("list_workspaces", serde_json::json!({}))
             .await
             .unwrap_err();
-        assert!(error.contains("not routable before authenticated host handshake"));
+        assert!(error
+            .to_string()
+            .contains("not routable before authenticated host handshake"));
     }
 }

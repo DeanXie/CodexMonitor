@@ -564,13 +564,6 @@ impl DaemonState {
     }
 
     async fn connect_workspace(&self, id: String, client_version: String) -> Result<(), String> {
-        {
-            let sessions = self.sessions.lock().await;
-            if sessions.contains_key(&id) {
-                return Ok(());
-            }
-        }
-
         let client_version = client_version.clone();
         workspaces_core::connect_workspace_core(
             id,
@@ -1777,6 +1770,44 @@ mod tests {
             workspace_ids: Mutex::new(HashSet::from([owner_workspace_id.clone()])),
             owner_workspace_id,
         })
+    }
+
+    #[test]
+    fn stale_workspace_session_does_not_fake_runtime_ready() {
+        run_async_test(async {
+            let tmp = make_temp_dir("stale-workspace-session");
+            let workspace_id = "stale-runtime";
+            let state = test_state(&tmp);
+            insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+
+            let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+            {
+                let mut child = session.child.lock().await;
+                child.kill().await.expect("stop dummy runtime");
+                let _ = child.wait().await;
+            }
+            state
+                .sessions
+                .lock()
+                .await
+                .insert(workspace_id.to_string(), session);
+            state.app_settings.lock().await.codex_bin =
+                Some("codex-monitor-nonexistent-runtime-binary".to_string());
+
+            let result = state
+                .connect_workspace(workspace_id.to_string(), "daemon-test".to_string())
+                .await;
+
+            assert!(
+                result.is_err(),
+                "a stale session must be revalidated instead of reporting runtime ready"
+            );
+            assert!(
+                !state.sessions.lock().await.contains_key(workspace_id),
+                "the stale session must be retired before reconnect"
+            );
+            let _ = std::fs::remove_dir_all(&tmp);
+        });
     }
 
     #[test]

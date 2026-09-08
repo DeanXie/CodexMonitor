@@ -1275,4 +1275,24 @@ mod thread_read_tests {
             ThreadReadStatus::NotFound
         );
     }
+
+    #[test]
+    fn remote_read_failure_remains_unavailable_not_not_found() {
+        let response = Err("remote backend disconnected".to_string());
+
+        assert_eq!(
+            classify_thread_read_response(&response),
+            ThreadReadStatus::Unavailable
+        );
+    }
+
+    #[test]
+    fn authoritative_exact_not_found_contract_is_unchanged() {
+        let response = Err("thread not found: 01a02ff3-de17-7340-9844-5620eef3f19f".to_string());
+
+        assert_eq!(
+            classify_thread_read_response(&response),
+            ThreadReadStatus::NotFound
+        );
+    }
 }

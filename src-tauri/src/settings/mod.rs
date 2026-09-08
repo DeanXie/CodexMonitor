@@ -28,6 +28,7 @@ pub(crate) async fn update_app_settings(
         update_app_settings_core(settings, &state.app_settings, &state.settings_path).await?;
     if should_reset_remote_backend(&previous, &updated) {
         *state.remote_backend.lock().await = None;
+        crate::remote_backend::invalidate_availability_for_settings(&state, &previous, &updated);
     }
     ensure_remote_runtime_for_settings(&updated, state).await;
     let _ = window::apply_window_appearance(&window, updated.theme.as_str());
@@ -54,6 +55,7 @@ fn should_reset_remote_backend(previous: &AppSettings, updated: &AppSettings) ->
         || previous.remote_backend_provider != updated.remote_backend_provider
         || previous.remote_backend_host != updated.remote_backend_host
         || previous.remote_backend_token != updated.remote_backend_token
+        || previous.active_remote_backend_id != updated.active_remote_backend_id
 }
 
 async fn ensure_remote_runtime_for_settings(settings: &AppSettings, state: State<'_, AppState>) {
@@ -96,5 +98,15 @@ mod tests {
         updated.theme = "dark".to_string();
         updated.backend_mode = BackendMode::Local;
         assert!(!should_reset_remote_backend(&previous, &updated));
+    }
+
+    #[test]
+    fn should_reset_remote_backend_when_active_target_changes() {
+        let mut previous = AppSettings::default();
+        previous.active_remote_backend_id = Some("remote-a".to_string());
+        let mut updated = previous.clone();
+        updated.active_remote_backend_id = Some("remote-b".to_string());
+
+        assert!(should_reset_remote_backend(&previous, &updated));
     }
 }

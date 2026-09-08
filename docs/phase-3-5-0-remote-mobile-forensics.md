@@ -1,6 +1,6 @@
 # Phase 3.5.0 — Remote / Mobile Interoperability Forensics & Contract
 
-Status: **FORENSICS COMPLETE**. Phase 3.5 is **IN PROGRESS**. Phase 3.5.1a Mobile Compile Boundary is **PASS / FROZEN (Windows implementation scope)**. Phase 3.5.1b RemoteHostIdentity is **GO / NOT STARTED**.
+Status: **FORENSICS COMPLETE**. Phase 3.5 is **IN PROGRESS**. Phase 3.5.1a Mobile Compile Boundary is **PASS / FROZEN (Windows implementation scope)**. Phase 3.5.1b RemoteHostIdentity is **PASS / FROZEN**. Phase 3.5.1c Host Availability is **GO / NOT STARTED**.
 
 ## Confirmed architecture
 
@@ -96,4 +96,6 @@ Phase 3.5.1a Windows implementation scope is frozen with:
 5. no Mobile-to-local-`CODEX_HOME` fallback or Mobile-local tombstone authority;
 6. desktop and full regression gates passing on Windows.
 
-The deferred iOS target and artifact gates will run during future Mobile build/device E2E. Phase 3.5.1b RemoteHostIdentity is the next and only development start point; host identity and availability remain unimplemented here.
+The deferred iOS target and artifact gates will run during future Mobile build/device E2E. Phase 3.5.1b now provides the stable persisted host-routing identity, authenticated handshake, TOFU pinning, `RemoteThreadLocator`, and host-qualified remote execution environment described in `phase-3-5-1b-remote-host-identity.md`.
+
+The current daemon has one effective `CODEX_HOME`. Copying its complete data directory preserves the same logical `RemoteHostIdentity`; simultaneous cloned identities are an unsupported operational condition. Phase 3.5.1c Host Availability is the next and only development start point.

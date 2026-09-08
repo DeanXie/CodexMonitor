@@ -1,6 +1,6 @@
 # Phase 3.4.5a Negative Desktop Catalog Projections
 
-Status: **PASS / FROZEN**. Phase 3.4.5 Focused Cross-Surface E2E and Phase 3.4 Cross-Surface Projection Reconciliation are **PASS / COMPLETE**. Phase 3.5 is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.4.5 Focused Cross-Surface E2E and Phase 3.4 Cross-Surface Projection Reconciliation are **PASS / COMPLETE**. Phase 3.5.0 is **FORENSICS COMPLETE** and Phase 3.5.1 is **GO / NOT STARTED**.
 
 ## Contract
 
@@ -37,4 +37,4 @@ Gate C is **PASS** through the production watcher, projection join, snapshot tra
 
 ## Phase 3.4.5 outcome
 
-Final Acceptance consolidated Gates A–I and is **PASS / COMPLETE**. Natural Desktop cleanup in Gate F is `NOT OBSERVED IN THIS E2E WINDOW`; this is an allowed Desktop OBSERVE_ONLY / UNSUPPORTED boundary and was not manufactured by writing Desktop private state. Phase 3.5 is the next and only development start point.
+Final Acceptance consolidated Gates A–I and is **PASS / COMPLETE**. Natural Desktop cleanup in Gate F is `NOT OBSERVED IN THIS E2E WINDOW`; this is an allowed Desktop OBSERVE_ONLY / UNSUPPORTED boundary and was not manufactured by writing Desktop private state. Phase 3.5.0 forensics are complete; Phase 3.5.1 is the next and only development start point.

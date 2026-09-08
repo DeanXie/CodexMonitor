@@ -1,6 +1,6 @@
 # Phase 3.4.5 Focused Cross-Surface E2E
 
-Status: **PASS / COMPLETE**. Phase 3.4 Cross-Surface Projection Reconciliation is **PASS / COMPLETE**. Phase 3.5 Remote / Mobile Interoperability is **GO / NOT STARTED**.
+Status: **PASS / COMPLETE**. Phase 3.4 Cross-Surface Projection Reconciliation is **PASS / COMPLETE**. Phase 3.5.0 Remote / Mobile Interoperability Forensics & Contract is **FORENSICS COMPLETE**; Phase 3.5.1 is **GO / NOT STARTED**.
 
 ## Final gate matrix
 
@@ -34,4 +34,4 @@ Directly launching `target\debug\codex-monitor.exe` does not start Vite and can 
 
 The observed `state_5.sqlite: private-schema-drift: threads.project_id is missing` message remains a Desktop private-schema diagnostic. It does not change Desktop Catalog COMPLETE coverage, canonical identity, Desktop Project assignment, or Gate C.
 
-Desktop private databases, catalog, sidebar, global state, and Project assignments remained read-only throughout acceptance. Phase 3.5 has not started.
+Desktop private databases, catalog, sidebar, global state, and Project assignments remained read-only throughout acceptance. Phase 3.5.0 forensics are complete; Phase 3.5.1 product development has not started.

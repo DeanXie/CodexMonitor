@@ -16,6 +16,7 @@ use super::rollout_watcher::{RolloutTailWatcher, RolloutWatcherConfig, WatcherRe
 use super::source_envelope::CodexHomeIdentity;
 use super::source_envelope::{EvidenceConfidence, SourceKind};
 use super::source_registry::{ExternalLifecycle, SourceAuthorityRegistry, SourceLaneUpdate};
+use crate::shared::surface_projection_core::ObservationCoverage;
 use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -174,6 +175,22 @@ fn create_desktop_databases(root: &Path, catalog_ids: &[&str], persisted_ids: &[
             )
             .expect("state row");
     }
+}
+
+#[test]
+fn desktop_catalog_inventory_reports_complete_empty_reads() {
+    let root = temp_root();
+    create_desktop_databases(&root, &[], &[]);
+    let mut watcher = RolloutTailWatcher::new(watcher_config(&root));
+
+    let report = watcher.reconcile(1_788_134_402_000).expect("reconcile");
+
+    assert_eq!(report.desktop_catalog_inventories.len(), 1);
+    let inventory = &report.desktop_catalog_inventories[0];
+    assert_eq!(inventory.codex_home_identity, "codex-home:fixture");
+    assert_eq!(inventory.coverage, ObservationCoverage::Complete);
+    assert!(inventory.observed_thread_ids.is_empty());
+    let _ = fs::remove_dir_all(root);
 }
 
 fn write_global_state(root: &Path, thread_ids: &[&str]) {

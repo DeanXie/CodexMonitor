@@ -27,6 +27,7 @@ use super::source_envelope::{
 use super::source_registry::{
     ExternalLifecycle, SourceAuthorityRegistry, SourceLaneUpdate, SourceRegistryBatchItem,
 };
+use crate::shared::surface_projection_core::ObservationCoverage;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -110,6 +111,7 @@ pub(crate) struct ReconcileReport {
     pub processed_sources: usize,
     pub read_failures: Vec<SourceReadFailure>,
     pub desktop_metadata_diagnostics: Vec<DesktopMetadataDiagnostic>,
+    pub desktop_catalog_inventories: Vec<DesktopCatalogInventoryReport>,
     pub desktop_projection_observations: Vec<DesktopProjectionObservation>,
     pub execution_settings_turn_contexts: Vec<RolloutTurnContextSettingsObservation>,
 }
@@ -132,6 +134,14 @@ struct ProcessedSource {
 pub(crate) struct DesktopProjectionObservation {
     pub thread_key: super::rollout_identity::CodexThreadKey,
     pub assessment: DesktopProjectionAssessment,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DesktopCatalogInventoryReport {
+    pub codex_home_identity: String,
+    pub observed_thread_ids: Vec<String>,
+    pub coverage: ObservationCoverage,
+    pub diagnostics: Vec<DesktopMetadataDiagnostic>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -482,6 +492,7 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
         self.apply_desktop_supplements();
         if desktop_metadata_refreshed || self.desktop_projection_dirty {
             report.desktop_metadata_diagnostics = self.desktop_metadata_diagnostic_changes();
+            report.desktop_catalog_inventories = self.desktop_catalog_inventory_reports();
             report.desktop_projection_observations = self.assess_desktop_catalog_changes();
             self.desktop_projection_dirty = false;
         }
@@ -669,6 +680,37 @@ impl<R: RolloutDeltaReader> RolloutTailWatcher<R> {
                 changed
             })
             .collect()
+    }
+
+    fn desktop_catalog_inventory_reports(&self) -> Vec<DesktopCatalogInventoryReport> {
+        let mut reports = self
+            .desktop_metadata
+            .values()
+            .map(|metadata| {
+                let coverage = if metadata.catalog_available {
+                    ObservationCoverage::Complete
+                } else if metadata.diagnostics.is_empty() {
+                    ObservationCoverage::NotObserved
+                } else {
+                    ObservationCoverage::Failed
+                };
+                let mut observed_thread_ids = metadata
+                    .catalog_entries
+                    .iter()
+                    .map(|entry| entry.thread_id.clone())
+                    .collect::<Vec<_>>();
+                observed_thread_ids.sort();
+                observed_thread_ids.dedup();
+                DesktopCatalogInventoryReport {
+                    codex_home_identity: metadata.codex_home_identity.clone(),
+                    observed_thread_ids,
+                    coverage,
+                    diagnostics: metadata.diagnostics.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+        reports.sort_by(|left, right| left.codex_home_identity.cmp(&right.codex_home_identity));
+        reports
     }
 
     fn desktop_metadata_diagnostic_changes(&mut self) -> Vec<DesktopMetadataDiagnostic> {

@@ -117,14 +117,19 @@ pub(crate) fn start(app: &AppHandle) -> Result<(), String> {
                     }
                     let runtime = &app_state.global_rollout_runtime;
                     let generated_at_ms = chrono::Utc::now().timestamp_millis();
+                    let canonical_snapshot = registry.snapshot();
                     let projection_updates = match &event {
                         crate::shared::global_sources_core::rollout_watch_service::RolloutWatchEvent::Reconciled(report) => {
-                            desktop_projection_updates(report, generated_at_ms.max(0) as u64)
+                            desktop_projection_updates(
+                                report,
+                                &canonical_snapshot,
+                                generated_at_ms.max(0) as u64,
+                            )
                         }
                         _ => Vec::new(),
                     };
                     let published_snapshot = runtime.publish_snapshot(
-                        registry.snapshot(),
+                        canonical_snapshot,
                         projection_updates,
                         generated_at_ms,
                     );
@@ -153,32 +158,75 @@ pub(crate) fn start(app: &AppHandle) -> Result<(), String> {
 
 fn desktop_projection_updates(
     report: &crate::shared::global_sources_core::rollout_watcher::ReconcileReport,
+    canonical: &crate::shared::global_sources_core::source_registry::CanonicalSourceSnapshot,
     observed_at: u64,
 ) -> Vec<crate::shared::surface_projection_core::SurfaceProjectionObservation> {
-    report
-        .desktop_projection_observations
+    let mut keys = canonical
+        .threads
         .iter()
-        .filter_map(|reported| {
+        .map(|thread| thread.key.clone())
+        .chain(
+            report
+                .desktop_projection_observations
+                .iter()
+                .map(|reported| reported.thread_key.clone()),
+        )
+        .collect::<Vec<_>>();
+    keys.sort_by(|left, right| {
+        left.codex_home_identity
+            .cmp(&right.codex_home_identity)
+            .then_with(|| left.thread_id.cmp(&right.thread_id))
+    });
+    keys.dedup();
+
+    keys.into_iter()
+        .filter_map(|thread_key| {
+            let inventory = report
+                .desktop_catalog_inventories
+                .iter()
+                .find(|inventory| {
+                    inventory.codex_home_identity == thread_key.codex_home_identity
+                })?;
             let engine = ProjectionObservationEngine::default();
-            let observation = desktop_inventory_observation(
-                reported.thread_key.clone(),
+            let mut observation = desktop_inventory_observation(
+                thread_key.clone(),
                 crate::shared::surface_projection_core::SurfaceProjectionKind::Catalog,
-                std::slice::from_ref(&reported.thread_key.thread_id),
-                crate::shared::surface_projection_core::ObservationCoverage::Complete,
+                &inventory.observed_thread_ids,
+                inventory.coverage,
                 observed_at,
             );
+            for diagnostic in &inventory.diagnostics {
+                observation = observation.with_diagnostic(format!(
+                    "{}:{}:{}",
+                    diagnostic.source, diagnostic.code, diagnostic.message
+                ));
+            }
             engine.observe(observation);
-            let canonical_state = match reported.assessment.state {
-                DesktopProjectionState::CanonicalSupplement => {
-                    CanonicalThreadProjectionState::Present
+            let canonical_state = if canonical
+                .threads
+                .iter()
+                .any(|thread| thread.key == thread_key)
+            {
+                CanonicalThreadProjectionState::Present
+            } else {
+                match report
+                    .desktop_projection_observations
+                    .iter()
+                    .find(|reported| reported.thread_key == thread_key)?
+                    .assessment
+                    .state
+                {
+                    DesktopProjectionState::CanonicalSupplement => {
+                        CanonicalThreadProjectionState::Present
+                    }
+                    DesktopProjectionState::DesktopStaleOrphan => {
+                        CanonicalThreadProjectionState::Absent
+                    }
+                    DesktopProjectionState::Ambiguous => CanonicalThreadProjectionState::Unknown,
                 }
-                DesktopProjectionState::DesktopStaleOrphan => {
-                    CanonicalThreadProjectionState::Absent
-                }
-                DesktopProjectionState::Ambiguous => CanonicalThreadProjectionState::Unknown,
             };
             let key = crate::shared::surface_projection_core::SurfaceProjectionKey::new(
-                reported.thread_key.clone(),
+                thread_key,
                 crate::shared::surface_projection_core::SurfaceProjectionSurface::Desktop,
                 crate::shared::surface_projection_core::SurfaceProjectionKind::Catalog,
             );
@@ -211,27 +259,190 @@ mod tests {
     };
     use crate::shared::global_sources_core::rollout_identity::CodexThreadKey;
     use crate::shared::global_sources_core::rollout_watcher::{
-        DesktopProjectionObservation, ReconcileReport,
+        DesktopCatalogInventoryReport, DesktopProjectionObservation, ReconcileReport,
+    };
+    use crate::shared::global_sources_core::source_registry::{
+        CanonicalSourceSnapshot, CanonicalSourceThread,
     };
     use crate::shared::surface_projection_core::{
-        ProjectionReconciliationState, SurfaceProjectionState, DESKTOP_STALE_ORPHAN_DIAGNOSTIC,
+        ObservationCoverage, ProjectionReconciliationState, SurfaceProjectionKind,
+        SurfaceProjectionState, DESKTOP_STALE_ORPHAN_DIAGNOSTIC,
     };
 
+    fn canonical_thread(home: &str, thread_id: &str) -> CanonicalSourceThread {
+        CanonicalSourceThread {
+            key: CodexThreadKey::new(home, thread_id),
+            parent_thread_key: None,
+            agent_path: None,
+            current_turn: None,
+            lifecycle: None,
+            observed_model: None,
+            token_snapshot: None,
+            producer_surface: Default::default(),
+            workspace_assignment: None,
+            authority_provenance: None,
+            live_lane_count: 0,
+            near_live_lane_count: 1,
+            historical_lane_count: 0,
+        }
+    }
+
+    fn canonical(home: &str, thread_ids: &[&str]) -> CanonicalSourceSnapshot {
+        CanonicalSourceSnapshot {
+            threads: thread_ids
+                .iter()
+                .map(|thread_id| canonical_thread(home, thread_id))
+                .collect(),
+        }
+    }
+
+    fn inventory(
+        home: &str,
+        thread_ids: &[&str],
+        coverage: ObservationCoverage,
+    ) -> DesktopCatalogInventoryReport {
+        DesktopCatalogInventoryReport {
+            codex_home_identity: home.to_string(),
+            observed_thread_ids: thread_ids.iter().map(|value| value.to_string()).collect(),
+            coverage,
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn report_with_inventory(inventory: DesktopCatalogInventoryReport) -> ReconcileReport {
+        ReconcileReport {
+            desktop_catalog_inventories: vec![inventory],
+            ..ReconcileReport::default()
+        }
+    }
+
+    fn stale_assessment(home: &str, thread_id: &str) -> DesktopProjectionObservation {
+        DesktopProjectionObservation {
+            thread_key: CodexThreadKey::new(home, thread_id),
+            assessment: DesktopProjectionAssessment {
+                state: DesktopProjectionState::DesktopStaleOrphan,
+                canonical_ingest_allowed: false,
+                evidence: vec!["tombstone".to_string()],
+            },
+        }
+    }
+
     #[test]
-    fn desktop_stale_assessment_is_exported_as_engine_determined_stale_pending() {
+    fn canonical_present_complete_catalog_hit_is_present() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = report_with_inventory(inventory(
+            "home-1",
+            &["thread-1"],
+            ObservationCoverage::Complete,
+        ));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].state, SurfaceProjectionState::Present);
+    }
+
+    #[test]
+    fn canonical_present_complete_catalog_miss_is_absent() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = report_with_inventory(inventory(
+            "home-1",
+            &["different-thread"],
+            ObservationCoverage::Complete,
+        ));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].state, SurfaceProjectionState::Absent);
+    }
+
+    #[test]
+    fn canonical_present_failed_catalog_miss_is_unknown() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = report_with_inventory(inventory("home-1", &[], ObservationCoverage::Failed));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].state, SurfaceProjectionState::Unknown);
+    }
+
+    #[test]
+    fn canonical_present_explicit_not_observed_is_unknown() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report =
+            report_with_inventory(inventory("home-1", &[], ObservationCoverage::NotObserved));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].state, SurfaceProjectionState::Unknown);
+    }
+
+    #[test]
+    fn canonical_present_bounded_or_partial_catalog_miss_is_unknown() {
+        let canonical = canonical("home-1", &["thread-1"]);
+
+        for coverage in [ObservationCoverage::Bounded, ObservationCoverage::Partial] {
+            let report = report_with_inventory(inventory("home-1", &[], coverage));
+            let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+            assert_eq!(observations.len(), 1);
+            assert_eq!(observations[0].coverage, coverage);
+            assert_eq!(observations[0].state, SurfaceProjectionState::Unknown);
+        }
+    }
+
+    #[test]
+    fn canonical_present_without_matching_home_report_has_no_observation() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = ReconcileReport::default();
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert!(observations.is_empty());
+    }
+
+    #[test]
+    fn different_codex_home_inventory_is_not_used_as_evidence() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = report_with_inventory(inventory(
+            "home-2",
+            &["thread-1"],
+            ObservationCoverage::Complete,
+        ));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert!(observations.is_empty());
+    }
+
+    #[test]
+    fn empty_complete_catalog_generates_absent_for_present_thread() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = report_with_inventory(inventory("home-1", &[], ObservationCoverage::Complete));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert_eq!(observations[0].state, SurfaceProjectionState::Absent);
+        assert_eq!(observations[0].coverage, ObservationCoverage::Complete);
+    }
+
+    #[test]
+    fn tombstoned_catalog_hit_remains_stale_pending() {
         let report = ReconcileReport {
-            desktop_projection_observations: vec![DesktopProjectionObservation {
-                thread_key: CodexThreadKey::new("home-1", "deleted-thread"),
-                assessment: DesktopProjectionAssessment {
-                    state: DesktopProjectionState::DesktopStaleOrphan,
-                    canonical_ingest_allowed: false,
-                    evidence: vec!["tombstone".to_string()],
-                },
-            }],
+            desktop_catalog_inventories: vec![inventory(
+                "home-1",
+                &["deleted-thread"],
+                ObservationCoverage::Complete,
+            )],
+            desktop_projection_observations: vec![stale_assessment("home-1", "deleted-thread")],
             ..ReconcileReport::default()
         };
 
-        let observations = desktop_projection_updates(&report, 1_000);
+        let observations =
+            desktop_projection_updates(&report, &CanonicalSourceSnapshot::default(), 1_000);
 
         assert_eq!(observations.len(), 1);
         assert_eq!(observations[0].state, SurfaceProjectionState::Stale);
@@ -242,5 +453,95 @@ mod tests {
         assert!(observations[0]
             .diagnostics
             .contains(&DESKTOP_STALE_ORPHAN_DIAGNOSTIC.to_string()));
+    }
+
+    #[test]
+    fn catalog_miss_does_not_create_sidebar_projection() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = report_with_inventory(inventory("home-1", &[], ObservationCoverage::Complete));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert!(observations
+            .iter()
+            .all(|value| value.key.projection_kind == SurfaceProjectionKind::Catalog));
+    }
+
+    #[test]
+    fn catalog_miss_does_not_change_project_relation() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = report_with_inventory(inventory("home-1", &[], ObservationCoverage::Complete));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert!(observations
+            .iter()
+            .all(|value| value.key.projection_kind != SurfaceProjectionKind::Project));
+    }
+
+    #[test]
+    fn catalog_miss_does_not_change_canonical_identity() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let original = canonical.clone();
+        let report = report_with_inventory(inventory("home-1", &[], ObservationCoverage::Complete));
+
+        let _ = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert_eq!(canonical, original);
+    }
+
+    #[test]
+    fn multiple_threads_mixed_hit_miss_are_deterministic() {
+        let canonical = canonical("home-1", &["thread-b", "thread-a"]);
+        let report = report_with_inventory(inventory(
+            "home-1",
+            &["thread-b"],
+            ObservationCoverage::Complete,
+        ));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert_eq!(
+            observations
+                .iter()
+                .map(|value| (value.key.thread_key.thread_id.as_str(), value.state))
+                .collect::<Vec<_>>(),
+            vec![
+                ("thread-a", SurfaceProjectionState::Absent),
+                ("thread-b", SurfaceProjectionState::Present),
+            ]
+        );
+    }
+
+    #[test]
+    fn insertion_order_does_not_change_output() {
+        let first_canonical = canonical("home-1", &["thread-b", "thread-a"]);
+        let second_canonical = canonical("home-1", &["thread-a", "thread-b"]);
+        let first_report = report_with_inventory(inventory(
+            "home-1",
+            &["thread-b", "thread-a"],
+            ObservationCoverage::Complete,
+        ));
+        let second_report = report_with_inventory(inventory(
+            "home-1",
+            &["thread-a", "thread-b"],
+            ObservationCoverage::Complete,
+        ));
+
+        assert_eq!(
+            desktop_projection_updates(&first_report, &first_canonical, 1_000),
+            desktop_projection_updates(&second_report, &second_canonical, 1_000)
+        );
+    }
+
+    #[test]
+    fn production_join_uses_inventory_coverage_not_single_element_complete_shortcut() {
+        let canonical = canonical("home-1", &["thread-1"]);
+        let report = report_with_inventory(inventory("home-1", &[], ObservationCoverage::Failed));
+
+        let observations = desktop_projection_updates(&report, &canonical, 1_000);
+
+        assert_eq!(observations[0].coverage, ObservationCoverage::Failed);
+        assert_eq!(observations[0].state, SurfaceProjectionState::Unknown);
     }
 }

@@ -1,6 +1,6 @@
 # Phase 3.4.5a Negative Desktop Catalog Projections
 
-Status: **PASS / FROZEN**. Phase 3.4.5 Focused Cross-Surface E2E remains **IN PROGRESS**.
+Status: **PASS / FROZEN**. Phase 3.4.5 Focused Cross-Surface E2E and Phase 3.4 Cross-Surface Projection Reconciliation are **PASS / COMPLETE**. Phase 3.5 is **GO / NOT STARTED**.
 
 ## Contract
 
@@ -35,6 +35,6 @@ The `threads.project_id is missing` observation remains a Desktop private-schema
 
 Gate C is **PASS** through the production watcher, projection join, snapshot transport, exact-key frontend selector, and Agent Monitor UI.
 
-## Remaining Phase 3.4.5 acceptance
+## Phase 3.4.5 outcome
 
-Phase 3.4.5 remains in progress. The next step is Final Acceptance consolidation for Gates A–I. Natural Desktop cleanup in Gate F is recorded as `PASS` if directly observed or `NOT OBSERVED IN THIS E2E WINDOW` if Desktop does not reconcile during the bounded window; it must never be manufactured by writing Desktop private state. Phase 3.5 remains **NOT STARTED**.
+Final Acceptance consolidated Gates A–I and is **PASS / COMPLETE**. Natural Desktop cleanup in Gate F is `NOT OBSERVED IN THIS E2E WINDOW`; this is an allowed Desktop OBSERVE_ONLY / UNSUPPORTED boundary and was not manufactured by writing Desktop private state. Phase 3.5 is the next and only development start point.

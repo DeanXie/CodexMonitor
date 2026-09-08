@@ -1,6 +1,6 @@
 # Phase 3.4.3 — Desktop Stale / Missing Projection Handling
 
-Status: **PASS / FROZEN**. Phase 3.4.1, Phase 3.4.2, and Phase 3.4.4 remain **PASS / FROZEN**. Phase 3.4.5 Focused Cross-Surface E2E is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.4.1, Phase 3.4.2, Phase 3.4.4, and Phase 3.4.5a remain **PASS / FROZEN**. Phase 3.4.5 / Phase 3.4 are **PASS / COMPLETE**. Phase 3.5 is **GO / NOT STARTED**.
 
 ## Authority boundary
 
@@ -32,4 +32,4 @@ The contract preserves these valid combinations:
 - a CLI/exec canonical Thread with incomplete Desktop coverage remains `UNKNOWN` on that Desktop projection;
 - a long-lived Thread uses its latest source activity timestamp rather than creation time for activity ordering.
 
-Phase 3.4.4 displays these already-derived states and capabilities without inventing repair authority. Phase 3.4.5 Focused Cross-Surface E2E is the next and only development start point.
+Phase 3.4.4 displays these already-derived states and capabilities without inventing repair authority. Phase 3.4.5 and Phase 3.4 are complete. Phase 3.5 is the next and only development start point.

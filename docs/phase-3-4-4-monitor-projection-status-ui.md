@@ -1,6 +1,6 @@
 # Phase 3.4.4 — Monitor Projection Status UI
 
-Status: **PASS / FROZEN**. Phase 3.4.1 through Phase 3.4.3 remain **PASS / FROZEN**. Phase 3.4.5 Focused Cross-Surface E2E is **GO / NOT STARTED**.
+Status: **PASS / FROZEN**. Phase 3.4.1 through Phase 3.4.3 and Phase 3.4.5a remain **PASS / FROZEN**. Phase 3.4.5 / Phase 3.4 are **PASS / COMPLETE**. Phase 3.5 is **GO / NOT STARTED**.
 
 ## Presentation boundary
 
@@ -34,4 +34,4 @@ Reliable source or observation activity evidence is presented as primary `Latest
 
 Implementation commit: `155a277 feat: expose projection status in agent monitor`.
 
-Phase 3.4.5 Focused Cross-Surface E2E is the next and only development start point.
+Phase 3.4.5 and Phase 3.4 are complete. Phase 3.5 is the next and only development start point.

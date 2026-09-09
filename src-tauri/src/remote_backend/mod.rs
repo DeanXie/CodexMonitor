@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
 use tokio::sync::Mutex;
@@ -29,6 +29,50 @@ use self::transport::{
 
 const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 const REMOTE_SEND_TIMEOUT: Duration = Duration::from_secs(15);
+const REMOTE_ENDPOINT_FAILURE_WINDOW: Duration = Duration::from_secs(5);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum RemoteBackendInitializationErrorKind {
+    EndpointUnreachable,
+    Other,
+}
+
+#[derive(Clone, Debug)]
+struct RemoteBackendInitializationError {
+    message: String,
+    kind: RemoteBackendInitializationErrorKind,
+}
+
+impl RemoteBackendInitializationError {
+    fn endpoint_unreachable(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            kind: RemoteBackendInitializationErrorKind::EndpointUnreachable,
+        }
+    }
+
+    #[cfg(test)]
+    fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl From<String> for RemoteBackendInitializationError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            kind: RemoteBackendInitializationErrorKind::Other,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct RemoteBackendNegativeResult {
+    target_id: String,
+    generation: u64,
+    error: RemoteBackendInitializationError,
+    retry_not_before: Instant,
+}
 
 #[derive(Default)]
 pub(crate) struct RemoteBackendCache {
@@ -40,34 +84,98 @@ pub(crate) struct RemoteBackendCache {
 struct RemoteBackendCacheState {
     generation: u64,
     current: Option<RemoteBackend>,
+    negative: Option<RemoteBackendNegativeResult>,
 }
 
 impl RemoteBackendCache {
+    #[cfg(test)]
     async fn get_or_try_initialize<F, Fut>(&self, initialize: F) -> Result<RemoteBackend, String>
     where
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<RemoteBackend, String>>,
     {
-        if let Some(client) = self.current().await {
-            return Ok(client);
+        self.get_or_try_initialize_for_target("", Duration::ZERO, || async {
+            initialize()
+                .await
+                .map_err(RemoteBackendInitializationError::from)
+        })
+        .await
+        .map_err(|error| error.message)
+    }
+
+    async fn get_or_try_initialize_for_target<F, Fut>(
+        &self,
+        target_id: &str,
+        negative_window: Duration,
+        initialize: F,
+    ) -> Result<RemoteBackend, RemoteBackendInitializationError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<RemoteBackend, RemoteBackendInitializationError>>,
+    {
+        if let Some(result) = self.current_or_negative(target_id).await {
+            return result;
         }
 
         let _initialization = self.initialization.lock().await;
-        if let Some(client) = self.current().await {
-            return Ok(client);
+        if let Some(result) = self.current_or_negative(target_id).await {
+            return result;
         }
 
         let generation = self.state.lock().await.generation;
-
-        let client = initialize().await?;
-        let mut state = self.state.lock().await;
-        if state.generation != generation {
-            return Err("remote backend initialization was superseded".to_string());
+        match initialize().await {
+            Ok(client) => {
+                let mut state = self.state.lock().await;
+                if state.generation != generation {
+                    return Err(RemoteBackendInitializationError::from(
+                        "remote backend initialization was superseded".to_string(),
+                    ));
+                }
+                state.negative = None;
+                state.current = Some(client.clone());
+                Ok(client)
+            }
+            Err(error) => {
+                if error.kind == RemoteBackendInitializationErrorKind::EndpointUnreachable {
+                    let mut state = self.state.lock().await;
+                    if state.generation == generation {
+                        state.negative = Some(RemoteBackendNegativeResult {
+                            target_id: target_id.to_string(),
+                            generation,
+                            error: error.clone(),
+                            retry_not_before: Instant::now() + negative_window,
+                        });
+                    }
+                }
+                Err(error)
+            }
         }
-        state.current = Some(client.clone());
-        Ok(client)
     }
 
+    async fn current_or_negative(
+        &self,
+        target_id: &str,
+    ) -> Option<Result<RemoteBackend, RemoteBackendInitializationError>> {
+        let mut state = self.state.lock().await;
+        if let Some(client) = state.current.clone() {
+            return Some(Ok(client));
+        }
+        let reusable = state.negative.as_ref().is_some_and(|negative| {
+            negative.target_id == target_id
+                && negative.generation == state.generation
+                && Instant::now() < negative.retry_not_before
+        });
+        if reusable {
+            return state
+                .negative
+                .as_ref()
+                .map(|negative| Err(negative.error.clone()));
+        }
+        state.negative = None;
+        None
+    }
+
+    #[cfg(test)]
     async fn current(&self) -> Option<RemoteBackend> {
         self.state.lock().await.current.clone()
     }
@@ -80,6 +188,7 @@ impl RemoteBackendCache {
             .is_some_and(|candidate| candidate.same_connection(client))
         {
             state.current = None;
+            state.negative = None;
             state.generation = state.generation.wrapping_add(1);
             return true;
         }
@@ -89,6 +198,7 @@ impl RemoteBackendCache {
     pub(crate) async fn clear(&self) {
         let mut state = self.state.lock().await;
         state.current = None;
+        state.negative = None;
         state.generation = state.generation.wrapping_add(1);
     }
 }
@@ -130,6 +240,15 @@ fn normalize_wsl_unc_path(path: &str) -> Option<String> {
 #[derive(Clone)]
 pub(crate) struct RemoteBackend {
     inner: Arc<RemoteBackendInner>,
+}
+
+#[cfg(test)]
+impl std::fmt::Debug for RemoteBackend {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RemoteBackend")
+            .finish_non_exhaustive()
+    }
 }
 
 struct RemoteBackendInner {
@@ -366,16 +485,23 @@ fn can_retry_after_disconnect(method: &str) -> bool {
 }
 
 async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<RemoteBackend, String> {
+    let target_id = {
+        let settings = state.app_settings.lock().await;
+        active_remote_target_id(&settings)
+    };
     state
         .remote_backend
-        .get_or_try_initialize(|| initialize_remote_backend(state, app))
+        .get_or_try_initialize_for_target(&target_id, REMOTE_ENDPOINT_FAILURE_WINDOW, || {
+            initialize_remote_backend(state, app)
+        })
         .await
+        .map_err(|error| error.message)
 }
 
 async fn initialize_remote_backend(
     state: &AppState,
     app: AppHandle,
-) -> Result<RemoteBackend, String> {
+) -> Result<RemoteBackend, RemoteBackendInitializationError> {
     let (target_id, expected_identity, transport_config) = {
         let settings = state.app_settings.lock().await;
         let target_id = active_remote_target_id(&settings);
@@ -387,7 +513,7 @@ async fn initialize_remote_backend(
                     chrono::Utc::now().timestamp_millis(),
                     error.clone(),
                 );
-                return Err(error);
+                return Err(error.into());
             }
         };
         (
@@ -412,7 +538,7 @@ async fn initialize_remote_backend(
                 chrono::Utc::now().timestamp_millis(),
                 error.clone(),
             );
-            return Err(error);
+            return Err(error.into());
         }
     };
 
@@ -442,7 +568,9 @@ async fn initialize_remote_backend(
                     diagnostic: error.message.clone(),
                 },
             );
-            return Err(error.message);
+            return Err(RemoteBackendInitializationError::endpoint_unreachable(
+                error.message,
+            ));
         }
     };
     availability.runtime.observe(
@@ -473,13 +601,13 @@ async fn initialize_remote_backend(
                 client.observe(AvailabilityEvent::AuthRejected {
                     diagnostic: message.clone(),
                 });
-                return Err(message);
+                return Err(message.into());
             }
             Err(error) => {
                 client.observe(AvailabilityEvent::AuthUnknown {
                     diagnostic: error.to_string(),
                 });
-                return Err(error.to_string());
+                return Err(error.to_string().into());
             }
         }
     }
@@ -491,7 +619,7 @@ async fn initialize_remote_backend(
             client.observe(AvailabilityEvent::DaemonUnknown {
                 diagnostic: error.to_string(),
             });
-            return Err(error.to_string());
+            return Err(error.to_string().into());
         }
     };
     let daemon_info: RemoteDaemonInfo = match serde_json::from_value(daemon_info_value) {
@@ -501,7 +629,7 @@ async fn initialize_remote_backend(
             client.observe(AvailabilityEvent::DaemonInvalidResponse {
                 diagnostic: error.clone(),
             });
-            return Err(error);
+            return Err(error.into());
         }
     };
     if daemon_info.name != "codex-monitor-daemon" || daemon_info.mode != "tcp" {
@@ -509,13 +637,13 @@ async fn initialize_remote_backend(
         client.observe(AvailabilityEvent::ServiceMismatch {
             diagnostic: error.clone(),
         });
-        return Err(error);
+        return Err(error.into());
     }
     if let Err(error) = validate_daemon_info(&daemon_info) {
         client.observe(AvailabilityEvent::ProtocolUnsupported {
             diagnostic: error.clone(),
         });
-        return Err(error);
+        return Err(error.into());
     }
     if let Err(error) =
         persist_or_validate_remote_host_pin(state, &daemon_info.remote_host_identity, true).await
@@ -524,7 +652,7 @@ async fn initialize_remote_backend(
             observed_identity: daemon_info.remote_host_identity.clone(),
             diagnostic: error.clone(),
         });
-        return Err(error);
+        return Err(error.into());
     }
     client.observe(AvailabilityEvent::DaemonAvailable {
         identity: daemon_info.remote_host_identity.clone(),
@@ -670,7 +798,7 @@ fn active_remote_host_identity(
 mod tests {
     use super::{
         can_retry_after_disconnect, reconcile_remote_host_pin, resolve_transport_config,
-        RemoteBackend, RemoteBackendCache, RemoteBackendInner,
+        RemoteBackend, RemoteBackendCache, RemoteBackendInitializationError, RemoteBackendInner,
     };
     use crate::remote_backend::transport::{RemoteTransportConfig, TransportAvailabilityObserver};
     use crate::shared::remote_host_availability::RemoteHostAvailabilityRuntime;
@@ -678,6 +806,7 @@ mod tests {
     use crate::types::AppSettings;
     use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::time::Duration;
     use tokio::sync::{Barrier, Mutex};
 
     fn test_backend_with_outbound(
@@ -782,6 +911,349 @@ mod tests {
             .current()
             .await
             .is_some_and(|current| current.same_connection(&first)));
+    }
+
+    #[tokio::test]
+    async fn endpoint_failure_is_coalesced_for_waiting_callers() {
+        let cache = Arc::new(RemoteBackendCache::default());
+        let initializer_calls = Arc::new(AtomicUsize::new(0));
+        let initializer_started = Arc::new(Barrier::new(2));
+        let release_initializer = Arc::new(Barrier::new(2));
+
+        let first_cache = Arc::clone(&cache);
+        let first_calls = Arc::clone(&initializer_calls);
+        let first_started = Arc::clone(&initializer_started);
+        let first_release = Arc::clone(&release_initializer);
+        let first = tokio::spawn(async move {
+            first_cache
+                .get_or_try_initialize_for_target(
+                    "remote-a",
+                    Duration::from_secs(5),
+                    || async move {
+                        first_calls.fetch_add(1, Ordering::SeqCst);
+                        first_started.wait().await;
+                        first_release.wait().await;
+                        Err(RemoteBackendInitializationError::endpoint_unreachable(
+                            "endpoint unavailable",
+                        ))
+                    },
+                )
+                .await
+        });
+
+        initializer_started.wait().await;
+        let second_cache = Arc::clone(&cache);
+        let second_calls = Arc::clone(&initializer_calls);
+        let second = tokio::spawn(async move {
+            second_cache
+                .get_or_try_initialize_for_target(
+                    "remote-a",
+                    Duration::from_secs(5),
+                    || async move {
+                        second_calls.fetch_add(1, Ordering::SeqCst);
+                        Err(RemoteBackendInitializationError::endpoint_unreachable(
+                            "second attempt must not run",
+                        ))
+                    },
+                )
+                .await
+        });
+
+        release_initializer.wait().await;
+        assert_eq!(
+            first.await.unwrap().unwrap_err().message(),
+            "endpoint unavailable"
+        );
+        assert_eq!(
+            second.await.unwrap().unwrap_err().message(),
+            "endpoint unavailable"
+        );
+        assert_eq!(initializer_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn coalesced_callers_do_not_increment_attempt_id() {
+        let cache = RemoteBackendCache::default();
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let first_availability = Arc::clone(&availability);
+        cache
+            .get_or_try_initialize_for_target(
+                "remote-a",
+                Duration::from_secs(5),
+                || async move {
+                    let attempt = first_availability.begin_attempt("remote-a", None, 10);
+                    first_availability.observe(
+                        attempt,
+                        11,
+                        crate::shared::remote_host_availability::AvailabilityEvent::EndpointUnreachable {
+                            diagnostic: "endpoint unavailable".to_string(),
+                        },
+                    );
+                    Err(RemoteBackendInitializationError::endpoint_unreachable(
+                        "endpoint unavailable",
+                    ))
+                },
+            )
+            .await
+            .unwrap_err();
+        let attempt_id = availability.snapshot("remote-a").unwrap().attempt_id;
+
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                panic!("coalesced caller must not allocate a new attempt");
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            availability.snapshot("remote-a").unwrap().attempt_id,
+            attempt_id
+        );
+    }
+
+    #[tokio::test]
+    async fn endpoint_failure_remains_observable_during_negative_window() {
+        use crate::shared::remote_host_availability::TransportState;
+
+        let cache = RemoteBackendCache::default();
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let observed = Arc::clone(&availability);
+        cache
+            .get_or_try_initialize_for_target(
+                "remote-a",
+                Duration::from_secs(5),
+                || async move {
+                    let attempt = observed.begin_attempt("remote-a", None, 10);
+                    observed.observe(
+                        attempt,
+                        11,
+                        crate::shared::remote_host_availability::AvailabilityEvent::EndpointUnreachable {
+                            diagnostic: "endpoint unavailable".to_string(),
+                        },
+                    );
+                    Err(RemoteBackendInitializationError::endpoint_unreachable(
+                        "endpoint unavailable",
+                    ))
+                },
+            )
+            .await
+            .unwrap_err();
+
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                panic!("negative result must be reused")
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            availability.snapshot("remote-a").unwrap().transport,
+            TransportState::EndpointUnreachable
+        );
+    }
+
+    #[tokio::test]
+    async fn only_one_retry_attempt_is_admitted_after_window_expires() {
+        let cache = RemoteBackendCache::default();
+        let calls = AtomicUsize::new(0);
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_millis(10), || async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "first",
+                ))
+            })
+            .await
+            .unwrap_err();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "retry",
+                ))
+            })
+            .await
+            .unwrap_err();
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "extra",
+                ))
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn repeated_failure_reestablishes_negative_window() {
+        let cache = RemoteBackendCache::default();
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_millis(10), || async {
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "first",
+                ))
+            })
+            .await
+            .unwrap_err();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "second",
+                ))
+            })
+            .await
+            .unwrap_err();
+
+        let error = cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                panic!("second failure window must be active")
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.message(), "second");
+    }
+
+    async fn assert_clear_invalidates_negative_result() {
+        let cache = RemoteBackendCache::default();
+        let calls = AtomicUsize::new(0);
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "old config",
+                ))
+            })
+            .await
+            .unwrap_err();
+        cache.clear().await;
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "new config",
+                ))
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn endpoint_change_invalidates_negative_result() {
+        assert_clear_invalidates_negative_result().await;
+    }
+
+    #[tokio::test]
+    async fn token_change_invalidates_negative_result_without_clearing_host_pin() {
+        assert_clear_invalidates_negative_result().await;
+    }
+
+    #[tokio::test]
+    async fn active_target_change_invalidates_negative_result() {
+        let cache = RemoteBackendCache::default();
+        let calls = AtomicUsize::new(0);
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "remote-a unavailable",
+                ))
+            })
+            .await
+            .unwrap_err();
+        cache
+            .get_or_try_initialize_for_target("remote-b", Duration::from_secs(5), || async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "remote-b unavailable",
+                ))
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn non_endpoint_initialization_failures_are_not_coalesced() {
+        let cache = RemoteBackendCache::default();
+        let calls = AtomicUsize::new(0);
+        for message in ["authentication failed", "identity mismatch"] {
+            let error = cache
+                .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Err(RemoteBackendInitializationError::from(message.to_string()))
+                })
+                .await
+                .unwrap_err();
+            assert_eq!(error.message(), message);
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn successful_reconnect_clears_negative_result() {
+        let cache = RemoteBackendCache::default();
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_millis(10), || async {
+                Err(RemoteBackendInitializationError::endpoint_unreachable(
+                    "first",
+                ))
+            })
+            .await
+            .unwrap_err();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let connected = cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                Ok(test_backend(availability, "remote-a", 20))
+            })
+            .await
+            .unwrap();
+        let reused = cache
+            .get_or_try_initialize_for_target("remote-a", Duration::from_secs(5), || async {
+                panic!("successful backend must be reused")
+            })
+            .await
+            .unwrap();
+        assert!(connected.same_connection(&reused));
+    }
+
+    #[tokio::test]
+    async fn queued_git_workspace_thread_reads_share_same_failed_initialization() {
+        let cache = Arc::new(RemoteBackendCache::default());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut tasks = Vec::new();
+        for _method in ["get_git_status", "list_workspaces", "read_thread"] {
+            let cache = Arc::clone(&cache);
+            let calls = Arc::clone(&calls);
+            tasks.push(tokio::spawn(async move {
+                cache
+                    .get_or_try_initialize_for_target(
+                        "remote-a",
+                        Duration::from_secs(5),
+                        || async move {
+                            calls.fetch_add(1, Ordering::SeqCst);
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                            Err(RemoteBackendInitializationError::endpoint_unreachable(
+                                "endpoint unavailable",
+                            ))
+                        },
+                    )
+                    .await
+            }));
+        }
+        for task in tasks {
+            assert_eq!(
+                task.await.unwrap().unwrap_err().message(),
+                "endpoint unavailable"
+            );
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

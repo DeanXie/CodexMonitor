@@ -2,7 +2,7 @@
 
 Status: **PASS / FROZEN**.
 
-Next development start point: **Phase 3.5.1d — Windows Remote Acceptance: GO / NOT STARTED**.
+Phase 3.5.1d Windows Remote Acceptance is **IN PROGRESS**. Gate C is **PASS** after the bounded remote backend connection-ownership correction. Acceptance resumes at Gate D.
 
 ## Frozen availability contract
 
@@ -79,3 +79,5 @@ When remote inventory never executes, there is no projection observation. Transp
 Availability state is intentionally process-local. Stable Host identity persists separately. Phase 3.5.1c does not redesign writer lifecycle, approval, deletion authority, Mobile projection, client identity, or multi-`CODEX_HOME` runtime behavior.
 
 Implementation commit: `bc2f6f0` (`feat: model remote host availability`).
+
+The availability reducer and remote backend cache now share the same attempt/generation ownership rule. A stale handshake cannot replace the current cached backend, a stale client cannot clear it, and stale EOF cannot mark the current attempt disconnected. A disconnect from the current cached connection still invalidates current availability. These rules preserve the frozen availability state model.

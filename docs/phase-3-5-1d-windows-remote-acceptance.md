@@ -1,6 +1,6 @@
 # Phase 3.5.1d — Windows Remote Acceptance
 
-Status: **IN PROGRESS**. Gates A-E are **PASS**. Phase 3.5.1d-b Remote Backend Connection Ownership Fix and Phase 3.5.1d-c Endpoint Failure Admission Control are **PASS / FROZEN**. Acceptance resumes at Gate F. Phase 3.5.2 is **NOT STARTED**.
+Status: **IN PROGRESS**. Gates A-H are **PASS**. Phase 3.5.1d-b Remote Backend Connection Ownership Fix, Phase 3.5.1d-c Endpoint Failure Admission Control, and Phase 3.5.1d-e Terminal Failure Preservation are **PASS / FROZEN**. Acceptance resumes at Gate I. Phase 3.5.2 is **NOT STARTED**.
 
 ## Frozen connection ownership contract
 
@@ -77,3 +77,39 @@ expected RemoteHostIdentity = 014383f2-41f8-4b13-b9d7-30c511e47cec
 The Host identity pin and historical readiness timestamps were preserved without being treated as current `READY`. No Thread, tombstone, projection, Workspace, Desktop Project, or token-accounting truth changed.
 
 Implementation commit: `df7f6b9` (`fix: coalesce remote endpoint connection failures`).
+
+## Frozen terminal-failure preservation contract
+
+A cleanup disconnect for the same availability attempt preserves an already-confirmed authoritative terminal failure:
+
+- `AuthState::FAILED`;
+- `DaemonState::IDENTITY_MISMATCH`;
+- `DaemonState::PROTOCOL_UNSUPPORTED`;
+- `DaemonState::SERVICE_MISMATCH`;
+- `DaemonState::INVALID_RESPONSE`.
+
+The summary selector gives these terminal causes precedence over the generic transport cleanup state. `Auth FAILED + Transport DISCONNECTED` therefore summarizes as `AUTHENTICATION_FAILED`; the corresponding daemon validation failures summarize as their existing typed identity, protocol, or daemon-verification outcome.
+
+This evidence belongs only to the current attempt. `begin_attempt(newId)` resets prior terminal evidence to the normal connecting/not-observed states, and stale-attempt events remain unable to overwrite the current attempt. Without an authoritative terminal failure, an unexpected disconnect from `CONNECTED / AUTHENTICATED / AVAILABLE / READY` still clears current success evidence to `DISCONNECTED / UNKNOWN / UNKNOWN / UNKNOWN` and summarizes as `DISCONNECTED`. The amendment is not sticky failure state and does not change transport lifecycle, retries, polling, Host identity, Thread authority, projections, Workspace/Project identity, or token accounting.
+
+## Gate H authoritative evidence
+
+The real Windows wrong-token acceptance run observed an authoritative daemon `invalid token` rejection followed by normal uncommitted-connection cleanup:
+
+```text
+Gate H = PASS
+baseline attemptId = 1
+wrong-token stable attemptId = 384
+Transport = DISCONNECTED
+Auth = FAILED
+Daemon = NOT_OBSERVED
+Runtime = NOT_OBSERVED
+Summary = AUTHENTICATION_FAILED
+expected RemoteHostIdentity = 014383f2-41f8-4b13-b9d7-30c511e47cec
+```
+
+Both `invalid token` and the subsequent `transport read ended` diagnostic were retained, while the Host identity pin was unchanged. The state did not become `ENDPOINT_UNREACHABLE`, `IDENTITY_MISMATCH`, `PROTOCOL_UNSUPPORTED`, or `READY`. Restoring the correct test token created attempt `719`, reset the previous terminal evidence, and recovered `CONNECTED / AUTHENTICATED / AVAILABLE / READY` for `phase-3-5-1d-workspace` with no observed Thread or accounting pollution.
+
+Wrong-token polling produced rapidly increasing attempt IDs. That is recorded as a non-blocking retry/admission optimization observation; this Slice does not add authentication-failure cooldown or change polling/retry policy.
+
+Implementation commit: `0e5a9ea` (`fix: preserve remote terminal availability failures`).

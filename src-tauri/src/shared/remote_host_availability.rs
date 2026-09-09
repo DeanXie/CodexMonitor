@@ -138,9 +138,6 @@ pub(crate) fn availability_summary(
     if snapshot.transport == TransportState::EndpointUnreachable {
         return AvailabilitySummary::EndpointUnreachable;
     }
-    if snapshot.transport == TransportState::Disconnected {
-        return AvailabilitySummary::Disconnected;
-    }
     if snapshot.auth == AuthState::Failed {
         return AvailabilitySummary::AuthenticationFailed;
     }
@@ -155,6 +152,9 @@ pub(crate) fn availability_summary(
         DaemonState::ServiceMismatch | DaemonState::InvalidResponse
     ) {
         return AvailabilitySummary::DaemonVerificationFailed;
+    }
+    if snapshot.transport == TransportState::Disconnected {
+        return AvailabilitySummary::Disconnected;
     }
     if snapshot.runtime.state == RuntimeState::Unavailable {
         return AvailabilitySummary::CodexRuntimeUnavailable;
@@ -381,10 +381,30 @@ impl RemoteHostAvailabilityRuntime {
                 );
             }
             AvailabilityEvent::Disconnected { diagnostic } => {
+                let auth_failed = snapshot.auth == AuthState::Failed;
+                let daemon_terminal = matches!(
+                    snapshot.daemon,
+                    DaemonState::ProtocolUnsupported
+                        | DaemonState::IdentityMismatch
+                        | DaemonState::ServiceMismatch
+                        | DaemonState::InvalidResponse
+                );
                 snapshot.transport = TransportState::Disconnected;
-                snapshot.auth = AuthState::Unknown;
-                snapshot.daemon = DaemonState::Unknown;
-                snapshot.runtime.state = RuntimeState::Unknown;
+                if auth_failed || daemon_terminal {
+                    if !auth_failed {
+                        snapshot.auth = AuthState::Unknown;
+                    }
+                    if !daemon_terminal && snapshot.daemon != DaemonState::NotObserved {
+                        snapshot.daemon = DaemonState::Unknown;
+                    }
+                    if snapshot.runtime.state != RuntimeState::NotObserved {
+                        snapshot.runtime.state = RuntimeState::Unknown;
+                    }
+                } else {
+                    snapshot.auth = AuthState::Unknown;
+                    snapshot.daemon = DaemonState::Unknown;
+                    snapshot.runtime.state = RuntimeState::Unknown;
+                }
                 push_diagnostic(
                     snapshot,
                     AvailabilityStage::Transport,
@@ -620,6 +640,60 @@ mod tests {
     }
 
     #[test]
+    fn auth_rejected_then_cleanup_disconnect_preserves_failed() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let attempt = runtime.begin_attempt(TARGET, None, 10);
+        runtime.observe(attempt.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(attempt.clone(), 12, AvailabilityEvent::AuthStarted);
+        runtime.observe(
+            attempt.clone(),
+            13,
+            AvailabilityEvent::AuthRejected {
+                diagnostic: "invalid token".to_string(),
+            },
+        );
+        runtime.observe(
+            attempt,
+            14,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "transport read ended".to_string(),
+            },
+        );
+
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.transport, TransportState::Disconnected);
+        assert_eq!(snapshot.auth, AuthState::Failed);
+        assert_eq!(snapshot.daemon, DaemonState::NotObserved);
+        assert_eq!(snapshot.runtime.state, RuntimeState::NotObserved);
+    }
+
+    #[test]
+    fn auth_failed_summary_beats_cleanup_disconnected() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let attempt = runtime.begin_attempt(TARGET, None, 10);
+        runtime.observe(attempt.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(
+            attempt.clone(),
+            12,
+            AvailabilityEvent::AuthRejected {
+                diagnostic: "invalid token".to_string(),
+            },
+        );
+        runtime.observe(
+            attempt,
+            13,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "transport read ended".to_string(),
+            },
+        );
+
+        assert_eq!(
+            availability_summary(&runtime.snapshot(TARGET).unwrap()),
+            AvailabilitySummary::AuthenticationFailed
+        );
+    }
+
+    #[test]
     fn auth_timeout_is_unknown() {
         let runtime = RemoteHostAvailabilityRuntime::default();
         let attempt = runtime.begin_attempt(TARGET, None, 10);
@@ -719,6 +793,128 @@ mod tests {
     }
 
     #[test]
+    fn identity_mismatch_then_disconnect_preserves_terminal_outcome() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let attempt = runtime.begin_attempt(TARGET, Some(host()), 10);
+        runtime.observe(attempt.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(attempt.clone(), 12, AvailabilityEvent::AuthSucceeded);
+        runtime.observe(
+            attempt.clone(),
+            13,
+            AvailabilityEvent::IdentityMismatch {
+                observed_identity: RemoteHostIdentity::parse(
+                    "db7a6abc-cfad-4e6b-a93c-6a6918c2e112",
+                )
+                .unwrap(),
+                diagnostic: "pin mismatch".to_string(),
+            },
+        );
+        runtime.observe(
+            attempt,
+            14,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "transport read ended".to_string(),
+            },
+        );
+
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.auth, AuthState::Unknown);
+        assert_eq!(snapshot.daemon, DaemonState::IdentityMismatch);
+        assert_eq!(snapshot.runtime.state, RuntimeState::NotObserved);
+        assert_eq!(
+            availability_summary(&snapshot),
+            AvailabilitySummary::IdentityMismatch
+        );
+    }
+
+    #[test]
+    fn protocol_unsupported_then_disconnect_preserves_terminal_outcome() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let attempt = runtime.begin_attempt(TARGET, None, 10);
+        runtime.observe(attempt.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(attempt.clone(), 12, AvailabilityEvent::AuthSucceeded);
+        runtime.observe(
+            attempt.clone(),
+            13,
+            AvailabilityEvent::ProtocolUnsupported {
+                diagnostic: "protocol 2".to_string(),
+            },
+        );
+        runtime.observe(
+            attempt,
+            14,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "transport read ended".to_string(),
+            },
+        );
+
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.daemon, DaemonState::ProtocolUnsupported);
+        assert_eq!(
+            availability_summary(&snapshot),
+            AvailabilitySummary::ProtocolUnsupported
+        );
+    }
+
+    #[test]
+    fn service_mismatch_then_disconnect_preserves_terminal_outcome() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let attempt = runtime.begin_attempt(TARGET, None, 10);
+        runtime.observe(attempt.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(attempt.clone(), 12, AvailabilityEvent::AuthSucceeded);
+        runtime.observe(
+            attempt.clone(),
+            13,
+            AvailabilityEvent::ServiceMismatch {
+                diagnostic: "wrong service".to_string(),
+            },
+        );
+        runtime.observe(
+            attempt,
+            14,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "transport read ended".to_string(),
+            },
+        );
+
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.daemon, DaemonState::ServiceMismatch);
+        assert_eq!(
+            availability_summary(&snapshot),
+            AvailabilitySummary::DaemonVerificationFailed
+        );
+    }
+
+    #[test]
+    fn invalid_response_then_disconnect_preserves_terminal_outcome() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let attempt = runtime.begin_attempt(TARGET, None, 10);
+        runtime.observe(attempt.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(attempt.clone(), 12, AvailabilityEvent::AuthSucceeded);
+        runtime.observe(
+            attempt.clone(),
+            13,
+            AvailabilityEvent::DaemonInvalidResponse {
+                diagnostic: "invalid daemon_info".to_string(),
+            },
+        );
+        runtime.observe(
+            attempt,
+            14,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "transport read ended".to_string(),
+            },
+        );
+
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.daemon, DaemonState::InvalidResponse);
+        assert_eq!(
+            availability_summary(&snapshot),
+            AvailabilitySummary::DaemonVerificationFailed
+        );
+    }
+
+    #[test]
     fn daemon_available_without_runtime_probe_is_not_ready() {
         let runtime = RemoteHostAvailabilityRuntime::default();
         let attempt = runtime.begin_attempt(TARGET, None, 10);
@@ -807,6 +1003,121 @@ mod tests {
             availability_summary(&snapshot),
             AvailabilitySummary::Disconnected
         );
+    }
+
+    #[test]
+    fn ready_then_unexpected_disconnect_clears_success_states() {
+        let runtime = ready_runtime();
+        runtime.observe(
+            runtime.current_attempt(TARGET).unwrap(),
+            200,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "unexpected eof".to_string(),
+            },
+        );
+
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.auth, AuthState::Unknown);
+        assert_eq!(snapshot.daemon, DaemonState::Unknown);
+        assert_eq!(snapshot.runtime.state, RuntimeState::Unknown);
+    }
+
+    #[test]
+    fn disconnect_without_terminal_failure_summarizes_disconnected() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let attempt = runtime.begin_attempt(TARGET, None, 10);
+        runtime.observe(attempt.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(
+            attempt,
+            12,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "unexpected eof".to_string(),
+            },
+        );
+
+        assert_eq!(
+            availability_summary(&runtime.snapshot(TARGET).unwrap()),
+            AvailabilitySummary::Disconnected
+        );
+    }
+
+    #[test]
+    fn new_attempt_resets_previous_auth_failure() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let failed = runtime.begin_attempt(TARGET, None, 10);
+        runtime.observe(failed.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(
+            failed,
+            12,
+            AvailabilityEvent::AuthRejected {
+                diagnostic: "invalid token".to_string(),
+            },
+        );
+
+        let next = runtime.begin_attempt(TARGET, None, 20);
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.attempt_id, next.attempt_id);
+        assert_eq!(snapshot.transport, TransportState::Connecting);
+        assert_eq!(snapshot.auth, AuthState::NotAttempted);
+    }
+
+    #[test]
+    fn new_attempt_resets_previous_daemon_terminal_failure() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let failed = runtime.begin_attempt(TARGET, None, 10);
+        runtime.observe(failed.clone(), 11, AvailabilityEvent::TransportConnected);
+        runtime.observe(failed.clone(), 12, AvailabilityEvent::AuthSucceeded);
+        runtime.observe(
+            failed,
+            13,
+            AvailabilityEvent::ProtocolUnsupported {
+                diagnostic: "protocol 2".to_string(),
+            },
+        );
+
+        let next = runtime.begin_attempt(TARGET, None, 20);
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.attempt_id, next.attempt_id);
+        assert_eq!(snapshot.daemon, DaemonState::NotObserved);
+    }
+
+    #[test]
+    fn stale_attempt_terminal_failure_cannot_overwrite_current_attempt() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let old = runtime.begin_attempt(TARGET, None, 10);
+        let current = runtime.begin_attempt(TARGET, None, 20);
+        runtime.observe(current.clone(), 21, AvailabilityEvent::TransportConnected);
+        runtime.observe(
+            old,
+            22,
+            AvailabilityEvent::AuthRejected {
+                diagnostic: "late rejection".to_string(),
+            },
+        );
+
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.attempt_id, current.attempt_id);
+        assert_eq!(snapshot.transport, TransportState::Connected);
+        assert_eq!(snapshot.auth, AuthState::NotAttempted);
+    }
+
+    #[test]
+    fn stale_attempt_disconnect_cannot_overwrite_current_attempt() {
+        let runtime = RemoteHostAvailabilityRuntime::default();
+        let old = runtime.begin_attempt(TARGET, None, 10);
+        let current = runtime.begin_attempt(TARGET, None, 20);
+        runtime.observe(current.clone(), 21, AvailabilityEvent::TransportConnected);
+        runtime.observe(
+            old,
+            22,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "late eof".to_string(),
+            },
+        );
+
+        let snapshot = runtime.snapshot(TARGET).unwrap();
+        assert_eq!(snapshot.attempt_id, current.attempt_id);
+        assert_eq!(snapshot.transport, TransportState::Connected);
     }
 
     #[test]

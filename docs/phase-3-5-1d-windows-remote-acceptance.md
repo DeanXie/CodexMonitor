@@ -1,6 +1,6 @@
 # Phase 3.5.1d — Windows Remote Acceptance
 
-Status: **IN PROGRESS**. Gate C is **PASS**. Phase 3.5.1d-b Remote Backend Connection Ownership Fix is **PASS / FROZEN**. Acceptance resumes at Gate D. Phase 3.5.2 is **NOT STARTED**.
+Status: **IN PROGRESS**. Gates A-E are **PASS**. Phase 3.5.1d-b Remote Backend Connection Ownership Fix and Phase 3.5.1d-c Endpoint Failure Admission Control are **PASS / FROZEN**. Acceptance resumes at Gate F. Phase 3.5.2 is **NOT STARTED**.
 
 ## Frozen connection ownership contract
 
@@ -45,3 +45,35 @@ diagnostics = []
 After a complete 15-second polling cycle, the snapshot remained `CONNECTED / AUTHENTICATED / AVAILABLE / READY` with the same workspace identity and non-null `lastRuntimeReadyAt`. There was no recurrence of `transport read ended`, `DISCONNECTED`, Runtime `UNKNOWN`, or a null workspace identity.
 
 Implementation commit: `096095b` (`fix: serialize remote backend connection ownership`).
+
+## Frozen endpoint-failure admission contract
+
+An authoritative TCP endpoint failure records `ENDPOINT_UNREACHABLE` and a bounded five-second negative initialization result owned by the same remote target and settings generation. During that window, queued and polling callers reuse the typed failure without allocating an attempt, opening another TCP connection, or changing current availability back to `CONNECTING`.
+
+After the window expires, the next eligible caller may start exactly one new connection attempt. A repeated endpoint failure establishes a new bounded window. This is admission control, not sticky availability: a real admitted reconnect still changes current transport state to `CONNECTING`.
+
+The negative result is invalidated by endpoint, token, provider, or active-target configuration changes. It does not clear or rewrite the pinned `RemoteHostIdentity`. Authentication rejection, identity mismatch, and unsupported protocol remain distinct typed outcomes and are not reclassified as endpoint failures.
+
+Endpoint failure and coalescing cannot emit Thread absence or deletion, create tombstones, synthesize complete empty inventory, mutate projections or Workspace/Desktop Project identity, or change token accounting.
+
+## Gate E authoritative evidence
+
+The acceptance daemon was stopped and its listener was released while production polling remained enabled. The real Windows run observed:
+
+```text
+Gate E = PASS
+first failed window attemptId = 10
+first negative window = approximately 5.114 seconds
+second attemptId = 11
+second negative window = approximately 5.068 seconds
+attempt sequence = 10 -> 11 -> 12
+observation window = 18.36 seconds
+actual TCP attempts = 3
+coalesced production reads = 40
+Transport = ENDPOINT_UNREACHABLE remained observable
+expected RemoteHostIdentity = 014383f2-41f8-4b13-b9d7-30c511e47cec
+```
+
+The Host identity pin and historical readiness timestamps were preserved without being treated as current `READY`. No Thread, tombstone, projection, Workspace, Desktop Project, or token-accounting truth changed.
+
+Implementation commit: `df7f6b9` (`fix: coalesce remote endpoint connection failures`).

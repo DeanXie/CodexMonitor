@@ -2,7 +2,7 @@
 
 Status: **PASS / FROZEN**.
 
-Phase 3.5.1d Windows Remote Acceptance is **IN PROGRESS**. Gate C is **PASS** after the bounded remote backend connection-ownership correction. Acceptance resumes at Gate D.
+Phase 3.5.1d Windows Remote Acceptance is **IN PROGRESS**. Gates C and E are **PASS** after the bounded remote backend connection-ownership and endpoint-failure admission corrections. Acceptance resumes at Gate F.
 
 ## Frozen availability contract
 
@@ -81,3 +81,5 @@ Availability state is intentionally process-local. Stable Host identity persists
 Implementation commit: `bc2f6f0` (`feat: model remote host availability`).
 
 The availability reducer and remote backend cache now share the same attempt/generation ownership rule. A stale handshake cannot replace the current cached backend, a stale client cannot clear it, and stale EOF cannot mark the current attempt disconnected. A disconnect from the current cached connection still invalidates current availability. These rules preserve the frozen availability state model.
+
+An endpoint-unreachable initialization result is coalesced for five seconds by target and settings generation. Reusing that negative result does not allocate an attempt or emit `CONNECTING`; only a genuinely admitted TCP attempt advances the current availability state. This backend admission rule preserves the frozen availability enum and selector contract.

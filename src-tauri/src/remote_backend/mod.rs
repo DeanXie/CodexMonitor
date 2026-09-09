@@ -3,6 +3,7 @@ mod tcp_transport;
 mod transport;
 
 use serde_json::{json, Value};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,6 +29,69 @@ use self::transport::{
 
 const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 const REMOTE_SEND_TIMEOUT: Duration = Duration::from_secs(15);
+
+#[derive(Default)]
+pub(crate) struct RemoteBackendCache {
+    state: Mutex<RemoteBackendCacheState>,
+    initialization: Mutex<()>,
+}
+
+#[derive(Default)]
+struct RemoteBackendCacheState {
+    generation: u64,
+    current: Option<RemoteBackend>,
+}
+
+impl RemoteBackendCache {
+    async fn get_or_try_initialize<F, Fut>(&self, initialize: F) -> Result<RemoteBackend, String>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<RemoteBackend, String>>,
+    {
+        if let Some(client) = self.current().await {
+            return Ok(client);
+        }
+
+        let _initialization = self.initialization.lock().await;
+        if let Some(client) = self.current().await {
+            return Ok(client);
+        }
+
+        let generation = self.state.lock().await.generation;
+
+        let client = initialize().await?;
+        let mut state = self.state.lock().await;
+        if state.generation != generation {
+            return Err("remote backend initialization was superseded".to_string());
+        }
+        state.current = Some(client.clone());
+        Ok(client)
+    }
+
+    async fn current(&self) -> Option<RemoteBackend> {
+        self.state.lock().await.current.clone()
+    }
+
+    async fn clear_if_current(&self, client: &RemoteBackend) -> bool {
+        let mut state = self.state.lock().await;
+        if state
+            .current
+            .as_ref()
+            .is_some_and(|candidate| candidate.same_connection(client))
+        {
+            state.current = None;
+            state.generation = state.generation.wrapping_add(1);
+            return true;
+        }
+        false
+    }
+
+    pub(crate) async fn clear(&self) {
+        let mut state = self.state.lock().await;
+        state.current = None;
+        state.generation = state.generation.wrapping_add(1);
+    }
+}
 
 pub(crate) fn normalize_path_for_remote(path: String) -> String {
     let trimmed = path.trim();
@@ -78,6 +142,10 @@ struct RemoteBackendInner {
 }
 
 impl RemoteBackend {
+    fn same_connection(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+
     pub(crate) async fn call(&self, method: &str, params: Value) -> Result<Value, RemoteCallError> {
         if !self.inner.ready.load(Ordering::SeqCst) {
             return Err(RemoteCallError::Protocol {
@@ -208,7 +276,7 @@ pub(crate) async fn call_remote(
     match client.call(method, params.clone()).await {
         Ok(value) => Ok(value),
         Err(RemoteCallError::Disconnected) => {
-            *state.remote_backend.lock().await = None;
+            state.remote_backend.clear_if_current(&client).await;
             if !can_retry_after_disconnect(method) {
                 return Err(RemoteCallError::Disconnected.to_string());
             }
@@ -216,13 +284,13 @@ pub(crate) async fn call_remote(
             match retry_client.call(method, params).await {
                 Ok(value) => Ok(value),
                 Err(retry_err) => {
-                    *state.remote_backend.lock().await = None;
+                    state.remote_backend.clear_if_current(&retry_client).await;
                     Err(retry_err.to_string())
                 }
             }
         }
         Err(err) => {
-            *state.remote_backend.lock().await = None;
+            state.remote_backend.clear_if_current(&client).await;
             Err(err.to_string())
         }
     }
@@ -298,13 +366,16 @@ fn can_retry_after_disconnect(method: &str) -> bool {
 }
 
 async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<RemoteBackend, String> {
-    {
-        let guard = state.remote_backend.lock().await;
-        if let Some(client) = guard.as_ref() {
-            return Ok(client.clone());
-        }
-    }
+    state
+        .remote_backend
+        .get_or_try_initialize(|| initialize_remote_backend(state, app))
+        .await
+}
 
+async fn initialize_remote_backend(
+    state: &AppState,
+    app: AppHandle,
+) -> Result<RemoteBackend, String> {
     let (target_id, expected_identity, transport_config) = {
         let settings = state.app_settings.lock().await;
         let target_id = active_remote_target_id(&settings);
@@ -460,11 +531,6 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
     });
     client.mark_ready();
 
-    {
-        let mut guard = state.remote_backend.lock().await;
-        *guard = Some(client.clone());
-    }
-
     Ok(client)
 }
 
@@ -604,15 +670,283 @@ fn active_remote_host_identity(
 mod tests {
     use super::{
         can_retry_after_disconnect, reconcile_remote_host_pin, resolve_transport_config,
-        RemoteBackend, RemoteBackendInner,
+        RemoteBackend, RemoteBackendCache, RemoteBackendInner,
     };
     use crate::remote_backend::transport::{RemoteTransportConfig, TransportAvailabilityObserver};
     use crate::shared::remote_host_availability::RemoteHostAvailabilityRuntime;
     use crate::shared::remote_host_identity::RemoteHostIdentity;
     use crate::types::AppSettings;
-    use std::sync::atomic::{AtomicBool, AtomicU64};
+    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
-    use tokio::sync::Mutex;
+    use tokio::sync::{Barrier, Mutex};
+
+    fn test_backend_with_outbound(
+        availability: Arc<RemoteHostAvailabilityRuntime>,
+        target: &str,
+        observed_at: i64,
+    ) -> (RemoteBackend, tokio::sync::mpsc::Receiver<String>) {
+        let (out_tx, out_rx) = tokio::sync::mpsc::channel(8);
+        let attempt = availability.begin_attempt(target, None, observed_at);
+        (
+            RemoteBackend {
+                inner: Arc::new(RemoteBackendInner {
+                    out_tx,
+                    pending: Arc::new(Mutex::new(Default::default())),
+                    next_id: AtomicU64::new(1),
+                    connected: Arc::new(AtomicBool::new(true)),
+                    ready: AtomicBool::new(true),
+                    availability: TransportAvailabilityObserver {
+                        runtime: availability,
+                        attempt,
+                    },
+                }),
+            },
+            out_rx,
+        )
+    }
+
+    fn test_backend(
+        availability: Arc<RemoteHostAvailabilityRuntime>,
+        target: &str,
+        observed_at: i64,
+    ) -> RemoteBackend {
+        test_backend_with_outbound(availability, target, observed_at).0
+    }
+
+    async fn complete_next_call(
+        backend: &RemoteBackend,
+        outbound: &mut tokio::sync::mpsc::Receiver<String>,
+        expected_method: &str,
+        response: serde_json::Value,
+    ) -> u64 {
+        let request: serde_json::Value =
+            serde_json::from_str(&outbound.recv().await.expect("outbound request"))
+                .expect("valid request JSON");
+        assert_eq!(request["method"], expected_method);
+        let id = request["id"].as_u64().expect("request id");
+        backend
+            .inner
+            .pending
+            .lock()
+            .await
+            .remove(&id)
+            .expect("pending request")
+            .send(Ok(response))
+            .expect("call receiver");
+        id
+    }
+
+    #[tokio::test]
+    async fn concurrent_connect_and_list_share_single_current_backend() {
+        let cache = Arc::new(RemoteBackendCache::default());
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let initializer_calls = Arc::new(AtomicUsize::new(0));
+        let initializer_started = Arc::new(Barrier::new(2));
+        let release_initializer = Arc::new(Barrier::new(2));
+
+        let first_cache = Arc::clone(&cache);
+        let first_availability = Arc::clone(&availability);
+        let first_calls = Arc::clone(&initializer_calls);
+        let first_started = Arc::clone(&initializer_started);
+        let first_release = Arc::clone(&release_initializer);
+        let first = tokio::spawn(async move {
+            first_cache
+                .get_or_try_initialize(|| async move {
+                    first_calls.fetch_add(1, Ordering::SeqCst);
+                    first_started.wait().await;
+                    first_release.wait().await;
+                    Ok(test_backend(first_availability, "remote-a", 10))
+                })
+                .await
+        });
+
+        initializer_started.wait().await;
+        let second_cache = Arc::clone(&cache);
+        let second_availability = Arc::clone(&availability);
+        let second_calls = Arc::clone(&initializer_calls);
+        let second = tokio::spawn(async move {
+            second_cache
+                .get_or_try_initialize(|| async move {
+                    second_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(test_backend(second_availability, "remote-a", 20))
+                })
+                .await
+        });
+        release_initializer.wait().await;
+
+        let first = first.await.unwrap().unwrap();
+        let second = second.await.unwrap().unwrap();
+        assert_eq!(initializer_calls.load(Ordering::SeqCst), 1);
+        assert!(first.same_connection(&second));
+        assert!(cache
+            .current()
+            .await
+            .is_some_and(|current| current.same_connection(&first)));
+    }
+
+    #[tokio::test]
+    async fn stale_client_disconnect_cannot_clear_current_backend() {
+        let cache = RemoteBackendCache::default();
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let stale = cache
+            .get_or_try_initialize(|| async {
+                Ok(test_backend(Arc::clone(&availability), "remote-a", 10))
+            })
+            .await
+            .unwrap();
+        assert!(cache.clear_if_current(&stale).await);
+        let current = cache
+            .get_or_try_initialize(|| async {
+                Ok(test_backend(Arc::clone(&availability), "remote-a", 20))
+            })
+            .await
+            .unwrap();
+
+        assert!(!cache.clear_if_current(&stale).await);
+        assert!(cache
+            .current()
+            .await
+            .is_some_and(|cached| cached.same_connection(&current)));
+    }
+
+    #[tokio::test]
+    async fn older_handshake_cannot_publish_after_generation_invalidation() {
+        let cache = Arc::new(RemoteBackendCache::default());
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let initializer_started = Arc::new(Barrier::new(2));
+        let release_initializer = Arc::new(Barrier::new(2));
+
+        let initializing_cache = Arc::clone(&cache);
+        let initializing_availability = Arc::clone(&availability);
+        let started = Arc::clone(&initializer_started);
+        let release = Arc::clone(&release_initializer);
+        let initializing = tokio::spawn(async move {
+            initializing_cache
+                .get_or_try_initialize(|| async move {
+                    started.wait().await;
+                    release.wait().await;
+                    Ok(test_backend(initializing_availability, "remote-a", 10))
+                })
+                .await
+        });
+
+        initializer_started.wait().await;
+        cache.clear().await;
+        release_initializer.wait().await;
+
+        assert!(initializing.await.unwrap().is_err());
+        assert!(cache.current().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn current_client_disconnect_does_invalidate_current_backend() {
+        let cache = RemoteBackendCache::default();
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let current = cache
+            .get_or_try_initialize(|| async { Ok(test_backend(availability, "remote-a", 10)) })
+            .await
+            .unwrap();
+
+        assert!(cache.clear_if_current(&current).await);
+        assert!(cache.current().await.is_none());
+    }
+
+    #[test]
+    fn discarded_stale_connection_eof_does_not_disconnect_current_attempt() {
+        use crate::shared::remote_host_availability::{AvailabilityEvent, TransportState};
+
+        let availability = RemoteHostAvailabilityRuntime::default();
+        let stale = availability.begin_attempt("remote-a", None, 10);
+        let current = availability.begin_attempt("remote-a", None, 20);
+        availability.observe(current.clone(), 21, AvailabilityEvent::TransportConnected);
+        availability.observe(
+            stale,
+            22,
+            AvailabilityEvent::Disconnected {
+                diagnostic: "transport read ended".to_string(),
+            },
+        );
+
+        let snapshot = availability.snapshot("remote-a").unwrap();
+        assert_eq!(snapshot.attempt_id, current.attempt_id);
+        assert_eq!(snapshot.transport, TransportState::Connected);
+        assert!(snapshot.diagnostics.is_empty());
+    }
+
+    #[tokio::test]
+    async fn connect_workspace_success_records_runtime_ready_on_current_attempt() {
+        use crate::shared::remote_host_availability::RuntimeState;
+
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let (backend, mut outbound) =
+            test_backend_with_outbound(Arc::clone(&availability), "remote-a", 10);
+        let caller = backend.clone();
+        let call = tokio::spawn(async move {
+            caller
+                .call(
+                    "connect_workspace",
+                    serde_json::json!({ "id": "workspace-a" }),
+                )
+                .await
+        });
+
+        complete_next_call(
+            &backend,
+            &mut outbound,
+            "connect_workspace",
+            serde_json::json!({ "ok": true }),
+        )
+        .await;
+        call.await.unwrap().unwrap();
+
+        let snapshot = availability.snapshot("remote-a").unwrap();
+        assert_eq!(snapshot.runtime.state, RuntimeState::Ready);
+        assert_eq!(
+            snapshot.runtime.workspace_id.as_deref(),
+            Some("workspace-a")
+        );
+        assert!(snapshot.last_runtime_ready_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn reconnect_normal_rpc_reuses_same_authenticated_long_connection() {
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let (backend, mut outbound) = test_backend_with_outbound(availability, "remote-a", 10);
+
+        let first_caller = backend.clone();
+        let first = tokio::spawn(async move {
+            first_caller
+                .call("list_workspaces", serde_json::json!({}))
+                .await
+        });
+        let first_id = complete_next_call(
+            &backend,
+            &mut outbound,
+            "list_workspaces",
+            serde_json::json!([]),
+        )
+        .await;
+        first.await.unwrap().unwrap();
+
+        let second_caller = backend.clone();
+        let second = tokio::spawn(async move {
+            second_caller
+                .call("list_workspaces", serde_json::json!({}))
+                .await
+        });
+        let second_id = complete_next_call(
+            &backend,
+            &mut outbound,
+            "list_workspaces",
+            serde_json::json!([]),
+        )
+        .await;
+        second.await.unwrap().unwrap();
+
+        assert_eq!(first_id, 1);
+        assert_eq!(second_id, 2);
+        assert!(backend.inner.connected.load(Ordering::SeqCst));
+    }
 
     #[test]
     fn resolve_tcp_transport_uses_remote_host() {

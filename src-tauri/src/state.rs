@@ -38,7 +38,7 @@ pub(crate) struct AppState {
     pub(crate) workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
     pub(crate) sessions: Mutex<HashMap<String, Arc<crate::codex::WorkspaceSession>>>,
     pub(crate) terminal_sessions: Mutex<HashMap<String, Arc<crate::terminal::TerminalSession>>>,
-    pub(crate) remote_backend: Mutex<Option<crate::remote_backend::RemoteBackend>>,
+    pub(crate) remote_backend: crate::remote_backend::RemoteBackendCache,
     pub(crate) remote_host_availability:
         Arc<crate::shared::remote_host_availability::RemoteHostAvailabilityRuntime>,
     pub(crate) storage_path: PathBuf,
@@ -67,7 +67,7 @@ impl AppState {
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
             terminal_sessions: Mutex::new(HashMap::new()),
-            remote_backend: Mutex::new(None),
+            remote_backend: Default::default(),
             remote_host_availability: Arc::new(Default::default()),
             storage_path,
             settings_path,

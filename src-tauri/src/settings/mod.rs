@@ -27,7 +27,7 @@ pub(crate) async fn update_app_settings(
     let updated =
         update_app_settings_core(settings, &state.app_settings, &state.settings_path).await?;
     if should_reset_remote_backend(&previous, &updated) {
-        *state.remote_backend.lock().await = None;
+        state.remote_backend.clear().await;
         crate::remote_backend::invalidate_availability_for_settings(&state, &previous, &updated);
     }
     ensure_remote_runtime_for_settings(&updated, state).await;

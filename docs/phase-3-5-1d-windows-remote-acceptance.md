@@ -1,6 +1,6 @@
 # Phase 3.5.1d — Windows Remote Acceptance
 
-Status: **IN PROGRESS**. Gates A-H are **PASS**. Phase 3.5.1d-b Remote Backend Connection Ownership Fix, Phase 3.5.1d-c Endpoint Failure Admission Control, and Phase 3.5.1d-e Terminal Failure Preservation are **PASS / FROZEN**. Acceptance resumes at Gate I. Phase 3.5.2 is **NOT STARTED**.
+Status: **PASS / COMPLETE**. Gates A-L are **PASS**. Phase 3.5.1 is **PASS / COMPLETE** for the Windows implementation scope. Phase 3.5.2 Exact-ID Remote Admission & Writer Lifecycle is **GO / NOT STARTED**. Deferred Mobile Artifact Validation remains **NOT YET EXECUTED**.
 
 ## Frozen connection ownership contract
 
@@ -113,3 +113,34 @@ Both `invalid token` and the subsequent `transport read ended` diagnostic were r
 Wrong-token polling produced rapidly increasing attempt IDs. That is recorded as a non-blocking retry/admission optimization observation; this Slice does not add authentication-failure cooldown or change polling/retry policy.
 
 Implementation commit: `0e5a9ea` (`fix: preserve remote terminal availability failures`).
+
+## Final acceptance matrix
+
+| Gate | Acceptance | Result |
+| --- | --- | --- |
+| A | First-run `RemoteHostIdentity` | PASS |
+| B | Authenticated handshake / TOFU | PASS |
+| C | Runtime READY | PASS |
+| D | Host-qualified `ExecutionEnvironmentKey` | PASS |
+| E | `ENDPOINT_UNREACHABLE` safety | PASS |
+| F | Same data-dir restart / reconnect | PASS |
+| G | Endpoint migration / same Host identity | PASS |
+| H | Wrong-token authentication failure | PASS |
+| I | Host identity mismatch / fail-closed | PASS |
+| J | Attempt generation / stale observation isolation | PASS |
+| K | Persistence consistency | PASS |
+| L | Final Thread / accounting isolation | PASS |
+
+Gate G's first run used a restricted sandbox/command-runner daemon lifecycle and failed before app-server initialization. That result is **INVALIDATED ACCEPTANCE HARNESS EVIDENCE**, not a product regression. The production-lifecycle retest passed.
+
+## Final identity and isolation evidence
+
+Host A is `014383f2-41f8-4b13-b9d7-30c511e47cec`. Its `remote-host-identity.json`, authenticated `daemon_info`, persisted target pin, and `ExecutionEnvironmentKey = remote:014383f2-41f8-4b13-b9d7-30c511e47cec` remained consistent through restart, endpoint migration, authentication failure, Host B mismatch, and recovery.
+
+Host B `0ae35772-5057-459e-b2b2-f259e492303f` was observed only as mismatch evidence and did not overwrite Host A's identity store, target pin, or execution environment. `RemoteHostIdentity` remains distinct from authentication token, endpoint, Workspace, and Thread identity. Canonical identity remains `CodexThreadKey = (codexHomeIdentity, fullThreadId)`; cross-host routing remains `RemoteThreadLocator { remoteHostIdentity, threadKey: CodexThreadKey }`.
+
+The final authoritative snapshot recorded 491 canonical Threads / 491 unique / 0 duplicate and 489 current Turns / 489 unique / 0 duplicate. All 802 Surface projections were Desktop Catalog observations: 403 PRESENT and 399 ABSENT. The ABSENT values are Desktop projection absence, not canonical Thread absence. No Remote, Sidebar, or Project projection was synthesized by availability failure, and no projection entry contributed token or runtime fields. No fake Thread absence/deletion, tombstone, Workspace/Project reassignment, duplicate token lane, duplicate runtime entry, or duplicate current Turn was observed.
+
+Phase 3.5.1d-b, Phase 3.5.1d-c, and Phase 3.5.1d-e are **PASS / FROZEN**. Phase 3.5.1d is **PASS / COMPLETE** and Phase 3.5.1 is **PASS / COMPLETE**. Phase 3.5.2 Exact-ID Remote Admission & Writer Lifecycle is **GO / NOT STARTED**.
+
+Phase 3.5.1a remains frozen only for the Windows source architecture and regression scope. Real `aarch64-apple-ios` and `aarch64-apple-ios-sim` target checks plus a Tauri iOS artifact/device build remain **Deferred Mobile Artifact Validation — NOT YET EXECUTED**; no iOS artifact validation is claimed.

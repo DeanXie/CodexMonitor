@@ -249,6 +249,15 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   proven idempotent, `resume_thread` is excluded from automatic safe retry.
   Phase 3.5.2a's frozen implementation and acceptance evidence are recorded in
   `docs/phase-3-5-2a-exact-id-remote-admission.md`.
+
+  Phase 3.5.2b.1 adds a pure shared-core observation contract for this
+  admission boundary. It records `ADMISSION_PENDING`, exact response admission,
+  typed active-writer rejection, unknown dispatch outcomes, and session-end
+  release-unobserved evidence for one WorkspaceSession generation and one
+  `CodexThreadKey`. The model is not yet wired to transport or UI. It never
+  reports global writer freedom, writer/lease identity, or release, and it does
+  not use legacy `WriterOccupancy` as authority. See
+  `docs/phase-3-5-2b-host-session-writer-admission-observation.md`.
 - `thread/fork`
 - `thread/list`
 - `thread/archive`

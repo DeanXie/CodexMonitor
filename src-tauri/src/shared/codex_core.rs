@@ -21,6 +21,8 @@ use crate::types::WorkspaceEntry;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) mod external_thread_admission;
 
+pub(crate) mod writer_admission_observation;
+
 pub(crate) mod creation_acknowledgement;
 pub(crate) mod creation_coordination;
 
@@ -1317,3 +1319,7 @@ mod tests {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[path = "codex_core/external_thread_admission_tests.rs"]
 mod external_thread_admission_tests;
+
+#[cfg(test)]
+#[path = "codex_core/writer_admission_observation_tests.rs"]
+mod writer_admission_observation_tests;

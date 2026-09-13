@@ -2,7 +2,7 @@
 
 Status: **PASS / FROZEN**.
 
-Phase 3.5.1d Windows Remote Acceptance is **PASS / COMPLETE** with Gates A-L **PASS**. Phase 3.5.1 is **PASS / COMPLETE**. Phase 3.5.2 Exact-ID Remote Admission & Writer Lifecycle is **GO / NOT STARTED**.
+Phase 3.5.1d Windows Remote Acceptance is **PASS / COMPLETE** with Gates A-L **PASS**. Phase 3.5.1 is **PASS / COMPLETE**. Phase 3.5.2a Exact-ID Remote Read / Admission Separation is **PASS / COMPLETE / FROZEN**; Phase 3.5.2b is **NOT STARTED**.
 
 ## Frozen availability contract
 

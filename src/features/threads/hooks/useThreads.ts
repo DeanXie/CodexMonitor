@@ -884,7 +884,7 @@ export function useThreads({
     pushThreadErrorMessage,
     ensureThreadForActiveWorkspace,
     ensureThreadForWorkspace,
-    refreshThread,
+    resumeThreadForWorkspace,
     forkThreadForWorkspace,
     updateThreadParent,
     registerDetachedReviewChild,
@@ -931,24 +931,16 @@ export function useThreads({
         void (async () => {
           const hasLocalSnapshot = hasLocalThreadSnapshot(threadId);
           if (hasLocalSnapshot) {
-            loadedThreadsRef.current[threadId] = true;
             return;
           }
-          const hasActiveTurnInWorkspace = hasProcessingThreadInWorkspace(targetId);
-          if (!hasActiveTurnInWorkspace) {
-            await ensureWorkspaceRuntimeCodexArgsBestEffort(targetId, threadId, "resume");
-          }
-          await resumeThreadForWorkspace(targetId, threadId);
+          await refreshThread(targetId, threadId);
         })();
       }
     },
     [
       activeWorkspaceId,
-      ensureWorkspaceRuntimeCodexArgsBestEffort,
       hasLocalThreadSnapshot,
-      hasProcessingThreadInWorkspace,
-      loadedThreadsRef,
-      resumeThreadForWorkspace,
+      refreshThread,
       state.activeThreadIdByWorkspace,
     ],
   );

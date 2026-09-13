@@ -7,6 +7,7 @@ import {
   forkThread,
   listThreads,
   listWorkspaces,
+  readThread,
   resumeThread,
   startThread,
 } from "@services/tauri";
@@ -25,6 +26,7 @@ import { acknowledgedCreation } from "./creationTestFixtures";
 vi.mock("@services/tauri", () => ({
   startThread: vi.fn(),
   forkThread: vi.fn(),
+  readThread: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
   listWorkspaces: vi.fn(),
@@ -196,8 +198,15 @@ describe("useThreadActions", () => {
     vi.mocked(forkThread).mockResolvedValue({
       result: { thread: { id: "thread-fork-1" } },
     });
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: { thread: { id: "thread-fork-1", turns: [] } },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
 
-    const { result, dispatch, loadedThreadsRef } = renderActions();
+    const onDebug = vi.fn();
+    const { result, dispatch, loadedThreadsRef } = renderActions({ onDebug });
 
     let threadId: string | null = null;
     await act(async () => {
@@ -206,6 +215,10 @@ describe("useThreadActions", () => {
 
     expect(threadId).toBe("thread-fork-1");
     expect(forkThread).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(resumeThread).toHaveBeenCalledWith("ws-1", "thread-fork-1");
+    expect(onDebug).not.toHaveBeenCalledWith(
+      expect.objectContaining({ label: "thread/resume error" }),
+    );
     expect(dispatch).toHaveBeenCalledWith({
       type: "ensureThread",
       workspaceId: "ws-1",
@@ -275,6 +288,34 @@ describe("useThreadActions", () => {
 
     expect(threadId).toBe("thread-1");
     expect(resumeThread).not.toHaveBeenCalled();
+  });
+
+  it("ordinary refresh reads the exact thread without resuming or creating admission state", async () => {
+    vi.mocked(readThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-read-only",
+          updated_at: 555,
+          turns: [],
+        },
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+
+    const { result, dispatch, loadedThreadsRef } = renderActions();
+
+    await act(async () => {
+      await result.current.refreshThread("ws-1", "thread-read-only");
+    });
+
+    expect(readThread).toHaveBeenCalledWith("ws-1", "thread-read-only");
+    expect(resumeThread).not.toHaveBeenCalled();
+    expect(startThread).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "setThreadResumeLoading" }),
+    );
+    expect(loadedThreadsRef.current["thread-read-only"]).not.toBe(true);
   });
 
   it("skips resume while processing unless forced", async () => {

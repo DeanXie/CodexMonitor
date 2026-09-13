@@ -13,7 +13,7 @@ type UseMainAppMobileThreadRefreshArgs = {
   reconnectLive: (
     workspaceId: string,
     threadId: string,
-    options?: { runResume?: boolean },
+    options?: { runRead?: boolean },
   ) => Promise<unknown>;
 };
 
@@ -44,7 +44,7 @@ export function useMainAppMobileThreadRefresh({
         return;
       }
       await refreshThread(activeWorkspace.id, threadId);
-      await reconnectLive(activeWorkspace.id, threadId, { runResume: false });
+      await reconnectLive(activeWorkspace.id, threadId, { runRead: false });
     })()
       .catch(() => {
         // Existing thread actions surface errors through debug entries and toasts.

@@ -534,9 +534,7 @@ fn classify_exact_thread_read_result(
             .and_then(Value::as_str)
             .unwrap_or("thread/read failed");
         let normalized = detail.to_ascii_lowercase();
-        return if normalized.contains("thread not loaded")
-            || normalized.contains("thread not found")
-            || normalized.contains("no rollout found")
+        return if normalized.contains("thread not found") || normalized.contains("no rollout found")
         {
             ExactIdProjectionResult::AuthoritativeNotFound
         } else {
@@ -1708,7 +1706,7 @@ mod tests {
     }
 
     #[test]
-    fn authoritative_monitor_read_not_found_is_ingested_as_absent() {
+    fn thread_not_loaded_read_is_ingested_as_unknown_without_absence_proof() {
         let engine = ProjectionObservationEngine::default();
         let context = request_context(
             "workspace-a",
@@ -1734,7 +1732,7 @@ mod tests {
                 CanonicalThreadProjectionState::Absent,
             )
             .unwrap();
-        assert_eq!(effective.state, SurfaceProjectionState::Absent);
+        assert_eq!(effective.state, SurfaceProjectionState::Unknown);
     }
 
     #[test]

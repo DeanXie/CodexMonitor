@@ -97,6 +97,52 @@ describe("useThreadMessaging telemetry", () => {
     );
   });
 
+  it("routes explicit resume interaction through writer admission instead of read refresh", async () => {
+    const resumeThreadForWorkspace = vi.fn(async () => "thread-1");
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch: vi.fn(),
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        resumeThreadForWorkspace,
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.startResume("/resume");
+    });
+
+    expect(resumeThreadForWorkspace).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      true,
+      true,
+    );
+  });
+
   it("records prompt_sent once for one message send", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
     const onRuntimeRecord = vi.fn();
@@ -128,7 +174,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -195,7 +241,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -245,7 +291,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -293,7 +339,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -341,7 +387,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -390,7 +436,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -448,7 +494,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -521,7 +567,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage,
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -592,7 +638,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage,
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -663,7 +709,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage,
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -719,7 +765,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace,
         ensureThreadForWorkspace,
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
       }),
@@ -773,7 +819,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-parent"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-parent"),
-        refreshThread: vi.fn(async () => null),
+        resumeThreadForWorkspace: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
         renameThread,

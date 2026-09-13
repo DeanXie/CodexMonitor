@@ -476,7 +476,6 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "read_thread"
             | "read_agent_config_toml"
             | "read_workspace_file"
-            | "resume_thread"
             | "thread_live_subscribe"
             | "thread_live_unsubscribe"
             | "skills_list"
@@ -1433,8 +1432,8 @@ mod tests {
     }
 
     #[test]
-    fn retries_only_retry_safe_methods_after_disconnect() {
-        assert!(can_retry_after_disconnect("resume_thread"));
+    fn resume_retry_policy_matches_proven_dispatch_certainty() {
+        assert!(!can_retry_after_disconnect("resume_thread"));
         assert!(can_retry_after_disconnect("list_threads"));
         assert!(can_retry_after_disconnect("local_usage_snapshot"));
         assert!(!can_retry_after_disconnect("send_user_message"));

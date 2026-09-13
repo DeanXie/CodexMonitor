@@ -204,13 +204,7 @@ pub(crate) async fn read_thread(
         )
         .await
     } else {
-        codex_core::read_thread_core(
-            &state.sessions,
-            workspace_id.clone(),
-            thread_id.clone(),
-            &state.creation_coordinator,
-        )
-        .await
+        codex_core::read_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone()).await
     };
 
     #[cfg(desktop)]
@@ -246,9 +240,7 @@ fn classify_thread_read_response(
 #[cfg(desktop)]
 fn is_thread_not_found_message(message: &str) -> bool {
     let normalized = message.to_ascii_lowercase();
-    normalized.contains("thread not loaded")
-        || normalized.contains("thread not found")
-        || normalized.contains("no rollout found")
+    normalized.contains("thread not found") || normalized.contains("no rollout found")
 }
 
 #[tauri::command]
@@ -1261,7 +1253,7 @@ mod thread_read_tests {
     use serde_json::json;
 
     #[test]
-    fn structured_thread_not_loaded_response_is_not_found_evidence() {
+    fn thread_not_loaded_is_not_treated_as_canonical_absent_without_proof() {
         let response = Ok(json!({
             "id": 9,
             "error": {
@@ -1272,13 +1264,50 @@ mod thread_read_tests {
 
         assert_eq!(
             classify_thread_read_response(&response),
-            ThreadReadStatus::NotFound
+            ThreadReadStatus::Unavailable
+        );
+    }
+
+    #[test]
+    fn active_writer_conflict_is_unavailable_not_not_found() {
+        let response = Ok(json!({
+            "id": 10,
+            "error": {
+                "code": -32600,
+                "message": "thread 01a02ff3-de17-7340-9844-5620eef3f19f already has an active writer"
+            }
+        }));
+
+        assert_eq!(
+            classify_thread_read_response(&response),
+            ThreadReadStatus::Unavailable
         );
     }
 
     #[test]
     fn remote_read_failure_remains_unavailable_not_not_found() {
         let response = Err("remote backend disconnected".to_string());
+
+        assert_eq!(
+            classify_thread_read_response(&response),
+            ThreadReadStatus::Unavailable
+        );
+    }
+
+    #[test]
+    fn remote_auth_failure_remains_unavailable_not_not_found() {
+        let response = Err("invalid token".to_string());
+
+        assert_eq!(
+            classify_thread_read_response(&response),
+            ThreadReadStatus::Unavailable
+        );
+    }
+
+    #[test]
+    fn remote_identity_mismatch_remains_unavailable_not_not_found() {
+        let response =
+            Err("remote host identity mismatch: expected host-a, received host-b".to_string());
 
         assert_eq!(
             classify_thread_read_response(&response),

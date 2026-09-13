@@ -264,13 +264,13 @@ describe("useRemoteThreadLiveConnection", () => {
     let firstReconnectPromise: Promise<boolean> = Promise.resolve(false);
     await act(async () => {
       firstReconnectPromise = result.current.reconnectLive("ws-1", "thread-1", {
-        runResume: false,
+        runRead: false,
       });
       await Promise.resolve();
     });
 
     await act(async () => {
-      await result.current.reconnectLive("ws-1", "thread-2", { runResume: false });
+      await result.current.reconnectLive("ws-1", "thread-2", { runRead: false });
       await Promise.resolve();
     });
 
@@ -312,14 +312,14 @@ describe("useRemoteThreadLiveConnection", () => {
     let secondReconnectPromise: Promise<boolean> = Promise.resolve(false);
     await act(async () => {
       firstReconnectPromise = result.current.reconnectLive("ws-1", "thread-1", {
-        runResume: false,
+        runRead: false,
       });
       await Promise.resolve();
     });
 
     await act(async () => {
       secondReconnectPromise = result.current.reconnectLive("ws-1", "thread-1", {
-        runResume: false,
+        runRead: false,
       });
       await Promise.resolve();
     });
@@ -359,7 +359,7 @@ describe("useRemoteThreadLiveConnection", () => {
     );
 
     await act(async () => {
-      result.current.reconnectLive("ws-1", "thread-1", { runResume: false });
+      result.current.reconnectLive("ws-1", "thread-1", { runRead: false });
       await Promise.resolve();
     });
 
@@ -404,7 +404,7 @@ describe("useRemoteThreadLiveConnection", () => {
     let firstReconnectPromise: Promise<boolean> = Promise.resolve(false);
     await act(async () => {
       firstReconnectPromise = result.current.reconnectLive("ws-1", "thread-1", {
-        runResume: false,
+        runRead: false,
       });
       await Promise.resolve();
     });
@@ -418,7 +418,7 @@ describe("useRemoteThreadLiveConnection", () => {
     let secondReconnectPromise: Promise<boolean> = Promise.resolve(false);
     await act(async () => {
       secondReconnectPromise = result.current.reconnectLive("ws-1", "thread-1", {
-        runResume: false,
+        runRead: false,
       });
       await Promise.resolve();
     });
@@ -483,7 +483,7 @@ describe("useRemoteThreadLiveConnection", () => {
     expect(refreshThread).toHaveBeenCalledTimes(0);
   });
 
-  it("switches active threads without forcing resume refresh", async () => {
+  it("switches active threads without forcing an exact read", async () => {
     const refreshThread = vi.fn().mockResolvedValue(undefined);
     const workspace = {
       id: "ws-1",
@@ -520,7 +520,7 @@ describe("useRemoteThreadLiveConnection", () => {
     expect(refreshThread).toHaveBeenCalledTimes(0);
   });
 
-  it("resumes when switching to a thread without local snapshot", async () => {
+  it("reads when switching to a thread without local snapshot", async () => {
     const refreshThread = vi.fn().mockResolvedValue(undefined);
     const workspace = {
       id: "ws-1",
@@ -602,7 +602,7 @@ describe("useRemoteThreadLiveConnection", () => {
     });
 
     await act(async () => {
-      await result.current.reconnectLive("ws-1", "thread-1", { runResume: false });
+      await result.current.reconnectLive("ws-1", "thread-1", { runRead: false });
       await Promise.resolve();
     });
 

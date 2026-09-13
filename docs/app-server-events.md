@@ -231,10 +231,24 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 - `thread/start`
 - `thread/read`
 - `thread/resume`
-  Both exact-ID operations use the same request-construction boundary. A
+  The exact-ID read and resume operations use the same request-construction
+  boundary but have different authority. `thread/read` is observation-only and
+  does not attach the creation coordinator or mark the client as writer-admitted;
+  selection, focus, polling, and ordinary refresh use this path. A successful
+  stored-thread response may report runtime status `notLoaded`; that remains
+  direct existence evidence. A textual `thread not loaded` failure is unavailable
+  evidence, never authoritative absence. Only `thread not found` or
+  `no rollout found` is accepted as authoritative exact-ID absence.
+
+  `thread/resume` is explicit writer admission used by continue/send/resume
+  interactions. A
   successful response is accepted only when `result.thread.id` exactly equals
   the requested full thread ID. Resume never falls back to `thread/start` and
-  is not a `turn/start` operation.
+  is not a `turn/start` operation. Active-writer error `-32600` is classified as
+  `BLOCKED_BY_ACTIVE_WRITER`. Because dispatch outcome after a disconnect is not
+  proven idempotent, `resume_thread` is excluded from automatic safe retry.
+  Phase 3.5.2a's frozen implementation and acceptance evidence are recorded in
+  `docs/phase-3-5-2a-exact-id-remote-admission.md`.
 - `thread/fork`
 - `thread/list`
 - `thread/archive`

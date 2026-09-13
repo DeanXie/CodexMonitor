@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "gate": "Phase 3.5.2a Gate A3",
+  "status": "ACCEPTANCE_PASS",
+  "targetThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+  "formalInvocation": {
+    "runnerPid": 9152,
+    "supervisorPid": 26728,
+    "resumeAttemptCount": 1,
+    "resumeSucceeded": true,
+    "returnedFullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "threadStartCount": 0,
+    "turnStartCount": 0,
+    "connectWorkspaceCount": 0,
+    "retryCount": 0,
+    "forceTakeover": false,
+    "noRetestResumePerformed": true
+  },
+  "formalEvidenceSha256": {
+    "result.json": "60427F4D2FA9170BA2A253988D650941536C89B5F4601B6D5891A54600CA5354",
+    "runner-process.json": "39D8BE0311E14014287F4D11613CA45B70C1FD715546D2294A4BC335965CDC6E",
+    "runner.stdout.log": "4AC2062C68194A1B55ADB4BC2DE05B58AC7E2D4D232DC88C356FD4AC122E2DDF",
+    "runner.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "armed.json": "5100880DFA81EE17BB45D7251C5FC3642D960B3534340CD32B8F7B9A0749FC27",
+    "go.signal": "48B46E0F6CF5873C8B897ABF23FEED64C624DD863A5B6A45AB984B20AAF77A3E"
+  },
+  "canonicalBefore": {
+    "total": 646,
+    "unique": 646,
+    "duplicate": 0,
+    "targetRows": 1,
+    "codexHomeIdentity": "codex-home:76c92e1eaaa451ef02c92f75f12738ea3337e69b890333a72cd14ec778cac75f",
+    "fullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "rolloutPath": "\\\\?\\C:\\Users\\DeanX\\.codex\\sessions\\2026\\09\\10\\rollout-2026-09-10T23-52-43-01a08c05-7880-75a2-976c-2a5895b58723.jsonl",
+    "turnCount": 1,
+    "rolloutLines": 34
+  },
+  "canonicalAfter": {
+    "capturedAt": "2026-09-13T22:20:22+08:00",
+    "total": 654,
+    "unique": 654,
+    "duplicate": 0,
+    "targetRows": 1,
+    "codexHomeIdentity": "codex-home:76c92e1eaaa451ef02c92f75f12738ea3337e69b890333a72cd14ec778cac75f",
+    "fullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "rolloutPath": "\\\\?\\C:\\Users\\DeanX\\.codex\\sessions\\2026\\09\\10\\rollout-2026-09-10T23-52-43-01a08c05-7880-75a2-976c-2a5895b58723.jsonl",
+    "turnCount": 1,
+    "rolloutLines": 34
+  },
+  "postResumeEvidence": {
+    "initialReader": "File.ReadLines(path, UTF8) failed with sharing violation",
+    "permissiveReader": "FileStream Open/Read with FileShare.ReadWrite|Delete and UTF-8 StreamReader passed",
+    "rootCause": "canonical reader sharing-mode incompatibility",
+    "rootCauseStatus": "PROVEN",
+    "redRegression": "current File.ReadLines implementation failed under a live shared writer",
+    "greenRegression": "explicit shared FileStream implementation passed under the same fixture"
+  },
+  "finalRunnerSha256": "71C11DC34541E50C1A318DE045E20D46FE4E263ABA1E22A563797C62D34D266D"
+}

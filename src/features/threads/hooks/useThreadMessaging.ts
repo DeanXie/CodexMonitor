@@ -84,7 +84,12 @@ type UseThreadMessagingOptions = {
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   ensureThreadForActiveWorkspace: (creationAction?: CreationAction) => Promise<string | null>;
   ensureThreadForWorkspace: (workspaceId: string) => Promise<string | null>;
-  refreshThread: (workspaceId: string, threadId: string) => Promise<string | null>;
+  resumeThreadForWorkspace: (
+    workspaceId: string,
+    threadId: string,
+    force?: boolean,
+    replaceLocal?: boolean,
+  ) => Promise<string | null>;
   forkThreadForWorkspace: (
     workspaceId: string,
     threadId: string,
@@ -134,7 +139,7 @@ export function useThreadMessaging({
   pushThreadErrorMessage,
   ensureThreadForActiveWorkspace,
   ensureThreadForWorkspace,
-  refreshThread,
+  resumeThreadForWorkspace,
   forkThreadForWorkspace,
   updateThreadParent,
   registerDetachedReviewChild,
@@ -923,14 +928,14 @@ export function useThreadMessaging({
       if (!threadId) {
         return;
       }
-      await refreshThread(activeWorkspace.id, threadId);
+      await resumeThreadForWorkspace(activeWorkspace.id, threadId, true, true);
       safeMessageActivity();
     },
     [
       activeThreadId,
       activeWorkspace,
       ensureThreadForActiveWorkspace,
-      refreshThread,
+      resumeThreadForWorkspace,
       safeMessageActivity,
       threadStatusById,
     ],

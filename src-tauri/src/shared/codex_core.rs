@@ -100,6 +100,39 @@ fn validate_exact_thread_response(
     Ok(response)
 }
 
+fn classify_exact_resume_response(mut response: Value) -> Value {
+    let is_active_writer_conflict = response
+        .get("error")
+        .and_then(Value::as_object)
+        .is_some_and(|error| {
+            error.get("code").and_then(Value::as_i64) == Some(-32600)
+                && error
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .is_some_and(|message| message.to_ascii_lowercase().contains("active writer"))
+        });
+    if !is_active_writer_conflict {
+        return response;
+    }
+
+    let Some(error) = response.get_mut("error").and_then(Value::as_object_mut) else {
+        return response;
+    };
+    let data = error.entry("data").or_insert_with(|| json!({}));
+    if let Some(data) = data.as_object_mut() {
+        data.insert(
+            "codexMonitorKind".to_string(),
+            json!("BLOCKED_BY_ACTIVE_WRITER"),
+        );
+    } else {
+        error.insert(
+            "codexMonitorKind".to_string(),
+            json!("BLOCKED_BY_ACTIVE_WRITER"),
+        );
+    }
+    response
+}
+
 #[allow(dead_code)]
 fn image_extension_for_path(path: &str) -> Option<String> {
     Path::new(path)
@@ -360,17 +393,15 @@ pub(crate) async fn resume_thread_core(
     let response = session
         .send_request_for_workspace(&workspace_id, request.method, request.params)
         .await?;
-    validate_exact_thread_response(&thread_id, response)
+    validate_exact_thread_response(&thread_id, classify_exact_resume_response(response))
 }
 
 pub(crate) async fn read_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
     thread_id: String,
-    coordinator: &creation_coordination::CreationCoordinator,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    *session.creation_coordinator.lock().await = Some(coordinator.clone());
     let request = build_exact_thread_request(ExactThreadMethod::Read, &thread_id)?;
     let response = session
         .send_request_for_workspace(&workspace_id, request.method, request.params)
@@ -1261,6 +1292,24 @@ mod tests {
         .expect("response must be compared with the normalized request id");
 
         assert_eq!(validated, response);
+    }
+
+    #[test]
+    fn active_writer_conflict_is_typed_blocked_not_not_found() {
+        let response = json!({
+            "id": 10,
+            "error": {
+                "code": -32600,
+                "message": "thread 01a00000-0000-7000-8000-000000000004 already has an active writer"
+            }
+        });
+
+        let classified = classify_exact_resume_response(response);
+
+        assert_eq!(
+            classified.pointer("/error/data/codexMonitorKind"),
+            Some(&json!("BLOCKED_BY_ACTIVE_WRITER"))
+        );
     }
 }
 

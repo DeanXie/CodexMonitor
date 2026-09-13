@@ -11,6 +11,7 @@ import {
   forkThread as forkThreadService,
   listThreads as listThreadsService,
   listWorkspaces as listWorkspacesService,
+  readThread as readThreadService,
   resumeThread as resumeThreadService,
   startThread as startThreadService,
 } from "@services/tauri";
@@ -214,6 +215,102 @@ export function useThreadActions({
     [dispatch, loadedThreadsRef, onDebug, onRuntimeRecord],
   );
 
+  const hydrateExactThreadResponse = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      response: Record<string, unknown> | null,
+      replaceLocal: boolean,
+      operation: "thread/read" | "thread/resume",
+    ) => {
+      const thread = extractThreadFromResponse(response);
+      if (!thread) {
+        return false;
+      }
+      dispatch({ type: "ensureThread", workspaceId, threadId });
+      applyThreadMetadata(workspaceId, threadId, thread, {
+        notifySubagent: true,
+      });
+      applyCollabThreadLinksFromThread(workspaceId, threadId, thread);
+      const localItems = itemsByThread[threadId] ?? [];
+      const shouldReplace =
+        replaceLocal || replaceOnResumeRef.current[threadId] === true;
+      if (shouldReplace) {
+        replaceOnResumeRef.current[threadId] = false;
+      }
+      const hydrationPlan = buildResumeHydrationPlan({
+        thread,
+        workspaceId,
+        threadId,
+        replaceLocal: shouldReplace,
+        localItems,
+        localStatus: threadStatusByIdRef.current[threadId],
+        localActiveTurnId: activeTurnIdByThreadRef.current[threadId] ?? null,
+        getCustomName,
+      });
+      if (!hydrationPlan.shouldHydrate) {
+        return true;
+      }
+      if (hydrationPlan.keepLocalProcessing) {
+        onDebug?.({
+          id: `${Date.now()}-client-${operation.replace("/", "-")}-keep-processing`,
+          timestamp: Date.now(),
+          source: "client",
+          label: `${operation} keep-processing`,
+          payload: { workspaceId, threadId },
+        });
+      }
+      dispatch({
+        type: "markProcessing",
+        threadId,
+        isProcessing: hydrationPlan.shouldMarkProcessing,
+        timestamp: hydrationPlan.processingTimestamp,
+      });
+      dispatch({
+        type: "setActiveTurnId",
+        threadId,
+        turnId: hydrationPlan.resumedActiveTurnId,
+      });
+      dispatch({
+        type: "markReviewing",
+        threadId,
+        isReviewing: hydrationPlan.reviewing,
+      });
+      if (hydrationPlan.mergedItems.length > 0) {
+        dispatch({ type: "setThreadItems", threadId, items: hydrationPlan.mergedItems });
+      }
+      if (hydrationPlan.threadName) {
+        dispatch({
+          type: "setThreadName",
+          workspaceId,
+          threadId,
+          name: hydrationPlan.threadName,
+        });
+      }
+      if (
+        hydrationPlan.lastMessageText &&
+        hydrationPlan.lastMessageTimestamp !== null
+      ) {
+        dispatchPreviewMessage(
+          threadId,
+          hydrationPlan.lastMessageText,
+          hydrationPlan.lastMessageTimestamp,
+        );
+      }
+      return true;
+    },
+    [
+      applyCollabThreadLinksFromThread,
+      applyThreadMetadata,
+      dispatch,
+      dispatchPreviewMessage,
+      getCustomName,
+      itemsByThread,
+      onDebug,
+      replaceOnResumeRef,
+    ],
+  );
+
   const resumeThreadForWorkspace = useCallback(
     async (
       workspaceId: string,
@@ -263,83 +360,15 @@ export function useThreadActions({
           label: "thread/resume response",
           payload: response,
         });
-        const thread = extractThreadFromResponse(response);
-        if (thread) {
-          dispatch({ type: "ensureThread", workspaceId, threadId });
-          applyThreadMetadata(workspaceId, threadId, thread, {
-            notifySubagent: true,
-          });
-          applyCollabThreadLinksFromThread(workspaceId, threadId, thread);
-          const localItems = itemsByThread[threadId] ?? [];
-          const shouldReplace =
-            replaceLocal || replaceOnResumeRef.current[threadId] === true;
-          if (shouldReplace) {
-            replaceOnResumeRef.current[threadId] = false;
-          }
-          const hydrationPlan = buildResumeHydrationPlan({
-            thread,
-            workspaceId,
-            threadId,
-            replaceLocal: shouldReplace,
-            localItems,
-            localStatus: threadStatusByIdRef.current[threadId],
-            localActiveTurnId: activeTurnIdByThreadRef.current[threadId] ?? null,
-            getCustomName,
-          });
-          if (!hydrationPlan.shouldHydrate) {
-            loadedThreadsRef.current[threadId] = true;
-            return threadId;
-          }
-          if (hydrationPlan.keepLocalProcessing) {
-            onDebug?.({
-              id: `${Date.now()}-client-thread-resume-keep-processing`,
-              timestamp: Date.now(),
-              source: "client",
-              label: "thread/resume keep-processing",
-              payload: { workspaceId, threadId },
-            });
-          }
-          dispatch({
-            type: "markProcessing",
-            threadId,
-            isProcessing: hydrationPlan.shouldMarkProcessing,
-            timestamp: hydrationPlan.processingTimestamp,
-          });
-          dispatch({
-            type: "setActiveTurnId",
-            threadId,
-            turnId: hydrationPlan.resumedActiveTurnId,
-          });
-          dispatch({
-            type: "markReviewing",
-            threadId,
-            isReviewing: hydrationPlan.reviewing,
-          });
-          if (hydrationPlan.mergedItems.length > 0) {
-            dispatch({
-              type: "setThreadItems",
-              threadId,
-              items: hydrationPlan.mergedItems,
-            });
-          }
-          if (hydrationPlan.threadName) {
-            dispatch({
-              type: "setThreadName",
-              workspaceId,
-              threadId,
-              name: hydrationPlan.threadName,
-            });
-          }
-          if (
-            hydrationPlan.lastMessageText &&
-            hydrationPlan.lastMessageTimestamp !== null
-          ) {
-            dispatchPreviewMessage(
-              threadId,
-              hydrationPlan.lastMessageText,
-              hydrationPlan.lastMessageTimestamp,
-            );
-          }
+        const hydrated = hydrateExactThreadResponse(
+          workspaceId,
+          threadId,
+          response,
+          replaceLocal,
+          "thread/resume",
+        );
+        if (!hydrated) {
+          return null;
         }
         loadedThreadsRef.current[threadId] = true;
         return threadId;
@@ -366,15 +395,10 @@ export function useThreadActions({
       }
     },
     [
-      applyThreadMetadata,
-      applyCollabThreadLinksFromThread,
-      dispatchPreviewMessage,
       dispatch,
-      getCustomName,
-      itemsByThread,
+      hydrateExactThreadResponse,
       loadedThreadsRef,
       onDebug,
-      replaceOnResumeRef,
     ],
   );
 
@@ -444,10 +468,44 @@ export function useThreadActions({
       if (!threadId) {
         return null;
       }
-      replaceOnResumeRef.current[threadId] = true;
-      return resumeThreadForWorkspace(workspaceId, threadId, true, true);
+      onDebug?.({
+        id: `${Date.now()}-client-thread-read`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "thread/read",
+        payload: { workspaceId, threadId },
+      });
+      try {
+        const response = (await readThreadService(workspaceId, threadId)) as
+          | Record<string, unknown>
+          | null;
+        onDebug?.({
+          id: `${Date.now()}-server-thread-read`,
+          timestamp: Date.now(),
+          source: "server",
+          label: "thread/read response",
+          payload: response,
+        });
+        const hydrated = hydrateExactThreadResponse(
+          workspaceId,
+          threadId,
+          response,
+          true,
+          "thread/read",
+        );
+        return hydrated ? threadId : null;
+      } catch (error) {
+        onDebug?.({
+          id: `${Date.now()}-client-thread-read-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "thread/read error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      }
     },
-    [replaceOnResumeRef, resumeThreadForWorkspace],
+    [hydrateExactThreadResponse, onDebug],
   );
 
   const resetWorkspaceThreads = useCallback(

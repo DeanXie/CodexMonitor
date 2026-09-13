@@ -45,7 +45,7 @@ describe("useMainAppMobileThreadRefresh", () => {
     expect(reconnectLive).toHaveBeenCalledWith(
       "ws-mobile",
       "thread-mobile",
-      { runResume: false },
+      { runRead: false },
     );
   });
 });

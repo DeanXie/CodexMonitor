@@ -13,7 +13,7 @@ export type RemoteThreadConnectionState = "live" | "polling" | "disconnected";
 const SELF_DETACH_IGNORE_WINDOW_MS = 10_000;
 
 type ReconnectOptions = {
-  runResume?: boolean;
+  runRead?: boolean;
   reason?: "thread-switch" | "focus" | "detached-recovery" | "connected-recovery";
 };
 
@@ -201,11 +201,11 @@ export function useRemoteThreadLiveConnection({
         const sequence = reconnectSequenceRef.current + 1;
         reconnectSequenceRef.current = sequence;
         const workspaceAtStart = activeWorkspaceRef.current;
-        const shouldResume = options?.runResume !== false;
+        const shouldRead = options?.runRead !== false;
         const shouldKeepLiveState = options?.reason === "thread-switch";
         if (!workspaceAtStart?.connected) {
           setState("disconnected");
-        } else if (shouldResume || !shouldKeepLiveState) {
+        } else if (shouldRead || !shouldKeepLiveState) {
           setState("polling");
         } else {
           setState("live");
@@ -226,7 +226,7 @@ export function useRemoteThreadLiveConnection({
             return false;
           }
 
-          if (shouldResume) {
+          if (shouldRead) {
             await Promise.resolve(refreshThreadRef.current(workspaceId, threadId));
           }
           if (sequence !== reconnectSequenceRef.current) {
@@ -254,7 +254,7 @@ export function useRemoteThreadLiveConnection({
           }
 
           activeSubscriptionKeyRef.current = targetKey;
-          if (shouldResume || !shouldKeepLiveState) {
+          if (shouldRead || !shouldKeepLiveState) {
             setState("polling");
           } else {
             setState("live");
@@ -318,7 +318,7 @@ export function useRemoteThreadLiveConnection({
       return;
     }
     void reconnectLive(parsed.workspaceId, parsed.threadId, {
-      runResume: !activeThreadHasLocalSnapshotRef.current,
+      runRead: !activeThreadHasLocalSnapshotRef.current,
       reason: "thread-switch",
     });
   }, [
@@ -350,7 +350,7 @@ export function useRemoteThreadLiveConnection({
 
       if (method === "codex/connected" && isDocumentVisible()) {
         void reconnectLive(activeWorkspaceId, selectedThreadId, {
-          runResume: false,
+          runRead: false,
           reason: "connected-recovery",
         });
         return;
@@ -382,7 +382,7 @@ export function useRemoteThreadLiveConnection({
           reconcileDisconnectedState();
           if (isDocumentVisible() && isWindowFocused()) {
             void reconnectLive(activeWorkspaceId, selectedThreadId, {
-              runResume: true,
+              runRead: true,
               reason: "detached-recovery",
             });
           }
@@ -426,7 +426,7 @@ export function useRemoteThreadLiveConnection({
         return;
       }
       void reconnectLive(workspaceId, threadId, {
-        runResume: true,
+        runRead: true,
         reason: "focus",
       });
     };

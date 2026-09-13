@@ -15,6 +15,10 @@ use tokio::time::timeout;
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
+use crate::shared::codex_core::writer_admission_observation::{
+    WriterAdmissionErrorKind, WriterAdmissionObservationRuntime,
+};
+use crate::shared::codex_identity::CodexThreadKey;
 use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
 use crate::shared::surface_projection_core::{
@@ -815,6 +819,14 @@ fn build_initialize_params(client_version: &str) -> Value {
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 
+pub(crate) fn classify_resume_dispatch_error(error: &str) -> WriterAdmissionErrorKind {
+    if error.contains("timed out") {
+        WriterAdmissionErrorKind::Timeout
+    } else {
+        WriterAdmissionErrorKind::DispatchDisconnected
+    }
+}
+
 pub(crate) struct WorkspaceSession {
     pub(crate) codex_args: Option<String>,
     pub(crate) child: Mutex<Child>,
@@ -825,6 +837,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) workspace_reconciler: Mutex<RuntimeWorkspaceReconciler>,
     pub(crate) execution_settings_evidence: ExecutionSettingsEvidenceRuntime,
     pub(crate) projection_observations: ProjectionObservationEngine,
+    pub(crate) writer_admission_observations: WriterAdmissionObservationRuntime,
     // Shared process owner survives session reconnect; this is only an observer.
     pub(crate) creation_coordinator: Mutex<Option<CreationCoordinator>>,
     pub(crate) runtime_observation_keys: Mutex<HashSet<String>>,
@@ -835,6 +848,35 @@ pub(crate) struct WorkspaceSession {
     pub(crate) background_thread_callbacks: Mutex<HashMap<String, mpsc::UnboundedSender<Value>>>,
     pub(crate) owner_workspace_id: String,
     pub(crate) workspace_ids: Mutex<HashSet<String>>,
+}
+
+struct ResumeAdmissionDispatchGuard<'a> {
+    runtime: &'a WriterAdmissionObservationRuntime,
+    thread_key: CodexThreadKey,
+    attempt_id: crate::shared::codex_core::writer_admission_observation::WriterAdmissionAttemptId,
+    boundary: DispatchBoundary,
+    completed: bool,
+}
+
+impl ResumeAdmissionDispatchGuard<'_> {
+    fn complete(&mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for ResumeAdmissionDispatchGuard<'_> {
+    fn drop(&mut self) {
+        if self.completed || !self.boundary.crossed() {
+            return;
+        }
+        let _ = self.runtime.record_outcome_unknown(
+            &self.thread_key,
+            &self.attempt_id,
+            WriterAdmissionErrorKind::Cancellation,
+            "resume operation was cancelled after dispatch",
+            unix_timestamp_ms() as i64,
+        );
+    }
 }
 
 impl WorkspaceSession {
@@ -963,6 +1005,125 @@ impl WorkspaceSession {
                     "request timed out after {} seconds",
                     REQUEST_TIMEOUT.as_secs()
                 ))
+            }
+        }
+    }
+
+    pub(crate) async fn send_resume_request_for_workspace(
+        &self,
+        workspace_id: &str,
+        requested_thread_id: &str,
+        params: Value,
+    ) -> Result<Value, String> {
+        let codex_home_identity = self
+            .workspace_reconciler
+            .lock()
+            .await
+            .codex_home_identity()
+            .to_string();
+        let thread_key = CodexThreadKey::new(codex_home_identity, requested_thread_id);
+        let attempt_id = self
+            .writer_admission_observations
+            .begin_resume(
+                thread_key.clone(),
+                requested_thread_id,
+                unix_timestamp_ms() as i64,
+            )
+            .map_err(|error| format!("writer admission observation failed: {error:?}"))?;
+        let boundary = DispatchBoundary::default();
+        let mut dispatch_guard = ResumeAdmissionDispatchGuard {
+            runtime: &self.writer_admission_observations,
+            thread_key: thread_key.clone(),
+            attempt_id: attempt_id.clone(),
+            boundary: boundary.clone(),
+            completed: false,
+        };
+        let response = self
+            .send_request_for_workspace_observed(
+                workspace_id,
+                "thread/resume",
+                params,
+                Some(&boundary),
+            )
+            .await;
+
+        match response {
+            Ok(response) => {
+                let observed_at = unix_timestamp_ms() as i64;
+                let active_writer =
+                    response
+                        .get("error")
+                        .and_then(Value::as_object)
+                        .and_then(|error| {
+                            let code = error.get("code").and_then(Value::as_i64)?;
+                            let message = error.get("message").and_then(Value::as_str)?;
+                            (code == -32600
+                                && message.to_ascii_lowercase().contains("active writer"))
+                            .then_some((code, message))
+                        });
+                let observation_result = if let Some((code, message)) = active_writer {
+                    self.writer_admission_observations
+                        .record_active_writer_blocked(
+                            &thread_key,
+                            &attempt_id,
+                            code,
+                            message,
+                            observed_at,
+                        )
+                } else if response.get("error").is_some() {
+                    self.writer_admission_observations.record_outcome_unknown(
+                        &thread_key,
+                        &attempt_id,
+                        WriterAdmissionErrorKind::UnclassifiedUpstreamResponse,
+                        "upstream response did not provide recognized writer-admission evidence",
+                        observed_at,
+                    )
+                } else {
+                    let returned_thread_id = response
+                        .pointer("/result/thread/id")
+                        .and_then(Value::as_str);
+                    if returned_thread_id == Some(requested_thread_id) {
+                        self.writer_admission_observations
+                            .record_exact_resume_success(
+                                &thread_key,
+                                &attempt_id,
+                                requested_thread_id,
+                                observed_at,
+                            )
+                    } else {
+                        self.writer_admission_observations.record_malformed_response(
+                            &thread_key,
+                            &attempt_id,
+                            returned_thread_id,
+                            "successful resume response did not return the exact requested thread id",
+                            observed_at,
+                        )
+                    }
+                };
+                observation_result
+                    .map_err(|error| format!("writer admission observation failed: {error:?}"))?;
+                dispatch_guard.complete();
+                Ok(response)
+            }
+            Err(error) => {
+                if boundary.crossed() {
+                    let error_kind = classify_resume_dispatch_error(&error);
+                    self.writer_admission_observations
+                        .record_outcome_unknown(
+                            &thread_key,
+                            &attempt_id,
+                            error_kind,
+                            &error,
+                            unix_timestamp_ms() as i64,
+                        )
+                        .map_err(|observation_error| {
+                            format!(
+                                "{error}; writer admission observation failed: {observation_error:?}"
+                            )
+                        })?;
+                }
+                dispatch_guard.complete();
+                Err(error)
             }
         }
     }
@@ -1242,6 +1403,7 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
         workspace_reconciler: Mutex::new(workspace_reconciler),
         execution_settings_evidence,
         projection_observations: Default::default(),
+        writer_admission_observations: Default::default(),
         creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),

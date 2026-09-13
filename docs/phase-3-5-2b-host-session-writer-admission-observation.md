@@ -1,6 +1,6 @@
 # Phase 3.5.2b — Host-session Writer Admission Observation
 
-Status: Phase 3.5.2b.1 shared observation model is **PASS / FROZEN**. Phase 3.5.2b.2 runtime wiring is **NOT STARTED**.
+Status: Phase 3.5.2b.1 shared observation model and Phase 3.5.2b.2 resume-boundary instrumentation are **PASS / FROZEN**. Phase 3.5.2b.3 is **NOT STARTED**.
 
 ## Authority boundary
 
@@ -13,10 +13,10 @@ it does not decide ownership, availability, lease state, takeover, or release.
 insufficient, and non-authoritative for writer admission. The new model does not
 read or derive from their `Occupied` or `Unoccupied` values.
 
-Phase 3.5.2b.1 is deliberately a crate-private shared-core model. It has no
-serde/IPC schema and is not connected to app-server transport, daemon RPC,
-frontend state, UI, or WorkspaceSession teardown. Those integrations belong to
-Phase 3.5.2b.2 or later and require separate acceptance.
+The observation remains a crate-private shared-core model with no serde/IPC
+schema, frontend state, or UI. Phase 3.5.2b.2 connects it only to the existing
+exact `thread/resume` transport boundary shared by the local app and daemon. It
+does not add a mutation, retry, takeover, or client-owned writer concept.
 
 ## Observation scope and provenance
 
@@ -32,11 +32,12 @@ requested full Thread ID, request method, and the minimal non-sensitive
 response/error evidence available. The attempt ID correlates one explicit
 resume intent; it is not a writer owner or lease identifier.
 
-The current `WorkspaceSession` has no reusable generation type. Phase 3.5.2b.1
-therefore defines the canonical `WorkspaceSessionGeneration` value object but
-does not generate values or wire session lifecycle. Callers must supply the
-generation created by the eventual WorkspaceSession lifecycle authority; no
-rollout/source generation or execution-environment identity is repurposed.
+Every `WorkspaceSession` creates one UUID-backed
+`WorkspaceSessionGeneration` with its process-local observation runtime. A
+replacement session therefore begins with an empty observation map and cannot
+inherit admission, blocking, or ambiguous-outcome evidence from the prior
+generation. No rollout/source generation or execution-environment identity is
+repurposed.
 
 Observations are attributed to the WorkspaceSession/app-server generation, not
 to a Remote TCP connection, Remote client, or Mobile page. CodexMonitor has no
@@ -81,6 +82,34 @@ current synthetic `thread/unsubscribe` do not alter admission evidence or imply
 release. A disconnect after the explicit resume request was dispatched is
 different: it changes that pending attempt to `ADMISSION_OUTCOME_UNKNOWN`, not
 to a released or free state.
+
+## Resume-boundary instrumentation
+
+Each explicit `resume_thread_core` invocation creates a UUID-backed attempt ID
+and records `ADMISSION_PENDING` before writing `thread/resume`. The observation
+key is the current session generation plus the canonical
+`(codexHomeIdentity, fullThreadId)` key; no Remote-client identity participates.
+Concurrent attempts remain correlated by attempt ID while the session exposes
+the most recently observed outcome for the Thread.
+
+The same dispatch returns the following direct observations:
+
+- A successful response with an exact `result.thread.id` records
+  `ADMITTED_FOR_SESSION` and `exactIdMatch = true`.
+- Error `-32600` whose message reports an active writer records
+  `BLOCKED_BY_ACTIVE_WRITER`; the existing typed response classification is
+  preserved and no absence or creation fallback is inferred.
+- A mismatched, missing, malformed, or otherwise unclassified response records
+  `ADMISSION_OUTCOME_UNKNOWN`, because the frozen model has no direct evidence
+  for admission or active-writer blocking.
+- A timeout, response-channel disconnect, or cancellation after the dispatch
+  boundary records `ADMISSION_OUTCOME_UNKNOWN` with its non-sensitive error
+  kind. Cancellation is guarded at the in-flight future boundary so dropping a
+  dispatched request cannot leave a false pending observation.
+
+`resume_thread` remains excluded from automatic Remote retry. `thread/read`,
+ordinary refresh, polling, unsubscribe, and Remote-client disconnect do not
+enter this instrumentation path.
 
 ## Release evidence boundary
 

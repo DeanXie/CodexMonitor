@@ -250,13 +250,16 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   Phase 3.5.2a's frozen implementation and acceptance evidence are recorded in
   `docs/phase-3-5-2a-exact-id-remote-admission.md`.
 
-  Phase 3.5.2b.1 adds a pure shared-core observation contract for this
-  admission boundary. It records `ADMISSION_PENDING`, exact response admission,
-  typed active-writer rejection, unknown dispatch outcomes, and session-end
-  release-unobserved evidence for one WorkspaceSession generation and one
-  `CodexThreadKey`. The model is not yet wired to transport or UI. It never
-  reports global writer freedom, writer/lease identity, or release, and it does
-  not use legacy `WriterOccupancy` as authority. See
+  Phase 3.5.2b.1 defines the shared-core observation contract and Phase
+  3.5.2b.2 wires it to the existing exact `thread/resume` dispatch boundary.
+  Each WorkspaceSession creates a distinct generation; every explicit resume
+  gets a unique attempt ID and records pending before dispatch. Exact-ID success,
+  typed active-writer rejection, and ambiguous post-dispatch outcomes are
+  recorded for that session generation and `CodexThreadKey`. Read, refresh,
+  polling, unsubscribe, and Remote-client disconnect remain non-transitioning.
+  The model is not wired to UI and never reports global writer freedom,
+  writer/lease identity, Remote-client ownership, or release. It does not use
+  legacy `WriterOccupancy` as authority. See
   `docs/phase-3-5-2b-host-session-writer-admission-observation.md`.
 - `thread/fork`
 - `thread/list`

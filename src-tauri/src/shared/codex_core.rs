@@ -393,7 +393,7 @@ pub(crate) async fn resume_thread_core(
     *session.creation_coordinator.lock().await = Some(coordinator.clone());
     let request = build_exact_thread_request(ExactThreadMethod::Resume, &thread_id)?;
     let response = session
-        .send_request_for_workspace(&workspace_id, request.method, request.params)
+        .send_resume_request_for_workspace(&workspace_id, &thread_id, request.params)
         .await?;
     validate_exact_thread_response(&thread_id, classify_exact_resume_response(response))
 }
@@ -1323,3 +1323,7 @@ mod external_thread_admission_tests;
 #[cfg(test)]
 #[path = "codex_core/writer_admission_observation_tests.rs"]
 mod writer_admission_observation_tests;
+
+#[cfg(test)]
+#[path = "codex_core/writer_admission_instrumentation_tests.rs"]
+mod writer_admission_instrumentation_tests;

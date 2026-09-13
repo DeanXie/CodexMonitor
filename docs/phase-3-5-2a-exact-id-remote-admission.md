@@ -1,6 +1,6 @@
 # Phase 3.5.2a — Exact-ID Remote Read / Admission Separation
 
-Status: **PASS / COMPLETE / FROZEN**. Gates A1, A2, and A3 are **PASS**. Phase 3.5.2b.1 shared observation model is **PASS / FROZEN**; Phase 3.5.2b.2 runtime wiring is **NOT STARTED**.
+Status: **PASS / COMPLETE / FROZEN**. Gates A1, A2, and A3 are **PASS**. Phase 3.5.2b.1 shared observation model and Phase 3.5.2b.2 resume-boundary instrumentation are **PASS / FROZEN**; Phase 3.5.2b.3 is **NOT STARTED**.
 
 ## Frozen authority contract
 

@@ -33,7 +33,7 @@ impl DispatchBoundary {
     pub(crate) fn mark_dispatched(&self) {
         self.0.store(true, Ordering::SeqCst);
     }
-    fn crossed(&self) -> bool {
+    pub(crate) fn crossed(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
 }

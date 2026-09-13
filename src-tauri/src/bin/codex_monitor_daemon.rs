@@ -1747,6 +1747,7 @@ mod tests {
             creation_coordinator: Mutex::new(None),
             execution_settings_evidence: Default::default(),
             projection_observations: Default::default(),
+            writer_admission_observations: Default::default(),
             codex_args: None,
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),

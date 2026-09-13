@@ -1,7 +1,8 @@
 use super::writer_admission_observation::{
     WorkspaceSessionGeneration, WriterAdmissionAttemptId, WriterAdmissionErrorKind,
-    WriterAdmissionNonTransitionEvent, WriterAdmissionObservationState,
-    WriterAdmissionObservationTracker, WriterAdmissionTransitionError,
+    WriterAdmissionNonTransitionEvent, WriterAdmissionObservationRuntime,
+    WriterAdmissionObservationState, WriterAdmissionObservationTracker,
+    WriterAdmissionTransitionError,
 };
 use crate::shared::codex_identity::CodexThreadKey;
 
@@ -384,5 +385,220 @@ fn different_generation_cannot_end_existing_observation() {
     assert_eq!(
         tracker.state(),
         WriterAdmissionObservationState::AdmittedForSession
+    );
+}
+
+#[test]
+fn resume_intent_records_pending() {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+
+    let attempt_id = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("resume intent");
+
+    let observation = runtime
+        .snapshot(&thread_key())
+        .expect("pending observation");
+    assert_eq!(
+        observation.state,
+        WriterAdmissionObservationState::AdmissionPending
+    );
+    assert_eq!(observation.attempt_id, attempt_id);
+    assert_eq!(
+        observation.workspace_session_generation,
+        generation("session-generation-1")
+    );
+}
+
+#[test]
+fn exact_success_records_admitted_for_session() {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+    let attempt_id = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("resume intent");
+
+    runtime
+        .record_exact_resume_success(&thread_key(), &attempt_id, THREAD_ID, 210)
+        .expect("exact success");
+
+    let observation = runtime
+        .snapshot(&thread_key())
+        .expect("admitted observation");
+    assert_eq!(
+        observation.state,
+        WriterAdmissionObservationState::AdmittedForSession
+    );
+    assert_eq!(observation.evidence.exact_id_match, Some(true));
+}
+
+#[test]
+fn mismatched_success_response_does_not_admit() {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+    let attempt_id = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("resume intent");
+
+    runtime
+        .record_malformed_response(
+            &thread_key(),
+            &attempt_id,
+            Some("different-thread"),
+            "resume response thread id did not match",
+            210,
+        )
+        .expect("unknown outcome");
+
+    let observation = runtime
+        .snapshot(&thread_key())
+        .expect("unknown observation");
+    assert_eq!(
+        observation.state,
+        WriterAdmissionObservationState::AdmissionOutcomeUnknown
+    );
+    assert_eq!(observation.evidence.exact_id_match, Some(false));
+    assert_eq!(
+        observation.evidence.normalized_error_kind,
+        Some(WriterAdmissionErrorKind::MalformedResponse)
+    );
+}
+
+#[test]
+fn active_writer_error_records_blocked() {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+    let attempt_id = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("resume intent");
+
+    runtime
+        .record_active_writer_blocked(
+            &thread_key(),
+            &attempt_id,
+            -32600,
+            "already has an active writer",
+            210,
+        )
+        .expect("blocked observation");
+
+    assert_eq!(
+        runtime.snapshot(&thread_key()).unwrap().state,
+        WriterAdmissionObservationState::BlockedByActiveWriter
+    );
+}
+
+#[test]
+fn timeout_disconnect_and_cancellation_record_outcome_unknown() {
+    let cases = [
+        WriterAdmissionErrorKind::Timeout,
+        WriterAdmissionErrorKind::DispatchDisconnected,
+        WriterAdmissionErrorKind::Cancellation,
+    ];
+
+    for (index, kind) in cases.into_iter().enumerate() {
+        let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+        let attempt_id = runtime
+            .begin_resume(thread_key(), THREAD_ID, 200)
+            .expect("resume intent");
+        runtime
+            .record_outcome_unknown(
+                &thread_key(),
+                &attempt_id,
+                kind,
+                format!("unknown outcome {index}"),
+                210,
+            )
+            .expect("unknown observation");
+
+        let observation = runtime
+            .snapshot(&thread_key())
+            .expect("unknown observation");
+        assert_eq!(
+            observation.state,
+            WriterAdmissionObservationState::AdmissionOutcomeUnknown
+        );
+        assert_eq!(observation.evidence.normalized_error_kind, Some(kind));
+    }
+}
+
+#[test]
+fn new_session_generation_resets_runtime_observation() {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+    let attempt_id = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("resume intent");
+    runtime
+        .record_exact_resume_success(&thread_key(), &attempt_id, THREAD_ID, 210)
+        .expect("exact success");
+
+    let next = WriterAdmissionObservationRuntime::new(generation("session-generation-2"));
+
+    assert_eq!(
+        next.state(&thread_key()),
+        WriterAdmissionObservationState::NotObserved
+    );
+    assert!(next.snapshot(&thread_key()).is_none());
+}
+
+#[test]
+fn observation_runtime_is_session_scoped_not_client_owned() {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+    let attempt_id = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("resume intent");
+    runtime
+        .record_exact_resume_success(&thread_key(), &attempt_id, THREAD_ID, 210)
+        .expect("exact success");
+
+    let observation = runtime
+        .snapshot(&thread_key())
+        .expect("admitted observation");
+    assert_eq!(
+        observation.workspace_session_generation,
+        generation("session-generation-1")
+    );
+}
+
+#[test]
+fn each_resume_intent_receives_a_unique_attempt_id() {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+
+    let first = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("first resume intent");
+    let second = runtime
+        .begin_resume(thread_key(), THREAD_ID, 210)
+        .expect("second resume intent");
+
+    assert_ne!(first, second);
+    assert_eq!(runtime.snapshot(&thread_key()).unwrap().attempt_id, second);
+}
+
+#[test]
+fn concurrent_session_attempts_are_correlated_without_client_ownership() {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+    let first = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("first resume intent");
+    let second = runtime
+        .begin_resume(thread_key(), THREAD_ID, 210)
+        .expect("second resume intent");
+
+    runtime
+        .record_exact_resume_success(&thread_key(), &first, THREAD_ID, 220)
+        .expect("first attempt remains correlated");
+    runtime
+        .record_active_writer_blocked(
+            &thread_key(),
+            &second,
+            -32600,
+            "already has an active writer",
+            230,
+        )
+        .expect("second attempt remains correlated");
+
+    let latest = runtime.snapshot(&thread_key()).expect("latest observation");
+    assert_eq!(latest.attempt_id, second);
+    assert_eq!(
+        latest.state,
+        WriterAdmissionObservationState::BlockedByActiveWriter
     );
 }

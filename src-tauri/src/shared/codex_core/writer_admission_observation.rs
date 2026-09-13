@@ -6,6 +6,8 @@
 //! availability, writer identity, lease identity, or release.
 
 use crate::shared::codex_identity::CodexThreadKey;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 const RESUME_METHOD: &str = "thread/resume";
 const ACTIVE_WRITER_ERROR_CODE: i64 = -32600;
@@ -51,6 +53,9 @@ pub(crate) enum WriterAdmissionErrorKind {
     BlockedByActiveWriter,
     Timeout,
     DispatchDisconnected,
+    Cancellation,
+    MalformedResponse,
+    UnclassifiedUpstreamResponse,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,6 +76,7 @@ pub(crate) enum WriterAdmissionNonTransitionEvent {
 pub(crate) struct WriterAdmissionEvidence {
     pub request_method: &'static str,
     pub returned_full_thread_id: Option<String>,
+    pub exact_id_match: Option<bool>,
     pub upstream_error_code: Option<i64>,
     pub normalized_error_kind: Option<WriterAdmissionErrorKind>,
     pub diagnostic: Option<String>,
@@ -100,6 +106,196 @@ pub(crate) enum WriterAdmissionTransitionError {
     ThreadIdentityMismatch,
     SessionGenerationMismatch,
     ActiveWriterEvidenceMismatch,
+    AttemptMismatch,
+}
+
+/// Process-local evidence for one concrete WorkspaceSession generation.
+///
+/// Remote clients are deliberately absent from the key. A new runtime is
+/// created with every WorkspaceSession, so prior admission evidence cannot be
+/// inherited by a replacement app-server process.
+pub(crate) struct WriterAdmissionObservationRuntime {
+    workspace_session_generation: WorkspaceSessionGeneration,
+    observations: Mutex<HashMap<CodexThreadKey, WriterAdmissionThreadObservations>>,
+}
+
+struct WriterAdmissionThreadObservations {
+    latest_attempt_id: WriterAdmissionAttemptId,
+    attempts: HashMap<WriterAdmissionAttemptId, WriterAdmissionObservationTracker>,
+}
+
+impl Default for WriterAdmissionObservationRuntime {
+    fn default() -> Self {
+        Self::new(
+            WorkspaceSessionGeneration::new(uuid::Uuid::new_v4().to_string())
+                .expect("UUID workspace session generation"),
+        )
+    }
+}
+
+impl WriterAdmissionObservationRuntime {
+    pub(crate) fn new(workspace_session_generation: WorkspaceSessionGeneration) -> Self {
+        Self {
+            workspace_session_generation,
+            observations: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub(crate) fn workspace_session_generation(&self) -> &WorkspaceSessionGeneration {
+        &self.workspace_session_generation
+    }
+
+    pub(crate) fn state(&self, thread_key: &CodexThreadKey) -> WriterAdmissionObservationState {
+        self.snapshot(thread_key).map_or(
+            WriterAdmissionObservationState::NotObserved,
+            |observation| observation.state,
+        )
+    }
+
+    pub(crate) fn snapshot(
+        &self,
+        thread_key: &CodexThreadKey,
+    ) -> Option<WriterAdmissionObservation> {
+        self.observations
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(thread_key)
+            .and_then(|observations| observations.attempts.get(&observations.latest_attempt_id))
+            .and_then(|tracker| tracker.latest_observation().cloned())
+    }
+
+    pub(crate) fn begin_resume(
+        &self,
+        thread_key: CodexThreadKey,
+        requested_full_thread_id: &str,
+        observed_at: i64,
+    ) -> Result<WriterAdmissionAttemptId, WriterAdmissionTransitionError> {
+        let attempt_id = WriterAdmissionAttemptId(uuid::Uuid::new_v4().to_string());
+        let mut tracker = WriterAdmissionObservationTracker::new(
+            thread_key.clone(),
+            self.workspace_session_generation.clone(),
+        );
+        tracker.begin_resume(attempt_id.clone(), requested_full_thread_id, observed_at)?;
+        let mut observations = self
+            .observations
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match observations.get_mut(&thread_key) {
+            Some(existing) => {
+                existing.attempts.retain(|_, tracker| {
+                    tracker.state() == WriterAdmissionObservationState::AdmissionPending
+                });
+                existing.attempts.insert(attempt_id.clone(), tracker);
+                existing.latest_attempt_id = attempt_id.clone();
+            }
+            None => {
+                observations.insert(
+                    thread_key,
+                    WriterAdmissionThreadObservations {
+                        latest_attempt_id: attempt_id.clone(),
+                        attempts: HashMap::from([(attempt_id.clone(), tracker)]),
+                    },
+                );
+            }
+        }
+        Ok(attempt_id)
+    }
+
+    pub(crate) fn record_exact_resume_success(
+        &self,
+        thread_key: &CodexThreadKey,
+        attempt_id: &WriterAdmissionAttemptId,
+        returned_full_thread_id: &str,
+        observed_at: i64,
+    ) -> Result<(), WriterAdmissionTransitionError> {
+        self.with_attempt(thread_key, attempt_id, |tracker| {
+            tracker.record_exact_resume_success(returned_full_thread_id, observed_at)
+        })
+    }
+
+    pub(crate) fn record_active_writer_blocked(
+        &self,
+        thread_key: &CodexThreadKey,
+        attempt_id: &WriterAdmissionAttemptId,
+        upstream_error_code: i64,
+        diagnostic: impl Into<String>,
+        observed_at: i64,
+    ) -> Result<(), WriterAdmissionTransitionError> {
+        let diagnostic = diagnostic.into();
+        self.with_attempt(thread_key, attempt_id, |tracker| {
+            tracker.record_active_writer_blocked(upstream_error_code, diagnostic, observed_at)
+        })
+    }
+
+    pub(crate) fn record_malformed_response(
+        &self,
+        thread_key: &CodexThreadKey,
+        attempt_id: &WriterAdmissionAttemptId,
+        returned_full_thread_id: Option<&str>,
+        diagnostic: impl Into<String>,
+        observed_at: i64,
+    ) -> Result<(), WriterAdmissionTransitionError> {
+        let diagnostic = diagnostic.into();
+        self.with_attempt(thread_key, attempt_id, |tracker| {
+            tracker.record_outcome_unknown(
+                WriterAdmissionErrorKind::MalformedResponse,
+                diagnostic,
+                observed_at,
+            )?;
+            let observation = tracker
+                .latest_observation
+                .as_mut()
+                .ok_or(WriterAdmissionTransitionError::InvalidTransition)?;
+            observation.evidence.returned_full_thread_id =
+                returned_full_thread_id.map(str::to_string);
+            observation.evidence.exact_id_match = Some(false);
+            Ok(())
+        })
+    }
+
+    pub(crate) fn record_outcome_unknown(
+        &self,
+        thread_key: &CodexThreadKey,
+        attempt_id: &WriterAdmissionAttemptId,
+        kind: WriterAdmissionErrorKind,
+        diagnostic: impl Into<String>,
+        observed_at: i64,
+    ) -> Result<(), WriterAdmissionTransitionError> {
+        let diagnostic = diagnostic.into();
+        self.with_attempt(thread_key, attempt_id, |tracker| {
+            tracker.record_outcome_unknown(kind, diagnostic, observed_at)
+        })
+    }
+
+    fn with_attempt(
+        &self,
+        thread_key: &CodexThreadKey,
+        attempt_id: &WriterAdmissionAttemptId,
+        update: impl FnOnce(
+            &mut WriterAdmissionObservationTracker,
+        ) -> Result<(), WriterAdmissionTransitionError>,
+    ) -> Result<(), WriterAdmissionTransitionError> {
+        let mut observations = self
+            .observations
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let thread_observations = observations
+            .get_mut(thread_key)
+            .ok_or(WriterAdmissionTransitionError::InvalidTransition)?;
+        let tracker = thread_observations
+            .attempts
+            .get_mut(attempt_id)
+            .ok_or(WriterAdmissionTransitionError::AttemptMismatch)?;
+        update(tracker)?;
+        thread_observations.latest_attempt_id = attempt_id.clone();
+        thread_observations
+            .attempts
+            .retain(|candidate_id, tracker| {
+                candidate_id == attempt_id
+                    || tracker.state() == WriterAdmissionObservationState::AdmissionPending
+            });
+        Ok(())
+    }
 }
 
 impl WriterAdmissionObservationTracker {
@@ -155,6 +351,7 @@ impl WriterAdmissionObservationTracker {
             evidence: WriterAdmissionEvidence {
                 request_method: RESUME_METHOD,
                 returned_full_thread_id: None,
+                exact_id_match: None,
                 upstream_error_code: None,
                 normalized_error_kind: None,
                 diagnostic: None,
@@ -175,6 +372,7 @@ impl WriterAdmissionObservationTracker {
         observation.state = WriterAdmissionObservationState::AdmittedForSession;
         observation.observed_at = observed_at;
         observation.evidence.returned_full_thread_id = Some(returned_full_thread_id.to_string());
+        observation.evidence.exact_id_match = Some(true);
         Ok(())
     }
 

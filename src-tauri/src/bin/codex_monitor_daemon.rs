@@ -78,7 +78,6 @@ use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
 use backend::app_server::{spawn_workspace_session_in_environment, WorkspaceSession};
 use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
-use shared::process_core::kill_child_process_tree;
 use shared::prompts_core::{self, CustomPromptEntry};
 use shared::remote_host_identity::{
     load_or_initialize_remote_host_identity, RemoteDaemonCapabilities, RemoteDaemonInfo,
@@ -243,25 +242,17 @@ impl DaemonState {
             *workspaces = stored;
         }
 
-        let stale_sessions: Vec<(String, Arc<WorkspaceSession>)> = {
-            let mut sessions = self.sessions.lock().await;
+        let stale_session_ids: Vec<String> = {
+            let sessions = self.sessions.lock().await;
             sessions
                 .keys()
                 .filter(|id| !workspace_ids.contains(*id))
                 .cloned()
-                .collect::<Vec<_>>()
-                .into_iter()
-                .filter_map(|workspace_id| {
-                    sessions
-                        .remove(&workspace_id)
-                        .map(|session| (workspace_id, session))
-                })
                 .collect()
         };
 
-        for (workspace_id, session) in stale_sessions {
-            let mut child = session.child.lock().await;
-            kill_child_process_tree(&mut child).await;
+        for workspace_id in stale_session_ids {
+            workspaces_core::kill_session_by_id(&self.sessions, &workspace_id).await;
             eprintln!("daemon: pruned stale session for removed workspace {workspace_id}");
         }
     }
@@ -2156,6 +2147,66 @@ mod tests {
                 kill_child_process_tree(&mut child).await;
             }
 
+            let _ = std::fs::remove_dir_all(&tmp);
+        });
+    }
+
+    #[test]
+    fn list_workspaces_sync_prunes_only_stale_route_for_shared_session() {
+        run_async_test(async {
+            let tmp = make_temp_dir("list-workspaces-sync-prune-shared-route");
+            let state = test_state(&tmp);
+            let keep_path = tmp.join("workspace-keep");
+            let persisted = vec![make_workspace_entry(
+                "ws-keep",
+                &keep_path.to_string_lossy(),
+            )];
+            write_workspaces(&state.storage_path, &persisted).expect("write workspaces");
+
+            let shared_session = make_session(make_workspace_entry(
+                "ws-keep",
+                &keep_path.to_string_lossy(),
+            ));
+            shared_session.register_workspace("ws-stale").await;
+            let thread_key =
+                crate::shared::codex_identity::CodexThreadKey::new("codex-home-a", "thread-1");
+            let attempt_id = shared_session
+                .writer_admission_observations
+                .begin_resume(thread_key.clone(), "thread-1", 100)
+                .expect("resume intent");
+            shared_session
+                .writer_admission_observations
+                .record_exact_resume_success(&thread_key, &attempt_id, "thread-1", 110)
+                .expect("admitted observation");
+            {
+                let mut sessions = state.sessions.lock().await;
+                sessions.insert("ws-keep".to_string(), Arc::clone(&shared_session));
+                sessions.insert("ws-stale".to_string(), Arc::clone(&shared_session));
+            }
+
+            state.list_workspaces().await;
+
+            {
+                let sessions = state.sessions.lock().await;
+                assert!(sessions.contains_key("ws-keep"));
+                assert!(!sessions.contains_key("ws-stale"));
+            }
+            assert_eq!(
+                shared_session
+                    .writer_admission_observations
+                    .state(&thread_key),
+                crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationState::AdmittedForSession
+            );
+            assert!(shared_session
+                .child
+                .lock()
+                .await
+                .try_wait()
+                .expect("query shared session child")
+                .is_none());
+
+            let mut child = shared_session.child.lock().await;
+            kill_child_process_tree(&mut child).await;
             let _ = std::fs::remove_dir_all(&tmp);
         });
     }

@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
 use crate::codex::home::resolve_workspace_codex_home;
+use crate::shared::codex_core::writer_admission_observation::WriterAdmissionSessionEndEvidenceKind;
 use crate::shared::process_core::kill_child_process_tree;
 use crate::types::{AppSettings, WorkspaceEntry};
 
@@ -22,7 +23,36 @@ pub(super) fn workspace_session_spawn_lock() -> &'static Mutex<()> {
 
 async fn session_process_is_alive(session: &Arc<WorkspaceSession>) -> bool {
     let mut child = session.child.lock().await;
-    matches!(child.try_wait(), Ok(None))
+    let status = child.try_wait();
+    drop(child);
+    match status {
+        Ok(None) => true,
+        Ok(Some(status)) => {
+            session.record_app_server_generation_ended(
+                WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited,
+                format!("app-server child exit observed: {status}"),
+            );
+            false
+        }
+        Err(_) => false,
+    }
+}
+
+pub(super) async fn terminate_session_generation(
+    session: &Arc<WorkspaceSession>,
+    diagnostic: &str,
+) {
+    let exit_status = {
+        let mut child = session.child.lock().await;
+        kill_child_process_tree(&mut child).await;
+        child.try_wait().ok().flatten()
+    };
+    if let Some(status) = exit_status {
+        session.record_app_server_generation_ended(
+            WriterAdmissionSessionEndEvidenceKind::AppServerProcessTerminated,
+            format!("{diagnostic}: {status}"),
+        );
+    }
 }
 
 async fn remove_session_references(
@@ -99,7 +129,7 @@ where
     Ok(())
 }
 
-pub(super) async fn kill_session_by_id(
+pub(crate) async fn kill_session_by_id(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     id: &str,
 ) {
@@ -118,8 +148,7 @@ pub(super) async fn kill_session_by_id(
         if still_referenced {
             return;
         }
-        let mut child = session.child.lock().await;
-        kill_child_process_tree(&mut child).await;
+        terminate_session_generation(&session, "last workspace route teardown completed").await;
     }
 }
 
@@ -135,7 +164,11 @@ mod tests {
     use tokio::process::Command;
     use tokio::sync::Mutex;
 
+    use crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationState;
+    use crate::shared::codex_identity::CodexThreadKey;
     use crate::types::{WorkspaceKind, WorkspaceSettings};
+
+    const THREAD_ID: &str = "01a08c05-7880-75a2-976c-2a5895b58723";
 
     fn make_workspace_entry(id: &str) -> WorkspaceEntry {
         WorkspaceEntry {
@@ -189,6 +222,19 @@ mod tests {
             owner_workspace_id: "test-owner".to_string(),
             workspace_ids: Mutex::new(HashSet::from(["test-owner".to_string()])),
         })
+    }
+
+    fn admit_for_session(session: &WorkspaceSession) -> CodexThreadKey {
+        let thread_key = CodexThreadKey::new("codex-home-a", THREAD_ID);
+        let attempt_id = session
+            .writer_admission_observations
+            .begin_resume(thread_key.clone(), THREAD_ID, 100)
+            .expect("resume intent");
+        session
+            .writer_admission_observations
+            .record_exact_resume_success(&thread_key, &attempt_id, THREAD_ID, 110)
+            .expect("admitted observation");
+        thread_key
     }
 
     #[test]
@@ -256,6 +302,62 @@ mod tests {
             assert_eq!(spawn_calls.load(Ordering::SeqCst), 1);
             assert!(sessions.lock().await.contains_key(&entry.id));
             kill_session_by_id(&sessions, &entry.id).await;
+        });
+    }
+
+    #[test]
+    fn removing_one_shared_route_does_not_end_shared_session() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let session = make_session(make_workspace_entry("ws-a"));
+            session.register_workspace("ws-b").await;
+            let thread_key = admit_for_session(&session);
+            let sessions = Mutex::new(HashMap::from([
+                ("ws-a".to_string(), Arc::clone(&session)),
+                ("ws-b".to_string(), Arc::clone(&session)),
+            ]));
+
+            kill_session_by_id(&sessions, "ws-a").await;
+
+            assert_eq!(
+                session.writer_admission_observations.state(&thread_key),
+                WriterAdmissionObservationState::AdmittedForSession
+            );
+            assert!(session_process_is_alive(&session).await);
+            kill_session_by_id(&sessions, "ws-b").await;
+        });
+    }
+
+    #[test]
+    fn removing_last_shared_route_ends_generation() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let session = make_session(make_workspace_entry("ws-a"));
+            let thread_key = admit_for_session(&session);
+            let sessions = Mutex::new(HashMap::from([("ws-a".to_string(), Arc::clone(&session))]));
+
+            kill_session_by_id(&sessions, "ws-a").await;
+
+            assert_eq!(
+                session.writer_admission_observations.state(&thread_key),
+                WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+            );
+        });
+    }
+
+    #[test]
+    fn actual_app_server_exit_ends_generation_when_observed() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let session = make_session(make_workspace_entry("ws-a"));
+            let thread_key = admit_for_session(&session);
+            {
+                let mut child = session.child.lock().await;
+                child.kill().await.expect("terminate dummy app-server");
+            }
+
+            assert!(!session_process_is_alive(&session).await);
+            assert_eq!(
+                session.writer_admission_observations.state(&thread_key),
+                WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+            );
         });
     }
 }

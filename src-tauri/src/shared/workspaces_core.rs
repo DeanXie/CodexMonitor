@@ -6,7 +6,7 @@ mod io;
 mod runtime_codex_args;
 mod worktree;
 
-pub(crate) use connect::connect_workspace_core;
+pub(crate) use connect::{connect_workspace_core, kill_session_by_id};
 pub(crate) use crud_persistence::{
     add_clone_core, add_workspace_core, add_workspace_from_git_url_core, remove_workspace_core,
     update_workspace_settings_core,

@@ -82,6 +82,20 @@ pub(crate) struct WriterAdmissionEvidence {
     pub diagnostic: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WriterAdmissionSessionEndEvidenceKind {
+    AppServerProcessExited,
+    AppServerProcessTerminated,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WriterAdmissionSessionEndEvidence {
+    pub kind: WriterAdmissionSessionEndEvidenceKind,
+    pub previous_state: WriterAdmissionObservationState,
+    pub admission_outcome_unresolved: bool,
+    pub diagnostic: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WriterAdmissionObservation {
     pub thread_key: CodexThreadKey,
@@ -91,6 +105,7 @@ pub(crate) struct WriterAdmissionObservation {
     pub requested_full_thread_id: String,
     pub state: WriterAdmissionObservationState,
     pub evidence: WriterAdmissionEvidence,
+    pub session_end_evidence: Option<WriterAdmissionSessionEndEvidence>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -267,6 +282,36 @@ impl WriterAdmissionObservationRuntime {
         })
     }
 
+    pub(crate) fn record_session_ended(
+        &self,
+        kind: WriterAdmissionSessionEndEvidenceKind,
+        diagnostic: impl Into<String>,
+        observed_at: i64,
+    ) -> usize {
+        let diagnostic = diagnostic.into();
+        let mut changed = 0;
+        let mut observations = self
+            .observations
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for thread_observations in observations.values_mut() {
+            for tracker in thread_observations.attempts.values_mut() {
+                if tracker
+                    .record_session_ended_with_evidence(
+                        &self.workspace_session_generation,
+                        kind,
+                        diagnostic.clone(),
+                        observed_at,
+                    )
+                    .is_ok()
+                {
+                    changed += 1;
+                }
+            }
+        }
+        changed
+    }
+
     fn with_attempt(
         &self,
         thread_key: &CodexThreadKey,
@@ -356,6 +401,7 @@ impl WriterAdmissionObservationTracker {
                 normalized_error_kind: None,
                 diagnostic: None,
             },
+            session_end_evidence: None,
         });
         Ok(())
     }
@@ -424,6 +470,21 @@ impl WriterAdmissionObservationTracker {
         workspace_session_generation: &WorkspaceSessionGeneration,
         observed_at: i64,
     ) -> Result<(), WriterAdmissionTransitionError> {
+        self.record_session_ended_with_evidence(
+            workspace_session_generation,
+            WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited,
+            "app-server process exit observed",
+            observed_at,
+        )
+    }
+
+    pub(crate) fn record_session_ended_with_evidence(
+        &mut self,
+        workspace_session_generation: &WorkspaceSessionGeneration,
+        kind: WriterAdmissionSessionEndEvidenceKind,
+        diagnostic: impl Into<String>,
+        observed_at: i64,
+    ) -> Result<(), WriterAdmissionTransitionError> {
         if workspace_session_generation != &self.workspace_session_generation {
             return Err(WriterAdmissionTransitionError::SessionGenerationMismatch);
         }
@@ -433,14 +494,26 @@ impl WriterAdmissionObservationTracker {
             .ok_or(WriterAdmissionTransitionError::InvalidTransition)?;
         if !matches!(
             observation.state,
-            WriterAdmissionObservationState::AdmittedForSession
+            WriterAdmissionObservationState::AdmissionPending
+                | WriterAdmissionObservationState::AdmittedForSession
                 | WriterAdmissionObservationState::BlockedByActiveWriter
                 | WriterAdmissionObservationState::AdmissionOutcomeUnknown
         ) {
             return Err(WriterAdmissionTransitionError::InvalidTransition);
         }
+        let previous_state = observation.state;
         observation.state = WriterAdmissionObservationState::SessionEndedReleaseUnobserved;
         observation.observed_at = observed_at;
+        observation.session_end_evidence = Some(WriterAdmissionSessionEndEvidence {
+            kind,
+            previous_state,
+            admission_outcome_unresolved: matches!(
+                previous_state,
+                WriterAdmissionObservationState::AdmissionPending
+                    | WriterAdmissionObservationState::AdmissionOutcomeUnknown
+            ),
+            diagnostic: diagnostic.into(),
+        });
         Ok(())
     }
 

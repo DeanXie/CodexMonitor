@@ -250,13 +250,21 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   Phase 3.5.2a's frozen implementation and acceptance evidence are recorded in
   `docs/phase-3-5-2a-exact-id-remote-admission.md`.
 
-  Phase 3.5.2b.1 defines the shared-core observation contract and Phase
-  3.5.2b.2 wires it to the existing exact `thread/resume` dispatch boundary.
+  Phase 3.5.2b.1 defines the shared-core observation contract, Phase 3.5.2b.2
+  wires it to the existing exact `thread/resume` dispatch boundary, and Phase
+  3.5.2b.3 invalidates observations when the corresponding app-server process
+  generation is directly observed to end.
   Each WorkspaceSession creates a distinct generation; every explicit resume
   gets a unique attempt ID and records pending before dispatch. Exact-ID success,
   typed active-writer rejection, and ambiguous post-dispatch outcomes are
   recorded for that session generation and `CodexThreadKey`. Read, refresh,
   polling, unsubscribe, and Remote-client disconnect remain non-transitioning.
+  Removing one route to a shared WorkspaceSession does not end its generation;
+  last-route teardown and runtime-argument respawn record the end only after
+  process termination is observed. A replacement session begins with a new
+  generation and `NOT_OBSERVED`. Daemon hard exit cannot persist a reliable
+  per-session acknowledgement and therefore writes no synthetic session-end
+  observation.
   The model is not wired to UI and never reports global writer freedom,
   writer/lease identity, Remote-client ownership, or release. It does not use
   legacy `WriterOccupancy` as authority. See

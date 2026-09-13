@@ -17,6 +17,7 @@ use crate::codex::args::parse_codex_args;
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
 use crate::shared::codex_core::writer_admission_observation::{
     WriterAdmissionErrorKind, WriterAdmissionObservationRuntime,
+    WriterAdmissionSessionEndEvidenceKind,
 };
 use crate::shared::codex_identity::CodexThreadKey;
 use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
@@ -880,6 +881,18 @@ impl Drop for ResumeAdmissionDispatchGuard<'_> {
 }
 
 impl WorkspaceSession {
+    pub(crate) fn record_app_server_generation_ended(
+        &self,
+        kind: WriterAdmissionSessionEndEvidenceKind,
+        diagnostic: impl Into<String>,
+    ) -> usize {
+        self.writer_admission_observations.record_session_ended(
+            kind,
+            diagnostic,
+            unix_timestamp_ms() as i64,
+        )
+    }
+
     pub(crate) async fn register_workspace(&self, workspace_id: &str) {
         self.register_workspace_with_path(workspace_id, None).await;
     }
@@ -1724,6 +1737,13 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
         // Ensure pending foreground requests cannot accumulate after process output ends.
         session_clone.pending.lock().await.clear();
         session_clone.request_context.lock().await.clear();
+        let exit_status = session_clone.child.lock().await.try_wait();
+        if let Ok(Some(status)) = exit_status {
+            session_clone.record_app_server_generation_ended(
+                WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited,
+                format!("app-server child exit observed after stdout ended: {status}"),
+            );
+        }
     });
 
     let workspace_id = entry.id.clone();

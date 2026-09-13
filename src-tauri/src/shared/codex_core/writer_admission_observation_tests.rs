@@ -2,7 +2,7 @@ use super::writer_admission_observation::{
     WorkspaceSessionGeneration, WriterAdmissionAttemptId, WriterAdmissionErrorKind,
     WriterAdmissionNonTransitionEvent, WriterAdmissionObservationRuntime,
     WriterAdmissionObservationState, WriterAdmissionObservationTracker,
-    WriterAdmissionTransitionError,
+    WriterAdmissionSessionEndEvidenceKind, WriterAdmissionTransitionError,
 };
 use crate::shared::codex_identity::CodexThreadKey;
 
@@ -300,22 +300,6 @@ fn blocked_and_unknown_observations_end_without_claiming_release() {
 }
 
 #[test]
-fn pending_observation_cannot_skip_to_session_ended() {
-    let mut tracker = pending_tracker();
-
-    let result = tracker.record_session_ended(&generation("session-generation-1"), 120);
-
-    assert_eq!(
-        result,
-        Err(WriterAdmissionTransitionError::InvalidTransition)
-    );
-    assert_eq!(
-        tracker.state(),
-        WriterAdmissionObservationState::AdmissionPending
-    );
-}
-
-#[test]
 fn admitted_state_has_no_owner_identity() {
     let tracker = admitted_tracker();
 
@@ -601,4 +585,178 @@ fn concurrent_session_attempts_are_correlated_without_client_ownership() {
         latest.state,
         WriterAdmissionObservationState::BlockedByActiveWriter
     );
+}
+
+fn runtime_with_observation(
+    state: WriterAdmissionObservationState,
+) -> (WriterAdmissionObservationRuntime, WriterAdmissionAttemptId) {
+    let runtime = WriterAdmissionObservationRuntime::new(generation("session-generation-1"));
+    let attempt_id = runtime
+        .begin_resume(thread_key(), THREAD_ID, 200)
+        .expect("resume intent");
+    match state {
+        WriterAdmissionObservationState::AdmissionPending => {}
+        WriterAdmissionObservationState::AdmittedForSession => runtime
+            .record_exact_resume_success(&thread_key(), &attempt_id, THREAD_ID, 210)
+            .expect("exact success"),
+        WriterAdmissionObservationState::BlockedByActiveWriter => runtime
+            .record_active_writer_blocked(
+                &thread_key(),
+                &attempt_id,
+                -32600,
+                "already has an active writer",
+                210,
+            )
+            .expect("blocked observation"),
+        WriterAdmissionObservationState::AdmissionOutcomeUnknown => runtime
+            .record_outcome_unknown(
+                &thread_key(),
+                &attempt_id,
+                WriterAdmissionErrorKind::Timeout,
+                "response outcome unknown",
+                210,
+            )
+            .expect("unknown observation"),
+        other => panic!("unsupported fixture state: {other:?}"),
+    }
+    (runtime, attempt_id)
+}
+
+#[test]
+fn admitted_session_end_marks_release_unobserved() {
+    let (runtime, _) =
+        runtime_with_observation(WriterAdmissionObservationState::AdmittedForSession);
+
+    let changed = runtime.record_session_ended(
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited,
+        "app-server child exit observed",
+        300,
+    );
+
+    assert_eq!(changed, 1);
+    let observation = runtime.snapshot(&thread_key()).expect("ended observation");
+    assert_eq!(
+        observation.state,
+        WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+    );
+    let end = observation
+        .session_end_evidence
+        .expect("session-end evidence");
+    assert_eq!(
+        end.previous_state,
+        WriterAdmissionObservationState::AdmittedForSession
+    );
+    assert_eq!(
+        end.kind,
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited
+    );
+    assert_eq!(end.diagnostic, "app-server child exit observed");
+    assert!(!end.admission_outcome_unresolved);
+}
+
+#[test]
+fn blocked_session_end_marks_release_unobserved() {
+    let (runtime, _) =
+        runtime_with_observation(WriterAdmissionObservationState::BlockedByActiveWriter);
+
+    runtime.record_session_ended(
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited,
+        "app-server child exit observed",
+        300,
+    );
+
+    let observation = runtime.snapshot(&thread_key()).expect("ended observation");
+    assert_eq!(
+        observation.state,
+        WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+    );
+    assert_eq!(
+        observation
+            .session_end_evidence
+            .expect("session-end evidence")
+            .previous_state,
+        WriterAdmissionObservationState::BlockedByActiveWriter
+    );
+}
+
+#[test]
+fn unknown_session_end_marks_release_unobserved() {
+    let (runtime, _) =
+        runtime_with_observation(WriterAdmissionObservationState::AdmissionOutcomeUnknown);
+
+    runtime.record_session_ended(
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited,
+        "app-server child exit observed",
+        300,
+    );
+
+    let observation = runtime.snapshot(&thread_key()).expect("ended observation");
+    assert_eq!(
+        observation.state,
+        WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+    );
+    assert!(
+        observation
+            .session_end_evidence
+            .expect("session-end evidence")
+            .admission_outcome_unresolved
+    );
+}
+
+#[test]
+fn pending_session_end_preserves_attempt_provenance() {
+    let (runtime, attempt_id) =
+        runtime_with_observation(WriterAdmissionObservationState::AdmissionPending);
+
+    runtime.record_session_ended(
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessTerminated,
+        "last workspace route teardown completed",
+        300,
+    );
+
+    let observation = runtime.snapshot(&thread_key()).expect("ended observation");
+    assert_eq!(
+        observation.state,
+        WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+    );
+    assert_eq!(observation.attempt_id, attempt_id);
+    assert_eq!(observation.requested_full_thread_id, THREAD_ID);
+    assert_eq!(
+        observation.workspace_session_generation,
+        generation("session-generation-1")
+    );
+    assert_eq!(observation.observed_at, 300);
+    let end = observation
+        .session_end_evidence
+        .expect("session-end evidence");
+    assert_eq!(
+        end.previous_state,
+        WriterAdmissionObservationState::AdmissionPending
+    );
+    assert_eq!(
+        end.kind,
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessTerminated
+    );
+    assert!(end.admission_outcome_unresolved);
+}
+
+#[test]
+fn old_generation_observation_is_not_visible_as_current() {
+    let (old, _) = runtime_with_observation(WriterAdmissionObservationState::AdmittedForSession);
+    old.record_session_ended(
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited,
+        "app-server child exit observed",
+        300,
+    );
+    let next = WriterAdmissionObservationRuntime::new(generation("session-generation-2"));
+
+    assert_eq!(
+        old.state(&thread_key()),
+        WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+    );
+    assert_eq!(
+        next.state(&thread_key()),
+        WriterAdmissionObservationState::NotObserved
+    );
+    assert!(next.snapshot(&thread_key()).is_none());
 }

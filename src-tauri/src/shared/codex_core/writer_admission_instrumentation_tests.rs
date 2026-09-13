@@ -2,7 +2,7 @@ use super::creation_coordination::CreationCoordinator;
 use super::writer_admission_observation::{
     WriterAdmissionErrorKind, WriterAdmissionObservationState,
 };
-use super::{read_thread_core, resume_thread_core};
+use super::{read_thread_core, resume_thread_core, thread_live_unsubscribe_core};
 use crate::backend::app_server::{classify_resume_dispatch_error, WorkspaceSession};
 use crate::shared::codex_identity::CodexThreadKey;
 use serde_json::{json, Value};
@@ -299,6 +299,37 @@ async fn thread_read_boundary_does_not_touch_writer_observation() {
     )
     .await;
     task.await.unwrap().expect("exact read succeeds");
+
+    assert_eq!(
+        session.writer_admission_observations.snapshot(&thread_key),
+        Some(before)
+    );
+    stop_session(&session).await;
+}
+
+#[tokio::test]
+async fn thread_unsubscribe_boundary_does_not_end_session_generation() {
+    let (session, thread_key) = make_session().await;
+    let attempt_id = session
+        .writer_admission_observations
+        .begin_resume(thread_key.clone(), THREAD_ID, 10)
+        .unwrap();
+    session
+        .writer_admission_observations
+        .record_exact_resume_success(&thread_key, &attempt_id, THREAD_ID, 20)
+        .unwrap();
+    let before = session
+        .writer_admission_observations
+        .snapshot(&thread_key)
+        .unwrap();
+    let sessions = Mutex::new(HashMap::from([(
+        WORKSPACE_ID.to_string(),
+        Arc::clone(&session),
+    )]));
+
+    thread_live_unsubscribe_core(&sessions, WORKSPACE_ID.to_string(), THREAD_ID.to_string())
+        .await
+        .expect("unsubscribe succeeds");
 
     assert_eq!(
         session.writer_admission_observations.snapshot(&thread_key),

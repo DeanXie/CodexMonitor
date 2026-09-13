@@ -1,6 +1,9 @@
 # Phase 3.5.2b — Host-session Writer Admission Observation
 
-Status: Phase 3.5.2b.1 shared observation model and Phase 3.5.2b.2 resume-boundary instrumentation are **PASS / FROZEN**. Phase 3.5.2b.3 is **NOT STARTED**.
+Status: Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2
+resume-boundary instrumentation, and Phase 3.5.2b.3 session-lifecycle
+invalidation are **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.4 is **NOT
+STARTED**.
 
 ## Authority boundary
 
@@ -67,12 +70,45 @@ ADMISSION_PENDING -> ADMISSION_OUTCOME_UNKNOWN
 ADMITTED_FOR_SESSION -> SESSION_ENDED_RELEASE_UNOBSERVED
 BLOCKED_BY_ACTIVE_WRITER -> SESSION_ENDED_RELEASE_UNOBSERVED
 ADMISSION_OUTCOME_UNKNOWN -> SESSION_ENDED_RELEASE_UNOBSERVED
+ADMISSION_PENDING -> SESSION_ENDED_RELEASE_UNOBSERVED
 ```
 
 The exact success transition requires the returned full Thread ID to equal the
 requested ID. Session-end evidence must match the observation's generation. A
 new WorkspaceSession generation begins at `NOT_OBSERVED` and inherits no prior
 admission evidence.
+
+## Session-lifecycle invalidation
+
+Phase 3.5.2b.3 connects lifecycle invalidation only to direct evidence that an
+app-server generation ended:
+
+- an app-server child exit status observed by the stdout/process-health path;
+- explicit termination of the app-server process after the last shared
+  Workspace route is removed; or
+- explicit replacement of that process generation during runtime-argument
+  respawn.
+
+Each retained observation for the ended generation becomes
+`SESSION_ENDED_RELEASE_UNOBSERVED`. Session-end evidence records the previous
+state, the ended generation, observation time, evidence kind, and a
+non-sensitive diagnostic. A pending attempt keeps its attempt provenance and
+is marked unresolved; this records that the session ended without claiming an
+admission outcome. Historical ended-generation evidence may remain in that
+generation's runtime, but a replacement `WorkspaceSession` has a new generation
+and starts with no current observation (`NOT_OBSERVED`).
+
+Workspace IDs may share one `Arc<WorkspaceSession>`. Removing one route only
+unregisters that route while another route still references the same session;
+it neither ends the generation nor changes admission evidence. The generation
+ends only after the last route is removed and process termination is observed.
+Storage reconciliation follows this route-aware teardown path instead of
+killing a session merely because one alias became stale.
+
+Daemon hard exit has no reliable per-session acknowledgement path after the
+process is gone. It therefore does not synthesize per-Thread session-end
+observations. Such evidence remains unavailable/stale rather than being
+reported as release, availability, or global freedom.
 
 ## Events that do not transition writer admission
 
@@ -115,6 +151,7 @@ enter this instrumentation path.
 
 Turn completion, idle state, client disconnect, unsubscribe, WorkspaceSession
 teardown, app-server exit, and daemon exit do not directly prove writer release.
-Session teardown may only produce `SESSION_ENDED_RELEASE_UNOBSERVED`. Any future
-claim of release requires new direct upstream evidence; inference from local
-lifecycle is prohibited.
+Observed app-server generation termination may only produce
+`SESSION_ENDED_RELEASE_UNOBSERVED`. Daemon hard exit produces no new per-session
+observation. Any future claim of release requires new direct upstream evidence;
+inference from local lifecycle is prohibited.

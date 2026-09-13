@@ -9,10 +9,9 @@ use tokio::sync::Mutex;
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
 use crate::codex::home::resolve_workspace_codex_home;
-use crate::shared::process_core::kill_child_process_tree;
 use crate::types::{AppSettings, WorkspaceEntry};
 
-use super::connect::workspace_session_spawn_lock;
+use super::connect::{terminate_session_generation, workspace_session_spawn_lock};
 use super::helpers::resolve_entry_and_parent;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -116,8 +115,11 @@ where
             .register_workspace_with_path(workspace_id, path)
             .await;
     }
-    let mut child = current_session.child.lock().await;
-    kill_child_process_tree(&mut child).await;
+    terminate_session_generation(
+        &current_session,
+        "workspace runtime arguments respawn replaced app-server generation",
+    )
+    .await;
 
     Ok(WorkspaceRuntimeCodexArgsResult {
         applied_codex_args: target_args,
@@ -129,6 +131,8 @@ where
 mod tests {
     use super::*;
 
+    use crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationState;
+    use crate::shared::codex_identity::CodexThreadKey;
     use std::collections::HashSet;
     use std::process::Stdio;
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -276,7 +280,26 @@ mod tests {
             let entry = make_workspace_entry("ws-1");
             let workspaces = Mutex::new(HashMap::from([(entry.id.clone(), entry.clone())]));
             let current_session = Arc::new(make_session(entry.clone(), Some("--old".to_string())));
-            let sessions = Mutex::new(HashMap::from([(entry.id.clone(), current_session)]));
+            let thread_key = CodexThreadKey::new(
+                current_session
+                    .workspace_reconciler
+                    .lock()
+                    .await
+                    .codex_home_identity(),
+                "thread-1",
+            );
+            let attempt_id = current_session
+                .writer_admission_observations
+                .begin_resume(thread_key.clone(), "thread-1", 100)
+                .expect("resume intent");
+            current_session
+                .writer_admission_observations
+                .record_exact_resume_success(&thread_key, &attempt_id, "thread-1", 110)
+                .expect("admitted observation");
+            let sessions = Mutex::new(HashMap::from([(
+                entry.id.clone(),
+                Arc::clone(&current_session),
+            )]));
             let app_settings = Mutex::new(AppSettings::default());
 
             let spawn_calls = Arc::new(AtomicUsize::new(0));
@@ -308,14 +331,29 @@ mod tests {
             );
             assert_eq!(spawn_calls.load(Ordering::SeqCst), 1);
 
-            let next = sessions
+            let next_session = sessions
                 .lock()
                 .await
                 .get(&entry.id)
                 .expect("session updated")
-                .codex_args
                 .clone();
-            assert_eq!(next, Some("--new".to_string()));
+            assert_eq!(next_session.codex_args, Some("--new".to_string()));
+            assert_eq!(
+                current_session
+                    .writer_admission_observations
+                    .state(&thread_key),
+                WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+            );
+            assert_eq!(
+                next_session
+                    .writer_admission_observations
+                    .state(&thread_key),
+                WriterAdmissionObservationState::NotObserved
+            );
+
+            let mut child = next_session.child.lock().await;
+            let _ = child.kill().await;
+            let _ = child.wait().await;
         });
     }
 }

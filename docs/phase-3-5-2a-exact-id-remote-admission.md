@@ -1,6 +1,6 @@
 # Phase 3.5.2a — Exact-ID Remote Read / Admission Separation
 
-Status: **PASS / COMPLETE / FROZEN**. Gates A1, A2, and A3 are **PASS**. Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2 resume-boundary instrumentation, Phase 3.5.2b.3 session-lifecycle invalidation, and Phase 3.5.2b.4 App/daemon read-only observation exposure are **PASS / FROZEN**; Phase 3.5.2b.5 is **NOT STARTED**.
+Status: **PASS / COMPLETE / FROZEN**. Gates A1, A2, and A3 are **PASS**. Phase 3.5.2b host-session writer admission observation, including slices b.1-b.5, is **PASS / COMPLETE / FROZEN**.
 
 ## Frozen authority contract
 

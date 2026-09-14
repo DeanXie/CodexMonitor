@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "scenario": "session_ended_release_unobserved",
+  "request": {
+    "method": "thread/resume",
+    "workspaceId": "fixture-workspace",
+    "fullThreadId": "fixture-thread-ended",
+    "threadKey": {
+      "codexHomeIdentity": "codex-home:fixture-host-a",
+      "threadId": "fixture-thread-ended"
+    },
+    "workspaceSessionGeneration": "generation-ended"
+  },
+  "responseOrErrorEvidence": {
+    "kind": "session_end_after_success",
+    "admittedAt": 1770000000410,
+    "observedAt": 1770000000420,
+    "message": "app-server child exit observed"
+  },
+  "normalized": {
+    "outcome": "snapshot",
+    "snapshot": {
+      "threadKey": {
+        "codexHomeIdentity": "codex-home:fixture-host-a",
+        "threadId": "fixture-thread-ended"
+      },
+      "workspaceSessionGeneration": "generation-ended",
+      "state": "session_ended_release_unobserved",
+      "observedAt": 1770000000420,
+      "attemptId": "attempt-ended",
+      "requestedFullThreadId": "fixture-thread-ended",
+      "evidence": {
+        "requestMethod": "thread/resume",
+        "returnedFullThreadId": "fixture-thread-ended",
+        "exactIdMatch": true,
+        "upstreamErrorCode": null,
+        "normalizedErrorKind": null,
+        "diagnostic": null
+      },
+      "sessionEndEvidence": {
+        "kind": "app_server_process_exited",
+        "previousState": "admitted_for_session",
+        "admissionOutcomeUnresolved": false,
+        "diagnostic": "app-server child exit observed"
+      }
+    },
+    "error": null
+  },
+  "attemptProvenance": {
+    "attemptId": "attempt-ended",
+    "requestedFullThreadId": "fixture-thread-ended",
+    "observedAt": 1770000000400,
+    "dispatchStatus": "response_received_then_session_ended"
+  },
+  "provenance": {
+    "sourceKind": "normalized_contract_fixture",
+    "source": "Phase 3.5.2b.3 lifecycle invalidation contract",
+    "evidencePath": "src-tauri/src/shared/codex_core/writer_admission_observation_tests.rs",
+    "sanitized": true
+  }
+}

@@ -1734,6 +1734,28 @@ mod tests {
     }
 
     fn make_session(entry: WorkspaceEntry) -> Arc<WorkspaceSession> {
+        make_session_with_observations(entry, Default::default())
+    }
+
+    fn make_session_with_generation(
+        entry: WorkspaceEntry,
+        generation: &str,
+    ) -> Arc<WorkspaceSession> {
+        make_session_with_observations(
+            entry,
+            crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationRuntime::new(
+                crate::shared::codex_core::writer_admission_observation::WorkspaceSessionGeneration::new(
+                    generation,
+                )
+                .expect("fixture generation"),
+            ),
+        )
+    }
+
+    fn make_session_with_observations(
+        entry: WorkspaceEntry,
+        writer_admission_observations: crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationRuntime,
+    ) -> Arc<WorkspaceSession> {
         let owner_workspace_id = entry.id;
         let mut cmd = if cfg!(windows) {
             let mut cmd = Command::new("cmd");
@@ -1756,7 +1778,7 @@ mod tests {
             creation_coordinator: Mutex::new(None),
             execution_settings_evidence: Default::default(),
             projection_observations: Default::default(),
-            writer_admission_observations: Default::default(),
+            writer_admission_observations,
             codex_args: None,
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),
@@ -1774,6 +1796,151 @@ mod tests {
             workspace_ids: Mutex::new(HashSet::from([owner_workspace_id.clone()])),
             owner_workspace_id,
         })
+    }
+
+    fn load_writer_admission_fixture(name: &str) -> Value {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("docs")
+            .join("fixtures")
+            .join("app-server")
+            .join("writer-admission-observation")
+            .join(name);
+        let bytes = std::fs::read(&path)
+            .unwrap_or_else(|error| panic!("read fixture {}: {error}", path.display()));
+        serde_json::from_slice(&bytes)
+            .unwrap_or_else(|error| panic!("parse fixture {}: {error}", path.display()))
+    }
+
+    #[test]
+    fn daemon_rpc_matches_frozen_writer_admission_fixtures() {
+        run_async_test(async {
+            for fixture_name in [
+                "exact-resume-accepted.json",
+                "active-writer-blocked.json",
+                "admission-outcome-unknown.json",
+                "session-ended-release-unobserved.json",
+                "current-generation-not-observed.json",
+            ] {
+                let fixture = load_writer_admission_fixture(fixture_name);
+                let request = &fixture["request"];
+                let evidence = &fixture["responseOrErrorEvidence"];
+                let workspace_id = request["workspaceId"].as_str().expect("workspace id");
+                let thread_id = request["fullThreadId"].as_str().expect("thread id");
+                let generation = request["workspaceSessionGeneration"]
+                    .as_str()
+                    .expect("session generation");
+                let tmp = make_temp_dir("writer-observation-protocol-fixture");
+                let state = test_state(&tmp);
+                insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+                let session = make_session_with_generation(
+                    make_workspace_entry(workspace_id, &tmp.to_string_lossy()),
+                    generation,
+                );
+                let codex_home_identity = session
+                    .workspace_reconciler
+                    .lock()
+                    .await
+                    .codex_home_identity()
+                    .to_string();
+                let thread_key = crate::shared::codex_identity::CodexThreadKey::new(
+                    codex_home_identity.clone(),
+                    thread_id,
+                );
+
+                let attempt_id = if fixture["scenario"] == "current_generation_not_observed" {
+                    None
+                } else {
+                    let attempt = session
+                        .writer_admission_observations
+                        .begin_resume(
+                            thread_key.clone(),
+                            thread_id,
+                            fixture["attemptProvenance"]["observedAt"]
+                                .as_i64()
+                                .expect("attempt observedAt"),
+                        )
+                        .expect("begin fixture resume");
+                    match fixture["scenario"].as_str().expect("scenario") {
+                        "exact_resume_accepted" => session
+                            .writer_admission_observations
+                            .record_exact_resume_success(
+                                &thread_key,
+                                &attempt,
+                                evidence["returnedFullThreadId"]
+                                    .as_str()
+                                    .expect("returned Thread id"),
+                                evidence["observedAt"].as_i64().expect("observedAt"),
+                            )
+                            .expect("accepted fixture transition"),
+                        "active_writer_blocked" => session
+                            .writer_admission_observations
+                            .record_active_writer_blocked(
+                                &thread_key,
+                                &attempt,
+                                evidence["code"].as_i64().expect("error code"),
+                                evidence["message"].as_str().expect("error message"),
+                                evidence["observedAt"].as_i64().expect("observedAt"),
+                            )
+                            .expect("blocked fixture transition"),
+                        "admission_outcome_unknown" => session
+                            .writer_admission_observations
+                            .record_outcome_unknown(
+                                &thread_key,
+                                &attempt,
+                                crate::shared::codex_core::writer_admission_observation::WriterAdmissionErrorKind::Timeout,
+                                evidence["message"].as_str().expect("timeout message"),
+                                evidence["observedAt"].as_i64().expect("observedAt"),
+                            )
+                            .expect("unknown fixture transition"),
+                        "session_ended_release_unobserved" => {
+                            session
+                                .writer_admission_observations
+                                .record_exact_resume_success(
+                                    &thread_key,
+                                    &attempt,
+                                    thread_id,
+                                    evidence["admittedAt"].as_i64().expect("admittedAt"),
+                                )
+                                .expect("admitted fixture transition");
+                            session.writer_admission_observations.record_session_ended(
+                                crate::shared::codex_core::writer_admission_observation::WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited,
+                                evidence["message"].as_str().expect("session-end message"),
+                                evidence["observedAt"].as_i64().expect("observedAt"),
+                            );
+                        }
+                        scenario => panic!("unsupported fixture scenario {scenario}"),
+                    }
+                    Some(attempt)
+                };
+
+                state
+                    .sessions
+                    .lock()
+                    .await
+                    .insert(workspace_id.to_string(), Arc::clone(&session));
+                let actual = rpc::handle_rpc_request(
+                    &state,
+                    "get_writer_admission_observation",
+                    json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+                    "fixture-client".to_string(),
+                )
+                .await
+                .expect("daemon fixture query succeeds");
+                let mut expected = fixture["normalized"]["snapshot"].clone();
+                expected["threadKey"]["codexHomeIdentity"] = json!(codex_home_identity);
+                if let Some(attempt_id) = attempt_id {
+                    expected["attemptId"] = json!(attempt_id.as_str());
+                }
+                assert_eq!(actual, expected, "daemon fixture {fixture_name}");
+                assert!(session.pending.lock().await.is_empty());
+
+                let mut child = session.child.lock().await;
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                let _ = std::fs::remove_dir_all(tmp);
+            }
+        });
     }
 
     #[test]

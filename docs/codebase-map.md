@@ -37,6 +37,7 @@ If a behavior must work in both app and daemon, implement it in `src-tauri/src/s
 | Change prompts CRUD/listing behavior | `src/features/prompts/hooks/useCustomPrompts.ts`, `src/features/prompts/components/PromptPanel.tsx`, `src/services/tauri.ts`, `src-tauri/src/prompts.rs`, `src-tauri/src/shared/prompts_core.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs` |
 | Change file read/write for Agents/config | `src/services/tauri.ts`, `src-tauri/src/files/mod.rs`, `src-tauri/src/shared/files_core.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs` |
 | Add/change daemon JSON-RPC surface | `src-tauri/src/bin/codex_monitor_daemon/rpc.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc/*`, `src-tauri/src/bin/codex_monitor_daemon.rs`, matching shared core |
+| Change writer-admission observation/query compatibility | `src-tauri/src/shared/codex_core/writer_admission_observation.rs`, `src-tauri/src/shared/codex_core/writer_admission_*_tests.rs`, `src-tauri/src/shared/codex_core/writer_admission_protocol_fixture_tests.rs`, `docs/fixtures/app-server/writer-admission-observation/*`, `docs/phase-3-5-2b-host-session-writer-admission-observation.md` |
 
 ## Frontend Navigation
 

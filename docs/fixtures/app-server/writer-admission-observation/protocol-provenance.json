@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-14",
+  "codexMonitor": {
+    "threadLiveUnsubscribe": {
+      "method": "thread_live_unsubscribe",
+      "sourcePath": "src-tauri/src/shared/codex_core.rs",
+      "dispatchesUpstream": false,
+      "writerReleaseAcknowledgement": false
+    }
+  },
+  "bundledAppServer": {
+    "cliVersion": "codex-cli 0.153.4",
+    "platform": "windows-x64",
+    "executableSha256": "444A3F0008050605CAE73CD9B7A2DCAC61294062DFAAB56DD20430FD6498518B",
+    "officialSourceTag": "rust-v0.153.4",
+    "officialSourceCommit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+    "threadUnsubscribe": {
+      "method": "thread/unsubscribe",
+      "responseStatuses": [
+        "notLoaded",
+        "notSubscribed",
+        "unsubscribed"
+      ],
+      "scope": "connection subscription lifecycle with delayed idle unload",
+      "writerReleaseAcknowledgement": false
+    }
+  },
+  "upstreamReference": {
+    "repository": "https://github.com/openai/codex",
+    "branch": "main",
+    "commit": "e9633d7a0226eac91c7a791dc4f92cf8f25df2ae",
+    "checkedAt": "2026-09-14",
+    "threadUnsubscribe": {
+      "method": "thread/unsubscribe",
+      "responseStatuses": [
+        "notLoaded",
+        "notSubscribed",
+        "unsubscribed"
+      ],
+      "scope": "connection subscription lifecycle with delayed idle unload",
+      "writerReleaseAcknowledgement": false
+    }
+  },
+  "normalizedContract": {
+    "threadUnsubscribe": {
+      "writerObservationTransition": false,
+      "writerReleaseAcknowledgement": false,
+      "releaseStateProduced": false
+    }
+  }
+}

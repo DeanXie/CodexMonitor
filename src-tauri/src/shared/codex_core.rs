@@ -1370,3 +1370,7 @@ mod writer_admission_instrumentation_tests;
 #[cfg(test)]
 #[path = "codex_core/writer_admission_observation_query_tests.rs"]
 mod writer_admission_observation_query_tests;
+
+#[cfg(test)]
+#[path = "codex_core/writer_admission_protocol_fixture_tests.rs"]
+mod writer_admission_protocol_fixture_tests;

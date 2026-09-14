@@ -1,4 +1,4 @@
-# App-Server Events Reference (Codex `19702e190ebf16f789617ca5f16bfc373c238fe7`)
+# App-Server Events Reference
 
 This document helps agents quickly answer:
 - Which app-server events CodexMonitor supports right now.
@@ -6,9 +6,20 @@ This document helps agents quickly answer:
 - Where to look in CodexMonitor to add support.
 - Where to look in `../Codex` to compare event lists and find emitters.
 
+The broad event/request inventory below was last compared at Codex commit
+`19702e190ebf16f789617ca5f16bfc373c238fe7`. Phase 3.5.2b.5 separately
+recalibrated the writer-admission and unsubscribe boundary against the bundled
+Windows x64 `codex-cli 0.153.4` executable (SHA-256
+`444A3F0008050605CAE73CD9B7A2DCAC61294062DFAAB56DD20430FD6498518B`;
+official source commit `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`) and upstream `main` commit
+`e9633d7a0226eac91c7a791dc4f92cf8f25df2ae`, checked 2026-09-14. The frozen
+machine-readable provenance is in
+`docs/fixtures/app-server/writer-admission-observation/protocol-provenance.json`.
+
 When updating this document:
 1. Fetch latest refs with `git -C ../Codex fetch --all --prune`.
-2. Update the Codex hash in the title using `git -C ../Codex rev-parse origin/main`.
+2. Update the broad-inventory baseline hash above using
+   `git -C ../Codex rev-parse origin/main`.
 3. Compare Codex events vs CodexMonitor routing.
 4. Compare Codex client request methods vs CodexMonitor outgoing request methods.
 5. Compare Codex server request methods vs CodexMonitor inbound request handling.
@@ -275,6 +286,12 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   writer/lease identity, Remote-client ownership, or release. It does not use
   legacy `WriterOccupancy` as authority. See
   `docs/phase-3-5-2b-host-session-writer-admission-observation.md`.
+
+  Phase 3.5.2b.5 freezes this request/response normalization in sanitized
+  fixtures shared by the App serialization tests and the real daemon query RPC
+  tests. The frozen state strings and snapshot fields are documented in the
+  Phase 3.5.2b authority document; the fixtures contain no token, writer/lease
+  identity, Remote-client ownership, or global freedom/release field.
 - `thread/fork`
 - `thread/list`
 - `thread/archive`
@@ -346,6 +363,15 @@ Compared against Codex v2 request methods, CodexMonitor currently does not send:
 - `thread/unarchive`
 - `thread/unsubscribe`
 - `windowsSandbox/setupStart`
+
+CodexMonitor's similarly named `thread_live_unsubscribe` is not this upstream
+request. It is synthetic local subscription bookkeeping and currently sends no
+app-server RPC. Bundled `codex-cli 0.153.4` and checked upstream commit
+`e9633d7a0226eac91c7a791dc4f92cf8f25df2ae` define real
+`thread/unsubscribe` as connection subscription lifecycle with delayed idle
+unload and response statuses `notLoaded`, `notSubscribed`, or `unsubscribed`.
+None is a writer-release acknowledgement, so the operation cannot transition
+the writer observation to `FREE`, `AVAILABLE`, or `RELEASED`.
 
 ## Server Requests (App-Server -> CodexMonitor, v2)
 

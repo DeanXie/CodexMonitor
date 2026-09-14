@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "scenario": "current_generation_not_observed",
+  "request": {
+    "method": "get_writer_admission_observation",
+    "workspaceId": "fixture-workspace",
+    "fullThreadId": "fixture-thread-current",
+    "threadKey": {
+      "codexHomeIdentity": "codex-home:fixture-host-a",
+      "threadId": "fixture-thread-current"
+    },
+    "workspaceSessionGeneration": "generation-current"
+  },
+  "responseOrErrorEvidence": {
+    "kind": "no_current_generation_observation"
+  },
+  "normalized": {
+    "outcome": "snapshot",
+    "snapshot": {
+      "threadKey": {
+        "codexHomeIdentity": "codex-home:fixture-host-a",
+        "threadId": "fixture-thread-current"
+      },
+      "workspaceSessionGeneration": "generation-current",
+      "state": "not_observed",
+      "observedAt": null,
+      "attemptId": null,
+      "requestedFullThreadId": null,
+      "evidence": null,
+      "sessionEndEvidence": null
+    },
+    "error": null
+  },
+  "attemptProvenance": {
+    "attemptId": null,
+    "requestedFullThreadId": null,
+    "observedAt": null,
+    "dispatchStatus": "not_dispatched"
+  },
+  "provenance": {
+    "sourceKind": "normalized_contract_fixture",
+    "source": "Phase 3.5.2b.4 current-generation query contract",
+    "evidencePath": "src-tauri/src/shared/codex_core/writer_admission_observation_query_tests.rs",
+    "sanitized": true
+  }
+}

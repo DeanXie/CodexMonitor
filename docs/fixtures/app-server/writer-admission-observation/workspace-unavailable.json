@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "scenario": "workspace_unavailable",
+  "request": {
+    "method": "get_writer_admission_observation",
+    "workspaceId": "missing-workspace",
+    "fullThreadId": "fixture-thread-unavailable",
+    "threadKey": {
+      "codexHomeIdentity": "codex-home:fixture-host-a",
+      "threadId": "fixture-thread-unavailable"
+    },
+    "workspaceSessionGeneration": "unavailable-no-generation"
+  },
+  "responseOrErrorEvidence": {
+    "kind": "query_error",
+    "message": "workspace not found"
+  },
+  "normalized": {
+    "outcome": "query_error",
+    "snapshot": null,
+    "error": "workspace not found"
+  },
+  "attemptProvenance": {
+    "attemptId": null,
+    "requestedFullThreadId": null,
+    "observedAt": null,
+    "dispatchStatus": "not_applicable"
+  },
+  "provenance": {
+    "sourceKind": "normalized_contract_fixture",
+    "source": "Phase 3.5.2b.4 workspace availability boundary",
+    "evidencePath": "src-tauri/src/shared/codex_core/writer_admission_observation_query_tests.rs",
+    "sanitized": true
+  }
+}

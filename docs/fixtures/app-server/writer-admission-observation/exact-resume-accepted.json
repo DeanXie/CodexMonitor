@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "scenario": "exact_resume_accepted",
+  "request": {
+    "method": "thread/resume",
+    "workspaceId": "phase-3-5-1d-workspace",
+    "fullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "threadKey": {
+      "codexHomeIdentity": "codex-home:fixture-host-a",
+      "threadId": "01a08c05-7880-75a2-976c-2a5895b58723"
+    },
+    "workspaceSessionGeneration": "generation-a3"
+  },
+  "responseOrErrorEvidence": {
+    "kind": "success",
+    "returnedFullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "exactIdMatch": true,
+    "observedAt": 1770000000110
+  },
+  "normalized": {
+    "outcome": "snapshot",
+    "snapshot": {
+      "threadKey": {
+        "codexHomeIdentity": "codex-home:fixture-host-a",
+        "threadId": "01a08c05-7880-75a2-976c-2a5895b58723"
+      },
+      "workspaceSessionGeneration": "generation-a3",
+      "state": "admitted_for_session",
+      "observedAt": 1770000000110,
+      "attemptId": "attempt-a3-exact-resume",
+      "requestedFullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+      "evidence": {
+        "requestMethod": "thread/resume",
+        "returnedFullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+        "exactIdMatch": true,
+        "upstreamErrorCode": null,
+        "normalizedErrorKind": null,
+        "diagnostic": null
+      },
+      "sessionEndEvidence": null
+    },
+    "error": null
+  },
+  "attemptProvenance": {
+    "attemptId": "attempt-a3-exact-resume",
+    "requestedFullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "observedAt": 1770000000100,
+    "dispatchStatus": "response_received"
+  },
+  "provenance": {
+    "sourceKind": "frozen_acceptance_evidence",
+    "source": "Phase 3.5.2a Gate A3",
+    "evidencePath": "docs/evidence/phase-3-5-2a/a3-acceptance-summary.json",
+    "sanitized": true
+  }
+}

@@ -2,8 +2,10 @@
 
 Status: Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2
 resume-boundary instrumentation, Phase 3.5.2b.3 session-lifecycle
-invalidation, and Phase 3.5.2b.4 App/daemon read-only observation exposure
-are **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.5 is **NOT STARTED**.
+invalidation, Phase 3.5.2b.4 App/daemon read-only observation exposure,
+and Phase 3.5.2b.5 protocol compatibility freeze are
+**PASS / COMPLETE / FROZEN**. Phase 3.5.2b is
+**PASS / COMPLETE / FROZEN**.
 
 ## Authority boundary
 
@@ -193,3 +195,57 @@ Observed app-server generation termination may only produce
 `SESSION_ENDED_RELEASE_UNOBSERVED`. Daemon hard exit produces no new per-session
 observation. Any future claim of release requires new direct upstream evidence;
 inference from local lifecycle is prohibited.
+
+## Protocol compatibility freeze
+
+Phase 3.5.2b.5 freezes sanitized protocol fixtures under
+`docs/fixtures/app-server/writer-admission-observation/`. The fixtures cover
+exact resume acceptance, active-writer rejection, ambiguous dispatch outcome,
+session-end release-unobserved evidence, current-generation `NOT_OBSERVED`,
+unknown Workspace, and unavailable WorkspaceSession. They contain the request,
+minimal response/error evidence, normalized snapshot or query error,
+WorkspaceSession generation, canonical Thread key, and attempt provenance.
+They contain no authentication secret, writer/lease identity, global freedom,
+or Remote-client ownership field.
+
+The frozen serialized state strings are:
+
+```text
+not_observed
+admission_pending
+admitted_for_session
+blocked_by_active_writer
+admission_outcome_unknown
+session_ended_release_unobserved
+```
+
+The frozen snapshot fields are `threadKey`, `workspaceSessionGeneration`,
+`state`, `observedAt`, `attemptId`, `requestedFullThreadId`, `evidence`, and
+`sessionEndEvidence`. App and daemon deserialize and serialize this same shared
+Rust snapshot; daemon fixture tests also exercise the real
+`get_writer_admission_observation` RPC route. A new generation reads
+`not_observed` instead of inheriting old-generation evidence. Workspace absence
+and WorkspaceSession unavailability remain query errors and are never encoded
+as `not_observed`.
+
+CodexMonitor's current `thread_live_unsubscribe` operation is synthetic local
+subscription bookkeeping. It does not dispatch upstream `thread/unsubscribe`
+and does not acknowledge writer release. In both the bundled Codex app-server
+and the checked upstream protocol, real `thread/unsubscribe` manages the
+calling connection's subscription lifecycle and delayed idle unload. Its
+`notLoaded`, `notSubscribed`, or `unsubscribed` response status is not writer
+release evidence and cannot produce `FREE`, `AVAILABLE`, or `RELEASED`.
+
+The protocol provenance is frozen in
+`docs/fixtures/app-server/writer-admission-observation/protocol-provenance.json`:
+
+- bundled Windows x64 `codex-cli 0.153.4`, executable SHA-256
+  `444A3F0008050605CAE73CD9B7A2DCAC61294062DFAAB56DD20430FD6498518B`,
+  official tag `rust-v0.153.4`, commit
+  `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`;
+- upstream `openai/codex` `main` checked on 2026-09-14 at commit
+  `e9633d7a0226eac91c7a791dc4f92cf8f25df2ae`.
+
+This is a compatibility snapshot, not a claim that future upstream revisions
+retain the same behavior. A later protocol upgrade must re-run the fixture and
+provenance checks before changing the frozen observation contract.

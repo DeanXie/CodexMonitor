@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "scenario": "admission_outcome_unknown",
+  "request": {
+    "method": "thread/resume",
+    "workspaceId": "fixture-workspace",
+    "fullThreadId": "fixture-thread-unknown",
+    "threadKey": {
+      "codexHomeIdentity": "codex-home:fixture-host-a",
+      "threadId": "fixture-thread-unknown"
+    },
+    "workspaceSessionGeneration": "generation-unknown"
+  },
+  "responseOrErrorEvidence": {
+    "kind": "transport_failure",
+    "message": "response timed out",
+    "normalizedErrorKind": "timeout",
+    "observedAt": 1770000000310
+  },
+  "normalized": {
+    "outcome": "snapshot",
+    "snapshot": {
+      "threadKey": {
+        "codexHomeIdentity": "codex-home:fixture-host-a",
+        "threadId": "fixture-thread-unknown"
+      },
+      "workspaceSessionGeneration": "generation-unknown",
+      "state": "admission_outcome_unknown",
+      "observedAt": 1770000000310,
+      "attemptId": "attempt-timeout",
+      "requestedFullThreadId": "fixture-thread-unknown",
+      "evidence": {
+        "requestMethod": "thread/resume",
+        "returnedFullThreadId": null,
+        "exactIdMatch": null,
+        "upstreamErrorCode": null,
+        "normalizedErrorKind": "timeout",
+        "diagnostic": "response timed out"
+      },
+      "sessionEndEvidence": null
+    },
+    "error": null
+  },
+  "attemptProvenance": {
+    "attemptId": "attempt-timeout",
+    "requestedFullThreadId": "fixture-thread-unknown",
+    "observedAt": 1770000000300,
+    "dispatchStatus": "outcome_unknown"
+  },
+  "provenance": {
+    "sourceKind": "normalized_contract_fixture",
+    "source": "Phase 3.5.2b.2 post-dispatch timeout contract",
+    "evidencePath": "src-tauri/src/shared/codex_core/writer_admission_instrumentation_tests.rs",
+    "sanitized": true
+  }
+}

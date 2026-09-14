@@ -30,3 +30,13 @@ The Phase 3.2.5 Project / Workspace interoperability evidence is stored in
 `UNKNOWN`, `NOT OBSERVED`, `NOT TESTED`, and
 `NOT RECOVERABLE BY CURRENT CONTRACT` explicit rather than inferring missing
 runtime observations.
+
+Phase 3.5.2b writer-admission compatibility evidence is stored as sanitized,
+reviewable protocol fixtures in
+`../fixtures/app-server/writer-admission-observation/`. The accepted and blocked
+fixtures reference the frozen Phase 3.5.2a evidence, while the provenance file
+pins the bundled Codex executable and checked upstream source revision. Rust
+fixture tests drive the shared observation core and the real daemon read RPC;
+they do not execute a new writer mutation.
+The Phase 3.5.2b.5 RED/GREEN and regression index is
+`phase-3-5-2b/protocol-compatibility-freeze.md`.

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "scenario": "active_writer_blocked",
+  "request": {
+    "method": "thread/resume",
+    "workspaceId": "phase-3-5-1d-workspace",
+    "fullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "threadKey": {
+      "codexHomeIdentity": "codex-home:fixture-host-a",
+      "threadId": "01a08c05-7880-75a2-976c-2a5895b58723"
+    },
+    "workspaceSessionGeneration": "generation-a2"
+  },
+  "responseOrErrorEvidence": {
+    "kind": "upstream_error",
+    "code": -32600,
+    "message": "already has an active writer",
+    "normalizedErrorKind": "blocked_by_active_writer",
+    "observedAt": 1770000000210
+  },
+  "normalized": {
+    "outcome": "snapshot",
+    "snapshot": {
+      "threadKey": {
+        "codexHomeIdentity": "codex-home:fixture-host-a",
+        "threadId": "01a08c05-7880-75a2-976c-2a5895b58723"
+      },
+      "workspaceSessionGeneration": "generation-a2",
+      "state": "blocked_by_active_writer",
+      "observedAt": 1770000000210,
+      "attemptId": "attempt-a2-active-writer",
+      "requestedFullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+      "evidence": {
+        "requestMethod": "thread/resume",
+        "returnedFullThreadId": null,
+        "exactIdMatch": null,
+        "upstreamErrorCode": -32600,
+        "normalizedErrorKind": "blocked_by_active_writer",
+        "diagnostic": "already has an active writer"
+      },
+      "sessionEndEvidence": null
+    },
+    "error": null
+  },
+  "attemptProvenance": {
+    "attemptId": "attempt-a2-active-writer",
+    "requestedFullThreadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "observedAt": 1770000000200,
+    "dispatchStatus": "response_received"
+  },
+  "provenance": {
+    "sourceKind": "frozen_acceptance_evidence",
+    "source": "Phase 3.5.2a Gate A2",
+    "evidencePath": "docs/phase-3-5-2a-exact-id-remote-admission.md",
+    "sanitized": true
+  }
+}

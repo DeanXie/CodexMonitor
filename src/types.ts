@@ -539,6 +539,44 @@ export type ThreadTokenUsage = {
   modelContextWindow: number | null;
 };
 
+export type WriterAdmissionObservationState =
+  | "not_observed"
+  | "admission_pending"
+  | "admitted_for_session"
+  | "blocked_by_active_writer"
+  | "admission_outcome_unknown"
+  | "session_ended_release_unobserved";
+
+export type WriterAdmissionEvidenceSnapshot = {
+  requestMethod: "thread/resume";
+  returnedFullThreadId: string | null;
+  exactIdMatch: boolean | null;
+  upstreamErrorCode: number | null;
+  normalizedErrorKind: string | null;
+  diagnostic: string | null;
+};
+
+export type WriterAdmissionSessionEndEvidenceSnapshot = {
+  kind: "app_server_process_exited" | "app_server_process_terminated";
+  previousState: WriterAdmissionObservationState;
+  admissionOutcomeUnresolved: boolean;
+  diagnostic: string;
+};
+
+export type WriterAdmissionObservationSnapshot = {
+  threadKey: {
+    codexHomeIdentity: string;
+    threadId: string;
+  };
+  workspaceSessionGeneration: string;
+  state: WriterAdmissionObservationState;
+  observedAt: number | null;
+  attemptId: string | null;
+  requestedFullThreadId: string | null;
+  evidence: WriterAdmissionEvidenceSnapshot | null;
+  sessionEndEvidence: WriterAdmissionSessionEndEvidenceSnapshot | null;
+};
+
 export type LocalUsageDay = {
   day: string;
   inputTokens: number;

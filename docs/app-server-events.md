@@ -251,9 +251,12 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   `docs/phase-3-5-2a-exact-id-remote-admission.md`.
 
   Phase 3.5.2b.1 defines the shared-core observation contract, Phase 3.5.2b.2
-  wires it to the existing exact `thread/resume` dispatch boundary, and Phase
+  wires it to the existing exact `thread/resume` dispatch boundary, Phase
   3.5.2b.3 invalidates observations when the corresponding app-server process
-  generation is directly observed to end.
+  generation is directly observed to end, and Phase 3.5.2b.4 exposes that same
+  authority through the App command and daemon RPC
+  `get_writer_admission_observation`. This is a CodexMonitor read-only surface,
+  not an upstream app-server request.
   Each WorkspaceSession creates a distinct generation; every explicit resume
   gets a unique attempt ID and records pending before dispatch. Exact-ID success,
   typed active-writer rejection, and ambiguous post-dispatch outcomes are
@@ -265,7 +268,10 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   generation and `NOT_OBSERVED`. Daemon hard exit cannot persist a reliable
   per-session acknowledgement and therefore writes no synthetic session-end
   observation.
-  The model is not wired to UI and never reports global writer freedom,
+  The read query returns `workspace session unavailable` when no current
+  WorkspaceSession exists, while a connected current generation with no
+  evidence returns `not_observed`. It neither connects the Workspace nor
+  dispatches an app-server request. The model is not wired to UI and never reports global writer freedom,
   writer/lease identity, Remote-client ownership, or release. It does not use
   legacy `WriterOccupancy` as authority. See
   `docs/phase-3-5-2b-host-session-writer-admission-observation.md`.

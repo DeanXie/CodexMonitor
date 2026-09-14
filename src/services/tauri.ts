@@ -21,6 +21,7 @@ import type {
   WorkspaceInfo,
   AppMention,
   WorkspaceSettings,
+  WriterAdmissionObservationSnapshot,
 } from "../types";
 import type {
   GitFileDiff,
@@ -1122,6 +1123,16 @@ export async function listMcpServerStatus(
 
 export async function resumeThread(workspaceId: string, threadId: string) {
   return invoke<any>("resume_thread", { workspaceId, threadId });
+}
+
+export async function getWriterAdmissionObservation(
+  workspaceId: string,
+  threadId: string,
+) {
+  return invoke<WriterAdmissionObservationSnapshot>(
+    "get_writer_admission_observation",
+    { workspaceId, threadId },
+  );
 }
 
 export async function readThread(workspaceId: string, threadId: string) {

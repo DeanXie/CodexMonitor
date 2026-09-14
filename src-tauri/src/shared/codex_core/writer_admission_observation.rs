@@ -6,7 +6,9 @@
 //! availability, writer identity, lease identity, or release.
 
 use crate::shared::codex_identity::CodexThreadKey;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Mutex;
 
 const RESUME_METHOD: &str = "thread/resume";
@@ -23,6 +25,10 @@ impl WorkspaceSessionGeneration {
         }
         Ok(Self(value))
     }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -35,6 +41,10 @@ impl WriterAdmissionAttemptId {
             return Err("writer admission attempt id is required".to_string());
         }
         Ok(Self(value))
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -124,6 +134,163 @@ pub(crate) enum WriterAdmissionTransitionError {
     AttemptMismatch,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WriterAdmissionObservationSnapshotState {
+    NotObserved,
+    AdmissionPending,
+    AdmittedForSession,
+    BlockedByActiveWriter,
+    AdmissionOutcomeUnknown,
+    SessionEndedReleaseUnobserved,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WriterAdmissionEvidenceSnapshot {
+    pub request_method: String,
+    pub returned_full_thread_id: Option<String>,
+    pub exact_id_match: Option<bool>,
+    pub upstream_error_code: Option<i64>,
+    pub normalized_error_kind: Option<String>,
+    pub diagnostic: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WriterAdmissionSessionEndEvidenceSnapshot {
+    pub kind: String,
+    pub previous_state: WriterAdmissionObservationSnapshotState,
+    pub admission_outcome_unresolved: bool,
+    pub diagnostic: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WriterAdmissionObservationSnapshot {
+    pub thread_key: CodexThreadKey,
+    pub workspace_session_generation: String,
+    pub state: WriterAdmissionObservationSnapshotState,
+    pub observed_at: Option<i64>,
+    pub attempt_id: Option<String>,
+    pub requested_full_thread_id: Option<String>,
+    pub evidence: Option<WriterAdmissionEvidenceSnapshot>,
+    pub session_end_evidence: Option<WriterAdmissionSessionEndEvidenceSnapshot>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WriterAdmissionObservationQueryError {
+    WorkspaceIdRequired,
+    FullThreadIdRequired,
+    WorkspaceNotFound,
+    WorkspaceSessionUnavailable,
+}
+
+impl fmt::Display for WriterAdmissionObservationQueryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::WorkspaceIdRequired => "workspaceId is required",
+            Self::FullThreadIdRequired => "threadId is required",
+            Self::WorkspaceNotFound => "workspace not found",
+            Self::WorkspaceSessionUnavailable => "workspace session unavailable",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl From<WriterAdmissionObservationState> for WriterAdmissionObservationSnapshotState {
+    fn from(state: WriterAdmissionObservationState) -> Self {
+        match state {
+            WriterAdmissionObservationState::NotObserved => Self::NotObserved,
+            WriterAdmissionObservationState::AdmissionPending => Self::AdmissionPending,
+            WriterAdmissionObservationState::AdmittedForSession => Self::AdmittedForSession,
+            WriterAdmissionObservationState::BlockedByActiveWriter => Self::BlockedByActiveWriter,
+            WriterAdmissionObservationState::AdmissionOutcomeUnknown => {
+                Self::AdmissionOutcomeUnknown
+            }
+            WriterAdmissionObservationState::SessionEndedReleaseUnobserved => {
+                Self::SessionEndedReleaseUnobserved
+            }
+        }
+    }
+}
+
+impl WriterAdmissionObservationSnapshot {
+    fn not_observed(thread_key: CodexThreadKey, generation: &WorkspaceSessionGeneration) -> Self {
+        Self {
+            thread_key,
+            workspace_session_generation: generation.as_str().to_string(),
+            state: WriterAdmissionObservationSnapshotState::NotObserved,
+            observed_at: None,
+            attempt_id: None,
+            requested_full_thread_id: None,
+            evidence: None,
+            session_end_evidence: None,
+        }
+    }
+}
+
+impl From<WriterAdmissionObservation> for WriterAdmissionObservationSnapshot {
+    fn from(observation: WriterAdmissionObservation) -> Self {
+        let evidence = WriterAdmissionEvidenceSnapshot {
+            request_method: observation.evidence.request_method.to_string(),
+            returned_full_thread_id: observation.evidence.returned_full_thread_id,
+            exact_id_match: observation.evidence.exact_id_match,
+            upstream_error_code: observation.evidence.upstream_error_code,
+            normalized_error_kind: observation
+                .evidence
+                .normalized_error_kind
+                .map(writer_admission_error_kind_name),
+            diagnostic: observation.evidence.diagnostic,
+        };
+        let session_end_evidence = observation.session_end_evidence.map(|session_end| {
+            WriterAdmissionSessionEndEvidenceSnapshot {
+                kind: writer_admission_session_end_kind_name(session_end.kind),
+                previous_state: session_end.previous_state.into(),
+                admission_outcome_unresolved: session_end.admission_outcome_unresolved,
+                diagnostic: session_end.diagnostic,
+            }
+        });
+        Self {
+            thread_key: observation.thread_key,
+            workspace_session_generation: observation
+                .workspace_session_generation
+                .as_str()
+                .to_string(),
+            state: observation.state.into(),
+            observed_at: Some(observation.observed_at),
+            attempt_id: Some(observation.attempt_id.as_str().to_string()),
+            requested_full_thread_id: Some(observation.requested_full_thread_id),
+            evidence: Some(evidence),
+            session_end_evidence,
+        }
+    }
+}
+
+fn writer_admission_error_kind_name(kind: WriterAdmissionErrorKind) -> String {
+    match kind {
+        WriterAdmissionErrorKind::BlockedByActiveWriter => "blocked_by_active_writer",
+        WriterAdmissionErrorKind::Timeout => "timeout",
+        WriterAdmissionErrorKind::DispatchDisconnected => "dispatch_disconnected",
+        WriterAdmissionErrorKind::Cancellation => "cancellation",
+        WriterAdmissionErrorKind::MalformedResponse => "malformed_response",
+        WriterAdmissionErrorKind::UnclassifiedUpstreamResponse => "unclassified_upstream_response",
+    }
+    .to_string()
+}
+
+fn writer_admission_session_end_kind_name(kind: WriterAdmissionSessionEndEvidenceKind) -> String {
+    match kind {
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited => {
+            "app_server_process_exited"
+        }
+        WriterAdmissionSessionEndEvidenceKind::AppServerProcessTerminated => {
+            "app_server_process_terminated"
+        }
+    }
+    .to_string()
+}
+
 /// Process-local evidence for one concrete WorkspaceSession generation.
 ///
 /// Remote clients are deliberately absent from the key. A new runtime is
@@ -177,6 +344,21 @@ impl WriterAdmissionObservationRuntime {
             .get(thread_key)
             .and_then(|observations| observations.attempts.get(&observations.latest_attempt_id))
             .and_then(|tracker| tracker.latest_observation().cloned())
+    }
+
+    pub(crate) fn current_snapshot(
+        &self,
+        thread_key: &CodexThreadKey,
+    ) -> WriterAdmissionObservationSnapshot {
+        self.snapshot(thread_key).map_or_else(
+            || {
+                WriterAdmissionObservationSnapshot::not_observed(
+                    thread_key.clone(),
+                    &self.workspace_session_generation,
+                )
+            },
+            WriterAdmissionObservationSnapshot::from,
+        )
     }
 
     pub(crate) fn begin_resume(

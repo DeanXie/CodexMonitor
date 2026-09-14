@@ -314,6 +314,45 @@ async fn get_session_clone(
         .ok_or_else(|| "workspace not connected".to_string())
 }
 
+pub(crate) async fn get_writer_admission_observation_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: &str,
+    full_thread_id: &str,
+) -> Result<
+    writer_admission_observation::WriterAdmissionObservationSnapshot,
+    writer_admission_observation::WriterAdmissionObservationQueryError,
+> {
+    use writer_admission_observation::WriterAdmissionObservationQueryError;
+
+    if workspace_id.trim().is_empty() {
+        return Err(WriterAdmissionObservationQueryError::WorkspaceIdRequired);
+    }
+    if full_thread_id.trim().is_empty() {
+        return Err(WriterAdmissionObservationQueryError::FullThreadIdRequired);
+    }
+    if !workspaces.lock().await.contains_key(workspace_id) {
+        return Err(WriterAdmissionObservationQueryError::WorkspaceNotFound);
+    }
+    let session = sessions
+        .lock()
+        .await
+        .get(workspace_id)
+        .cloned()
+        .ok_or(WriterAdmissionObservationQueryError::WorkspaceSessionUnavailable)?;
+    let codex_home_identity = session
+        .workspace_reconciler
+        .lock()
+        .await
+        .codex_home_identity()
+        .to_string();
+    let thread_key =
+        crate::shared::codex_identity::CodexThreadKey::new(codex_home_identity, full_thread_id);
+    Ok(session
+        .writer_admission_observations
+        .current_snapshot(&thread_key))
+}
+
 async fn resolve_workspace_and_parent(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: &str,
@@ -1327,3 +1366,7 @@ mod writer_admission_observation_tests;
 #[cfg(test)]
 #[path = "codex_core/writer_admission_instrumentation_tests.rs"]
 mod writer_admission_instrumentation_tests;
+
+#[cfg(test)]
+#[path = "codex_core/writer_admission_observation_query_tests.rs"]
+mod writer_admission_observation_query_tests;

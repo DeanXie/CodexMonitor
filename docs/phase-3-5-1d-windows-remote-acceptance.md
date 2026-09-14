@@ -1,6 +1,6 @@
 # Phase 3.5.1d — Windows Remote Acceptance
 
-Status: **PASS / COMPLETE**. Gates A-L are **PASS**. Phase 3.5.1 is **PASS / COMPLETE** for the Windows implementation scope. Phase 3.5.2a Exact-ID Remote Read / Admission Separation is **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2 resume-boundary instrumentation, and Phase 3.5.2b.3 session-lifecycle invalidation are **PASS / FROZEN**; Phase 3.5.2b.4 is **NOT STARTED**. Deferred Mobile Artifact Validation remains **NOT YET EXECUTED**.
+Status: **PASS / COMPLETE**. Gates A-L are **PASS**. Phase 3.5.1 is **PASS / COMPLETE** for the Windows implementation scope. Phase 3.5.2a Exact-ID Remote Read / Admission Separation is **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2 resume-boundary instrumentation, Phase 3.5.2b.3 session-lifecycle invalidation, and Phase 3.5.2b.4 App/daemon read-only observation exposure are **PASS / FROZEN**; Phase 3.5.2b.5 is **NOT STARTED**. Deferred Mobile Artifact Validation remains **NOT YET EXECUTED**.
 
 ## Frozen connection ownership contract
 
@@ -141,6 +141,6 @@ Host B `0ae35772-5057-459e-b2b2-f259e492303f` was observed only as mismatch evid
 
 The final authoritative snapshot recorded 491 canonical Threads / 491 unique / 0 duplicate and 489 current Turns / 489 unique / 0 duplicate. All 802 Surface projections were Desktop Catalog observations: 403 PRESENT and 399 ABSENT. The ABSENT values are Desktop projection absence, not canonical Thread absence. No Remote, Sidebar, or Project projection was synthesized by availability failure, and no projection entry contributed token or runtime fields. No fake Thread absence/deletion, tombstone, Workspace/Project reassignment, duplicate token lane, duplicate runtime entry, or duplicate current Turn was observed.
 
-Phase 3.5.1d-b, Phase 3.5.1d-c, and Phase 3.5.1d-e are **PASS / FROZEN**. Phase 3.5.1d is **PASS / COMPLETE** and Phase 3.5.1 is **PASS / COMPLETE**. Phase 3.5.2a Exact-ID Remote Read / Admission Separation is **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2 resume-boundary instrumentation, and Phase 3.5.2b.3 session-lifecycle invalidation are **PASS / FROZEN**; Phase 3.5.2b.4 is **NOT STARTED**.
+Phase 3.5.1d-b, Phase 3.5.1d-c, and Phase 3.5.1d-e are **PASS / FROZEN**. Phase 3.5.1d is **PASS / COMPLETE** and Phase 3.5.1 is **PASS / COMPLETE**. Phase 3.5.2a Exact-ID Remote Read / Admission Separation is **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2 resume-boundary instrumentation, Phase 3.5.2b.3 session-lifecycle invalidation, and Phase 3.5.2b.4 App/daemon read-only observation exposure are **PASS / FROZEN**; Phase 3.5.2b.5 is **NOT STARTED**.
 
 Phase 3.5.1a remains frozen only for the Windows source architecture and regression scope. Real `aarch64-apple-ios` and `aarch64-apple-ios-sim` target checks plus a Tauri iOS artifact/device build remain **Deferred Mobile Artifact Validation — NOT YET EXECUTED**; no iOS artifact validation is claimed.

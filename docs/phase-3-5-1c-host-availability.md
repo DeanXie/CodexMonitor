@@ -2,7 +2,7 @@
 
 Status: **PASS / FROZEN**.
 
-Phase 3.5.1d Windows Remote Acceptance is **PASS / COMPLETE** with Gates A-L **PASS**. Phase 3.5.1 is **PASS / COMPLETE**. Phase 3.5.2a Exact-ID Remote Read / Admission Separation is **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2 resume-boundary instrumentation, and Phase 3.5.2b.3 session-lifecycle invalidation are **PASS / FROZEN**; Phase 3.5.2b.4 is **NOT STARTED**.
+Phase 3.5.1d Windows Remote Acceptance is **PASS / COMPLETE** with Gates A-L **PASS**. Phase 3.5.1 is **PASS / COMPLETE**. Phase 3.5.2a Exact-ID Remote Read / Admission Separation is **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2 resume-boundary instrumentation, Phase 3.5.2b.3 session-lifecycle invalidation, and Phase 3.5.2b.4 App/daemon read-only observation exposure are **PASS / FROZEN**; Phase 3.5.2b.5 is **NOT STARTED**.
 
 ## Frozen availability contract
 

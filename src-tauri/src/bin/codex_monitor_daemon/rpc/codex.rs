@@ -68,6 +68,24 @@ pub(super) async fn try_handle(
             };
             Some(state.resume_thread(workspace_id, thread_id).await)
         }
+        "get_writer_admission_observation" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let thread_id = match parse_string(params, "threadId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .get_writer_admission_observation(workspace_id, thread_id)
+                    .await
+                    .and_then(|snapshot| {
+                        serde_json::to_value(snapshot).map_err(|error| error.to_string())
+                    }),
+            )
+        }
         "read_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,

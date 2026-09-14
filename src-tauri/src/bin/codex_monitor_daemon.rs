@@ -735,6 +735,24 @@ impl DaemonState {
         .await
     }
 
+    async fn get_writer_admission_observation(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+    ) -> Result<
+        shared::codex_core::writer_admission_observation::WriterAdmissionObservationSnapshot,
+        String,
+    > {
+        codex_core::get_writer_admission_observation_core(
+            &self.workspaces,
+            &self.sessions,
+            &workspace_id,
+            &thread_id,
+        )
+        .await
+        .map_err(|error| error.to_string())
+    }
+
     async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
         codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
     }
@@ -1756,6 +1774,117 @@ mod tests {
             workspace_ids: Mutex::new(HashSet::from([owner_workspace_id.clone()])),
             owner_workspace_id,
         })
+    }
+
+    #[test]
+    fn writer_admission_observation_rpc_is_session_scoped_and_read_only() {
+        run_async_test(async {
+            let tmp = make_temp_dir("writer-observation-query");
+            let workspace_id = "writer-observation-query-workspace";
+            let thread_id = "01a08c05-7880-75a2-976c-2a5895b58723";
+            let state = test_state(&tmp);
+            insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+            let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+            let home = session
+                .workspace_reconciler
+                .lock()
+                .await
+                .codex_home_identity()
+                .to_string();
+            let thread_key = crate::shared::codex_identity::CodexThreadKey::new(home, thread_id);
+            let attempt = session
+                .writer_admission_observations
+                .begin_resume(thread_key.clone(), thread_id, 10)
+                .unwrap();
+            session
+                .writer_admission_observations
+                .record_exact_resume_success(&thread_key, &attempt, thread_id, 20)
+                .unwrap();
+            state
+                .sessions
+                .lock()
+                .await
+                .insert(workspace_id.to_string(), Arc::clone(&session));
+            let next_id_before = session.next_id.load(std::sync::atomic::Ordering::SeqCst);
+
+            let params = json!({ "workspaceId": workspace_id, "threadId": thread_id });
+            let client_a = rpc::handle_rpc_request(
+                &state,
+                "get_writer_admission_observation",
+                params.clone(),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("client A query succeeds");
+            let client_b = rpc::handle_rpc_request(
+                &state,
+                "get_writer_admission_observation",
+                params,
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("client B query succeeds");
+
+            assert_eq!(client_a, client_b);
+            assert_eq!(client_a["state"], "admitted_for_session");
+            assert_eq!(client_a["threadKey"]["threadId"], thread_id);
+            assert_eq!(
+                session.next_id.load(std::sync::atomic::Ordering::SeqCst),
+                next_id_before,
+                "query must not dispatch an app-server request"
+            );
+            assert!(session.pending.lock().await.is_empty());
+            let mut child = session.child.lock().await;
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            let _ = std::fs::remove_dir_all(tmp);
+        });
+    }
+
+    #[test]
+    fn writer_admission_observation_rpc_distinguishes_unavailable_from_not_observed() {
+        run_async_test(async {
+            let tmp = make_temp_dir("writer-observation-availability");
+            let workspace_id = "writer-observation-availability-workspace";
+            let thread_id = "01a08c05-7880-75a2-976c-2a5895b58723";
+            let state = test_state(&tmp);
+            insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+
+            let unavailable = rpc::handle_rpc_request(
+                &state,
+                "get_writer_admission_observation",
+                json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+                "daemon-test".to_string(),
+            )
+            .await;
+            assert_eq!(
+                unavailable,
+                Err("workspace session unavailable".to_string())
+            );
+            assert!(state.sessions.lock().await.is_empty());
+
+            let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+            state
+                .sessions
+                .lock()
+                .await
+                .insert(workspace_id.to_string(), Arc::clone(&session));
+            let not_observed = rpc::handle_rpc_request(
+                &state,
+                "get_writer_admission_observation",
+                json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("connected session query succeeds");
+            assert_eq!(not_observed["state"], "not_observed");
+            assert!(session.pending.lock().await.is_empty());
+
+            let mut child = session.child.lock().await;
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            let _ = std::fs::remove_dir_all(tmp);
+        });
     }
 
     #[test]

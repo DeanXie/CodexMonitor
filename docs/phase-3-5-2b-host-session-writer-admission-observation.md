@@ -1,9 +1,9 @@
 # Phase 3.5.2b — Host-session Writer Admission Observation
 
 Status: Phase 3.5.2b.1 shared observation model, Phase 3.5.2b.2
-resume-boundary instrumentation, and Phase 3.5.2b.3 session-lifecycle
-invalidation are **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.4 is **NOT
-STARTED**.
+resume-boundary instrumentation, Phase 3.5.2b.3 session-lifecycle
+invalidation, and Phase 3.5.2b.4 App/daemon read-only observation exposure
+are **PASS / COMPLETE / FROZEN**. Phase 3.5.2b.5 is **NOT STARTED**.
 
 ## Authority boundary
 
@@ -16,10 +16,12 @@ it does not decide ownership, availability, lease state, takeover, or release.
 insufficient, and non-authoritative for writer admission. The new model does not
 read or derive from their `Occupied` or `Unoccupied` values.
 
-The observation remains a crate-private shared-core model with no serde/IPC
-schema, frontend state, or UI. Phase 3.5.2b.2 connects it only to the existing
-exact `thread/resume` transport boundary shared by the local app and daemon. It
-does not add a mutation, retry, takeover, or client-owned writer concept.
+The observation authority remains crate-private shared core. Phase 3.5.2b.4
+adds a stable read-only serde/IPC projection and matching TypeScript contract;
+it does not add frontend state or UI. Phase 3.5.2b.2 connects the authority only
+to the existing exact `thread/resume` transport boundary shared by the local
+app and daemon. None of these slices adds a mutation, retry, takeover, or
+client-owned writer concept.
 
 ## Observation scope and provenance
 
@@ -146,6 +148,42 @@ The same dispatch returns the following direct observations:
 `resume_thread` remains excluded from automatic Remote retry. `thread/read`,
 ordinary refresh, polling, unsubscribe, and Remote-client disconnect do not
 enter this instrumentation path.
+
+## Read-only App/daemon exposure
+
+`WriterAdmissionObservationSnapshot` is the sole serialized read model. It
+contains the canonical `CodexThreadKey`, current WorkspaceSession generation,
+the frozen state string, observation timestamp, attempt/request identity,
+minimal response or error evidence, and optional session-end evidence. It has
+no field for global freedom or availability, release, writer/lease identity,
+or Remote-client ownership.
+
+The App command and daemon RPC are both named
+`get_writer_admission_observation`. Both accept `workspaceId` and `threadId`,
+resolve the current WorkspaceSession generation and canonical Thread key, and
+delegate to the same `get_writer_admission_observation_core` query. The
+frontend wrapper only exposes this read contract; no UI consumes it in this
+slice.
+
+The query has four distinct boundaries:
+
+- an unknown Workspace returns `workspace not found`;
+- a known Workspace without a live WorkspaceSession returns
+  `workspace session unavailable`;
+- a live current generation with no observation for the canonical Thread key
+  returns `not_observed`; and
+- a live current generation with evidence returns that generation's snapshot.
+
+Historical `SESSION_ENDED_RELEASE_UNOBSERVED` evidence remains attached to its
+ended generation and cannot be returned as the current state of a replacement
+session. Multiple Remote clients querying one daemon see the same
+WorkspaceSession-scoped snapshot; the read result does not attribute ownership
+to either client.
+
+The query only reads Workspace/session maps, the session's canonical Codex home
+identity, and the process-local observation runtime. It does not connect a
+Workspace, dispatch an app-server request, call `thread/read`, `thread/resume`,
+`thread/start`, or `turn/start`, change the generation, or hydrate writer state.
 
 ## Release evidence boundary
 

@@ -17,6 +17,7 @@ import {
   getGitStatus,
   getGlobalSourceSnapshot,
   getOpenAppIcon,
+  getWriterAdmissionObservation,
   listThreads,
   listMcpServerStatus,
   readThread,
@@ -356,6 +357,21 @@ describe("tauri invoke wrappers", () => {
       workspaceId: "ws-10",
       threadId: "thread-1",
     });
+  });
+
+  it("maps workspaceId/threadId for the read-only writer observation query", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await getWriterAdmissionObservation("ws-10", "thread-1");
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      "get_writer_admission_observation",
+      {
+        workspaceId: "ws-10",
+        threadId: "thread-1",
+      },
+    );
   });
 
   it("maps entries for set_tray_recent_threads", async () => {

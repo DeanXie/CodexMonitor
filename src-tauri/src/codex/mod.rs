@@ -178,6 +178,37 @@ pub(crate) async fn resume_thread(
 }
 
 #[tauri::command]
+pub(crate) async fn get_writer_admission_observation(
+    workspace_id: String,
+    thread_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<
+    crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationSnapshot,
+    String,
+> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "get_writer_admission_observation",
+            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|error| error.to_string());
+    }
+
+    codex_core::get_writer_admission_observation_core(
+        &state.workspaces,
+        &state.sessions,
+        &workspace_id,
+        &thread_id,
+    )
+    .await
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub(crate) async fn read_thread(
     workspace_id: String,
     thread_id: String,

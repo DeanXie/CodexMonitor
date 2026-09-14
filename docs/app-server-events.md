@@ -373,6 +373,12 @@ unload and response statuses `notLoaded`, `notSubscribed`, or `unsubscribed`.
 None is a writer-release acknowledgement, so the operation cannot transition
 the writer observation to `FREE`, `AVAILABLE`, or `RELEASED`.
 
+Phase 3.5.2c.1 defines crate-private, connection-generation-scoped subscription
+and runtime-availability observation reducers for this boundary. The two models
+are independent from each other and from `WriterAdmissionObservation`; they are
+not yet wired to `thread_live_unsubscribe`, an upstream request, App/daemon RPC,
+or UI. See `docs/phase-3-5-2c-subscription-release-lifecycle.md`.
+
 ## Server Requests (App-Server -> CodexMonitor, v2)
 
 Supported server requests:

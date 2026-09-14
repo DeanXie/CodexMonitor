@@ -8,7 +8,7 @@ use crate::shared::codex_identity::CodexThreadKey;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -335,6 +335,8 @@ async fn thread_unsubscribe_boundary_does_not_end_session_generation() {
         session.writer_admission_observations.snapshot(&thread_key),
         Some(before)
     );
+    assert!(session.pending.lock().await.is_empty());
+    assert_eq!(session.next_id.load(Ordering::SeqCst), 1);
     stop_session(&session).await;
 }
 

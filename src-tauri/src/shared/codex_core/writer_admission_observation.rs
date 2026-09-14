@@ -80,6 +80,9 @@ pub(crate) enum WriterAdmissionNonTransitionEvent {
     MobilePageClosed,
     FocusLost,
     ThreadUnsubscribe,
+    ThreadUnsubscribedForAppServerConnection,
+    ThreadClosed,
+    ThreadRuntimeNotLoaded,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

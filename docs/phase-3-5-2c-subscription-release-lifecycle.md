@@ -1,8 +1,9 @@
 # Phase 3.5.2c — Subscription / Release Lifecycle
 
 Status: Phase 3.5.2c.1 shared subscription and runtime observation contracts
-are **PASS / COMPLETE / FROZEN**. Phase 3.5.2c remains in progress. Phase
-3.5.2c.2 has not started.
+are **PASS / COMPLETE / FROZEN**. Phase 3.5.2c.2 synthetic detach boundary
+freeze is **PASS / COMPLETE / FROZEN**. Phase 3.5.2c remains in progress.
+Phase 3.5.2c.3 has not started.
 
 ## Authority separation
 
@@ -30,9 +31,9 @@ an internal app-server connection identity, not a Remote-client identity.
 Removing the last subscriber does not immediately unload an active runtime;
 unload is delayed and separately observed.
 
-CodexMonitor's existing `thread_live_unsubscribe` remains synthetic local live
-subscription bookkeeping. Phase 3.5.2c.1 does not send upstream
-`thread/unsubscribe`, change that product path, or ingest `thread/closed`.
+CodexMonitor's existing `thread_live_unsubscribe` remains a synthetic local
+live detach. It does not send upstream `thread/unsubscribe` or ingest
+`thread/closed`.
 
 ## Normalized observation scope
 
@@ -116,9 +117,34 @@ may transition writer admission evidence to
 `RELEASED`, writer-owner, lease, Remote-client ownership, force-takeover, or
 retry semantics.
 
+## Synthetic live detach boundary
+
+Phase 3.5.2c.2 freezes `thread_live_unsubscribe` as `LOCAL SYNTHETIC DETACH
+ONLY`. The App command and daemon RPC use one shared outcome contract. After
+confirming that the Workspace exists and has a current WorkspaceSession, each
+successful call emits exactly one local `thread/live_detached` event with
+`reason = manual` and returns `{ "ok": true }`.
+
+The operation dispatches no app-server request. It does not resume or start a
+Thread, start a Turn, connect a Workspace, end a WorkspaceSession, terminate an
+app-server process, or change subscription, runtime-availability, or writer-
+admission evidence. A shared WorkspaceSession and all of its routes remain
+intact. The outcome records no Remote-client subscription owner.
+
+Repeated explicit calls repeat the same successful local detach event; there
+is no authoritative subscription state that would turn the second call into
+an upstream no-op. Transport disconnect does not automatically retry the
+operation, so an ambiguous response cannot silently duplicate the local event.
+
+A missing Workspace returns `workspace not found`. A known Workspace without
+a current WorkspaceSession returns `workspace session unavailable`. Neither
+case emits a local detach event or manufactures subscription, runtime, or
+writer evidence.
+
 ## Slice boundary
 
 Phase 3.5.2c.1 contains crate-private shared reducers and contract tests only.
-It adds no public App, daemon, frontend, or upstream mutation surface. Wiring
-the existing synthetic detach boundary belongs to Phase 3.5.2c.2 and is not
-part of this slice.
+Phase 3.5.2c.2 centralizes and freezes the pre-existing local App/daemon detach
+contract without adding an upstream request or public API. Upstream
+`thread/unsubscribe`, response mapping, runtime unload observation, and
+`thread/closed` ingestion remain outside this slice.

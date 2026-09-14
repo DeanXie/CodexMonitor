@@ -791,24 +791,21 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        codex_core::thread_live_unsubscribe_core(
+        let outcome = codex_core::thread_live_unsubscribe_core(
+            &self.workspaces,
             &self.sessions,
-            workspace_id.clone(),
-            thread_id.clone(),
+            workspace_id,
+            thread_id,
         )
         .await?;
         self.event_sink.emit_app_server_event(AppServerEvent {
-            workspace_id: workspace_id.clone(),
+            workspace_id: outcome.workspace_id().to_string(),
             message: json!({
-                "method": "thread/live_detached",
-                "params": {
-                    "workspaceId": workspace_id,
-                    "threadId": thread_id,
-                    "reason": "manual",
-                }
+                "method": outcome.event_method(),
+                "params": outcome.event_params(),
             }),
         });
-        Ok(json!({ "ok": true }))
+        Ok(outcome.response())
     }
 
     async fn fork_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
@@ -1810,6 +1807,66 @@ mod tests {
             .unwrap_or_else(|error| panic!("read fixture {}: {error}", path.display()));
         serde_json::from_slice(&bytes)
             .unwrap_or_else(|error| panic!("parse fixture {}: {error}", path.display()))
+    }
+
+    #[test]
+    fn daemon_rpc_uses_shared_synthetic_live_detach_contract() {
+        run_async_test(async {
+            let tmp = make_temp_dir("synthetic-live-detach");
+            let workspace_id = "synthetic-live-detach-workspace";
+            let thread_id = "01a08c05-7880-75a2-976c-2a5895b58723";
+            let (tx, mut events) = broadcast::channel::<DaemonEvent>(32);
+            let mut state = test_state(&tmp);
+            state.event_sink = DaemonEventSink { tx };
+            insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+            let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+            let next_id_before = session.next_id.load(std::sync::atomic::Ordering::SeqCst);
+            state
+                .sessions
+                .lock()
+                .await
+                .insert(workspace_id.to_string(), Arc::clone(&session));
+
+            let response = rpc::handle_rpc_request(
+                &state,
+                "thread_live_unsubscribe",
+                json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("daemon synthetic live detach succeeds");
+            let event = events.recv().await.expect("local detach event");
+            let DaemonEvent::AppServer(event) = event else {
+                panic!("expected app-server event")
+            };
+
+            assert_eq!(response, json!({ "ok": true }));
+            assert_eq!(event.workspace_id, workspace_id);
+            assert_eq!(
+                event.message,
+                json!({
+                    "method": "thread/live_detached",
+                    "params": {
+                        "workspaceId": workspace_id,
+                        "threadId": thread_id,
+                        "reason": "manual",
+                    }
+                })
+            );
+            assert_eq!(
+                session.next_id.load(std::sync::atomic::Ordering::SeqCst),
+                next_id_before,
+                "synthetic live detach must not dispatch an app-server request"
+            );
+            assert!(session.pending.lock().await.is_empty());
+            assert!(state.sessions.lock().await.contains_key(workspace_id));
+            assert!(session.child.lock().await.try_wait().unwrap().is_none());
+
+            let mut child = session.child.lock().await;
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            let _ = std::fs::remove_dir_all(tmp);
+        });
     }
 
     #[test]

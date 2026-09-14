@@ -331,23 +331,20 @@ pub(crate) async fn thread_live_unsubscribe(
         .await;
     }
 
-    codex_core::thread_live_unsubscribe_core(
+    let outcome = codex_core::thread_live_unsubscribe_core(
+        &state.workspaces,
         &state.sessions,
-        workspace_id.clone(),
-        thread_id.clone(),
+        workspace_id,
+        thread_id,
     )
     .await?;
     emit_thread_live_event(
         &app,
-        &workspace_id,
-        "thread/live_detached",
-        json!({
-            "workspaceId": workspace_id,
-            "threadId": thread_id,
-            "reason": "manual",
-        }),
+        outcome.workspace_id(),
+        outcome.event_method(),
+        outcome.event_params(),
     );
-    Ok(json!({ "ok": true }))
+    Ok(outcome.response())
 }
 
 #[tauri::command]

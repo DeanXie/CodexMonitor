@@ -477,7 +477,6 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "read_agent_config_toml"
             | "read_workspace_file"
             | "thread_live_subscribe"
-            | "thread_live_unsubscribe"
             | "skills_list"
             | "worktree_setup_status"
     )
@@ -1439,6 +1438,11 @@ mod tests {
         assert!(!can_retry_after_disconnect("send_user_message"));
         assert!(!can_retry_after_disconnect("start_thread"));
         assert!(!can_retry_after_disconnect("remove_workspace"));
+    }
+
+    #[test]
+    fn synthetic_live_detach_is_not_retried_after_disconnect() {
+        assert!(!can_retry_after_disconnect("thread_live_unsubscribe"));
     }
 
     fn host(value: &str) -> RemoteHostIdentity {

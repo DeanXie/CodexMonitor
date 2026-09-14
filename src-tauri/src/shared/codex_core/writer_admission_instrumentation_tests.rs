@@ -5,6 +5,7 @@ use super::writer_admission_observation::{
 use super::{read_thread_core, resume_thread_core, thread_live_unsubscribe_core};
 use crate::backend::app_server::{classify_resume_dispatch_error, WorkspaceSession};
 use crate::shared::codex_identity::CodexThreadKey;
+use crate::types::{WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
@@ -326,10 +327,27 @@ async fn thread_unsubscribe_boundary_does_not_end_session_generation() {
         WORKSPACE_ID.to_string(),
         Arc::clone(&session),
     )]));
+    let workspaces = Mutex::new(HashMap::from([(
+        WORKSPACE_ID.to_string(),
+        WorkspaceEntry {
+            id: WORKSPACE_ID.to_string(),
+            name: "Writer observation workspace".to_string(),
+            path: "C:\\writer-observation-workspace".to_string(),
+            kind: WorkspaceKind::Main,
+            parent_id: None,
+            worktree: None,
+            settings: WorkspaceSettings::default(),
+        },
+    )]));
 
-    thread_live_unsubscribe_core(&sessions, WORKSPACE_ID.to_string(), THREAD_ID.to_string())
-        .await
-        .expect("unsubscribe succeeds");
+    thread_live_unsubscribe_core(
+        &workspaces,
+        &sessions,
+        WORKSPACE_ID.to_string(),
+        THREAD_ID.to_string(),
+    )
+    .await
+    .expect("synthetic live detach succeeds");
 
     assert_eq!(
         session.writer_admission_observations.snapshot(&thread_key),

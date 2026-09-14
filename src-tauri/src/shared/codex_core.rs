@@ -463,16 +463,57 @@ pub(crate) async fn thread_live_subscribe_core(
     Ok(())
 }
 
+/// The complete local-only result of `thread_live_unsubscribe`.
+///
+/// App and daemon adapters emit this synthetic event without dispatching an
+/// app-server request or changing subscription, runtime, or writer evidence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SyntheticLiveDetachOutcome {
+    workspace_id: String,
+    thread_id: String,
+}
+
+impl SyntheticLiveDetachOutcome {
+    pub(crate) fn event_method(&self) -> &'static str {
+        "thread/live_detached"
+    }
+
+    pub(crate) fn workspace_id(&self) -> &str {
+        &self.workspace_id
+    }
+
+    pub(crate) fn event_params(&self) -> Value {
+        json!({
+            "workspaceId": self.workspace_id,
+            "threadId": self.thread_id,
+            "reason": "manual",
+        })
+    }
+
+    pub(crate) fn response(&self) -> Value {
+        json!({ "ok": true })
+    }
+}
+
 pub(crate) async fn thread_live_unsubscribe_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
     thread_id: String,
-) -> Result<(), String> {
+) -> Result<SyntheticLiveDetachOutcome, String> {
     if thread_id.trim().is_empty() {
         return Err("threadId is required".to_string());
     }
-    let _ = get_session_clone(sessions, &workspace_id).await?;
-    Ok(())
+    if !workspaces.lock().await.contains_key(&workspace_id) {
+        return Err("workspace not found".to_string());
+    }
+    if !sessions.lock().await.contains_key(&workspace_id) {
+        return Err("workspace session unavailable".to_string());
+    }
+    Ok(SyntheticLiveDetachOutcome {
+        workspace_id,
+        thread_id,
+    })
 }
 
 pub(crate) async fn fork_thread_core(
@@ -1379,3 +1420,7 @@ mod writer_admission_protocol_fixture_tests;
 #[cfg(test)]
 #[path = "codex_core/thread_lifecycle_observation_tests.rs"]
 mod thread_lifecycle_observation_tests;
+
+#[cfg(test)]
+#[path = "codex_core/synthetic_live_detach_tests.rs"]
+mod synthetic_live_detach_tests;

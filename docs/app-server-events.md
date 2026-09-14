@@ -376,8 +376,14 @@ the writer observation to `FREE`, `AVAILABLE`, or `RELEASED`.
 Phase 3.5.2c.1 defines crate-private, connection-generation-scoped subscription
 and runtime-availability observation reducers for this boundary. The two models
 are independent from each other and from `WriterAdmissionObservation`; they are
-not yet wired to `thread_live_unsubscribe`, an upstream request, App/daemon RPC,
-or UI. See `docs/phase-3-5-2c-subscription-release-lifecycle.md`.
+not wired to an upstream request or UI.
+
+Phase 3.5.2c.2 freezes `thread_live_unsubscribe` as a local synthetic live
+detach shared by the App and daemon adapters. It validates Workspace/session
+availability, emits `thread/live_detached`, and sends no app-server request.
+It does not transition subscription, runtime-availability, or writer-admission
+evidence, and it is excluded from automatic disconnect retry. See
+`docs/phase-3-5-2c-subscription-release-lifecycle.md`.
 
 ## Server Requests (App-Server -> CodexMonitor, v2)
 

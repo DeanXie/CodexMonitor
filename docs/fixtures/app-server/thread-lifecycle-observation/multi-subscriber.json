@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "scenario": "multi_subscriber_connection_isolation",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-a",
+    "appServerConnectionGeneration": "connection-a",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-multi-subscriber" }
+  },
+  "connectionBGeneration": "connection-b",
+  "attemptId": "unsubscribe-attempt-connection-a",
+  "requestedFullThreadId": "fixture-thread-multi-subscriber",
+  "observedAt": 170,
+  "responseOrErrorEvidence": { "connectionAStatus": "unsubscribed" },
+  "runtimeEvidence": null,
+  "expected": {
+    "connectionAState": "unsubscribed_for_app_server_connection",
+    "connectionBState": "subscribed_for_app_server_connection",
+    "globalSubscriptionClaim": false
+  },
+  "writerObservationTransition": false
+}

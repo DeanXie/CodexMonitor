@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "scenario": "subscription_state_serialization",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-a",
+    "appServerConnectionGeneration": "connection-generation-a",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-subscription" }
+  },
+  "states": [
+    "not_observed",
+    "subscribed_for_app_server_connection",
+    "unsubscribe_pending",
+    "unsubscribed_for_app_server_connection",
+    "not_subscribed_for_app_server_connection",
+    "unsubscribe_outcome_unknown"
+  ],
+  "subscriptionSnapshotFields": [
+    "appServerConnectionGeneration", "attemptId", "evidence", "observedAt",
+    "requestedFullThreadId", "state", "threadKey", "workspaceSessionGeneration"
+  ],
+  "observedAt": 100,
+  "attemptId": null,
+  "requestedFullThreadId": null,
+  "responseOrErrorEvidence": null,
+  "runtimeEvidence": null,
+  "writerObservationTransition": false
+}

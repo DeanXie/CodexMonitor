@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "scenario": "connection_generation_reset",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-a",
+    "appServerConnectionGeneration": "connection-generation-old",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-connection-reset" }
+  },
+  "newAppServerConnectionGeneration": "connection-generation-new",
+  "observedAt": 150,
+  "attemptId": null,
+  "requestedFullThreadId": null,
+  "responseOrErrorEvidence": {
+    "connectionEnd": "transport_disconnected",
+    "diagnostic": "fixture transport disconnected"
+  },
+  "runtimeEvidence": null,
+  "expected": {
+    "subscriptionState": "not_observed",
+    "runtimeState": "unknown",
+    "ambiguousUnsubscribeReplayCount": 0
+  },
+  "writerObservationTransition": false
+}

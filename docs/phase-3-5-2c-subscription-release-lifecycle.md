@@ -1,7 +1,7 @@
 # Phase 3.5.2c — Subscription / Release Lifecycle
 
-Status: Phase 3.5.2c.1 through Phase 3.5.2c.4 are **PASS / COMPLETE /
-FROZEN**. Phase 3.5.2c remains in progress.
+Status: Phase 3.5.2c.1 through Phase 3.5.2c.5 and Phase 3.5.2c as a
+whole are **PASS / COMPLETE / FROZEN**.
 
 ## Authority separation
 
@@ -248,3 +248,46 @@ no-retry boundary. Phase 3.5.2c.4 adds direct runtime-not-loaded notification
 ingestion, order-independent evidence reconciliation, connection-end history,
 generation reset, reconnect isolation, and multi-subscriber coverage. It adds
 no new public mutation or Remote-client ownership model.
+
+## Contract and fixture compatibility freeze
+
+Phase 3.5.2c.5 adds no product behavior. Sanitized fixtures under
+`docs/fixtures/app-server/thread-lifecycle-observation/` freeze the existing
+subscription and runtime state spellings, snapshot fields, generation scope,
+unsubscribe mappings, and lifecycle ordering. App and daemon compatibility
+tests consume the same shared fixture authority.
+
+The fixtures permanently distinguish `thread_live_unsubscribe` as `LOCAL
+SYNTHETIC DETACH ONLY` with zero upstream dispatch from
+`thread_upstream_unsubscribe`, which dispatches the real upstream
+`thread/unsubscribe` mutation. The normalized upstream outcomes remain:
+
+```text
+unsubscribed    -> UNSUBSCRIBED_FOR_APP_SERVER_CONNECTION
+notSubscribed  -> NOT_SUBSCRIBED_FOR_APP_SERVER_CONNECTION
+notLoaded      -> NOT_SUBSCRIBED_FOR_APP_SERVER_CONNECTION
+                  + NOT_LOADED_OBSERVED
+ambiguous after dispatch -> UNSUBSCRIBE_OUTCOME_UNKNOWN, retry count 0
+```
+
+A delayed or earlier `thread/closed` adds independent
+`NOT_LOADED_OBSERVED` evidence and never rewrites a response or an unknown
+unsubscribe outcome. Reconnect creates a new app-server connection generation
+without inherited subscription truth. A new WorkspaceSession generation resets
+current subscription to `NOT_OBSERVED`, runtime availability to `UNKNOWN`, and
+writer admission to `NOT_OBSERVED`. One connection's unsubscribe does not alter
+another connection's subscription observation.
+
+Synthetic detach, every upstream unsubscribe outcome, `thread/closed`,
+`notLoaded`, connection teardown, Remote TCP/client/Mobile close, Turn
+completion, and idle do not directly prove writer freedom, availability, or
+release. Only actual WorkspaceSession generation end records
+`SESSION_ENDED_RELEASE_UNOBSERVED`, which is still not a release acknowledgement.
+
+The bundled behavior authority is Windows x64 `codex-cli 0.153.4`, executable
+SHA-256 `444A3F0008050605CAE73CD9B7A2DCAC61294062DFAAB56DD20430FD6498518B`,
+with official source commit `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`.
+The separately checked upstream `main` reference is commit
+`e9633d7a0226eac91c7a791dc4f92cf8f25df2ae` as of 2026-09-14. CodexMonitor's
+normalized contract is the state/generation/non-transition contract above; it
+does not treat either source as writer-release evidence.

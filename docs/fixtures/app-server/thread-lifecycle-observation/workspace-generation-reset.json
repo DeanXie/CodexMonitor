@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "scenario": "workspace_session_generation_reset",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-old",
+    "appServerConnectionGeneration": "connection-generation-old",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-workspace-reset" }
+  },
+  "newWorkspaceSessionGeneration": "workspace-generation-new",
+  "newAppServerConnectionGeneration": "connection-generation-new",
+  "observedAt": 160,
+  "attemptId": null,
+  "requestedFullThreadId": null,
+  "responseOrErrorEvidence": { "sessionEnd": "app_server_process_exited" },
+  "runtimeEvidence": null,
+  "expected": {
+    "subscriptionState": "not_observed",
+    "runtimeState": "unknown",
+    "writerState": "not_observed"
+  },
+  "writerObservationTransition": false
+}

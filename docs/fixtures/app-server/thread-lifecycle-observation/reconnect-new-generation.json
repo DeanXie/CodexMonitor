@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "scenario": "reconnect_new_connection_generation",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-a",
+    "appServerConnectionGeneration": "connection-generation-before-reconnect",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-reconnect" }
+  },
+  "newAppServerConnectionGeneration": "connection-generation-after-reconnect",
+  "observedAt": 180,
+  "attemptId": null,
+  "requestedFullThreadId": null,
+  "responseOrErrorEvidence": { "oldConnectionEnd": "transport_disconnected" },
+  "runtimeEvidence": null,
+  "expected": {
+    "subscriptionState": "not_observed",
+    "runtimeState": "unknown",
+    "inheritedSubscriptionTruth": false,
+    "automaticRetryCount": 0
+  },
+  "writerObservationTransition": false
+}

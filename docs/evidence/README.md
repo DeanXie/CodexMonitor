@@ -40,3 +40,9 @@ fixture tests drive the shared observation core and the real daemon read RPC;
 they do not execute a new writer mutation.
 The Phase 3.5.2b.5 RED/GREEN and regression index is
 `phase-3-5-2b/protocol-compatibility-freeze.md`.
+
+Phase 3.5.2c subscription/runtime lifecycle compatibility fixtures are stored
+in `../fixtures/app-server/thread-lifecycle-observation/`. They freeze the
+existing c.1-c.4 reducers and lifecycle reconciliation without executing a new
+unsubscribe or writer mutation. The c.5 RED/GREEN and regression index is
+`phase-3-5-2c/protocol-compatibility-freeze.md`.

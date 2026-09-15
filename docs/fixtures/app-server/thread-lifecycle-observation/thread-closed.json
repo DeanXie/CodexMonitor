@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "scenario": "unknown_unsubscribe_then_delayed_thread_closed",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-a",
+    "appServerConnectionGeneration": "connection-generation-a",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-closed" }
+  },
+  "attemptId": "unsubscribe-attempt-fixture-closed",
+  "requestedFullThreadId": "fixture-thread-closed",
+  "observedAt": 130,
+  "responseOrErrorEvidence": { "unsubscribeOutcome": "dispatch_disconnected", "notificationMethod": "thread/closed" },
+  "runtimeEvidence": { "source": "thread_closed_notification", "state": "not_loaded_observed" },
+  "notification": {
+    "method": "thread/closed",
+    "params": { "threadId": "fixture-thread-closed" }
+  },
+  "expected": {
+    "subscriptionState": "unsubscribe_outcome_unknown",
+    "runtimeState": "not_loaded_observed"
+  },
+  "writerObservationTransition": false
+}

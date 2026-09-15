@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "scenario": "runtime_state_serialization",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-a",
+    "appServerConnectionGeneration": "connection-generation-a",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-runtime" }
+  },
+  "states": ["unknown", "loaded_observed", "not_loaded_observed"],
+  "observedAt": 130,
+  "attemptId": null,
+  "requestedFullThreadId": null,
+  "responseOrErrorEvidence": null,
+  "runtimeEvidence": {
+    "loadedSource": "thread_read_response",
+    "notLoadedSource": "thread_closed_notification",
+    "statusNotLoadedSource": "thread_status_changed_notification",
+    "statusNotLoadedMessage": {
+      "method": "thread/status/changed",
+      "params": {
+        "threadId": "fixture-thread-runtime",
+        "status": { "type": "notLoaded" }
+      }
+    }
+  },
+  "writerObservationTransition": false
+}

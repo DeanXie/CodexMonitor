@@ -1449,5 +1449,9 @@ mod thread_lifecycle_observation_tests;
 mod lifecycle_reconciliation_tests;
 
 #[cfg(test)]
+#[path = "codex_core/thread_lifecycle_protocol_fixture_tests.rs"]
+mod thread_lifecycle_protocol_fixture_tests;
+
+#[cfg(test)]
 #[path = "codex_core/synthetic_live_detach_tests.rs"]
 mod synthetic_live_detach_tests;

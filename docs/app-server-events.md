@@ -13,8 +13,9 @@ Windows x64 `codex-cli 0.153.4` executable (SHA-256
 `444A3F0008050605CAE73CD9B7A2DCAC61294062DFAAB56DD20430FD6498518B`;
 official source commit `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`) and upstream `main` commit
 `e9633d7a0226eac91c7a791dc4f92cf8f25df2ae`, checked 2026-09-14. The frozen
-machine-readable provenance is in
-`docs/fixtures/app-server/writer-admission-observation/protocol-provenance.json`.
+machine-readable writer and subscription/runtime provenance is in
+`docs/fixtures/app-server/writer-admission-observation/protocol-provenance.json`
+and `docs/fixtures/app-server/thread-lifecycle-observation/protocol-provenance.json`.
 
 When updating this document:
 1. Fetch latest refs with `git -C ../Codex fetch --all --prune`.
@@ -416,6 +417,16 @@ confirmed app-server process end, and last shared-route teardown are recorded
 as connection-generation lifecycle evidence rather than unsubscribe success.
 Replacement connection and WorkspaceSession generations start without inherited
 current subscription/runtime observations or retried unsubscribe attempts.
+Phase 3.5.2c.5 freezes those normalized state strings, fields, outcome mappings,
+generation boundaries, ordering rules, and App/daemon parity in sanitized
+fixtures under `docs/fixtures/app-server/thread-lifecycle-observation/`.
+
+The three authorities remain distinct in every fixture: subscription evidence
+does not rewrite runtime evidence, and neither subscription nor runtime evidence
+transitions writer admission. Missing Workspace, unavailable WorkspaceSession,
+subscription `not_observed`, and runtime `unknown` remain four different
+results. The fixture provenance separately identifies bundled behavior, the
+checked upstream `main` reference, and CodexMonitor's normalized contract.
 
 ## Server Requests (App-Server -> CodexMonitor, v2)
 

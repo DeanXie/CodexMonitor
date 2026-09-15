@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "scenario": "upstream_thread_unsubscribe_outcomes",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-a",
+    "appServerConnectionGeneration": "connection-generation-a",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-upstream-unsubscribe" }
+  },
+  "operation": "thread_upstream_unsubscribe",
+  "upstreamMethod": "thread/unsubscribe",
+  "attemptId": "unsubscribe-attempt-fixture-1",
+  "requestedFullThreadId": "fixture-thread-upstream-unsubscribe",
+  "observedAt": 120,
+  "outcomes": {
+    "unsubscribed": {
+      "responseOrErrorEvidence": { "status": "unsubscribed" },
+      "subscriptionState": "unsubscribed_for_app_server_connection",
+      "runtimeState": "unknown"
+    },
+    "notSubscribed": {
+      "responseOrErrorEvidence": { "status": "notSubscribed" },
+      "subscriptionState": "not_subscribed_for_app_server_connection",
+      "runtimeState": "unknown"
+    },
+    "notLoaded": {
+      "responseOrErrorEvidence": { "status": "notLoaded" },
+      "subscriptionState": "not_subscribed_for_app_server_connection",
+      "runtimeState": "not_loaded_observed",
+      "runtimeEvidence": "thread_unsubscribe_not_loaded_response"
+    },
+    "outcomeUnknown": {
+      "responseOrErrorEvidence": { "kind": "timeout_after_dispatch", "message": "fixture timeout after dispatch" },
+      "subscriptionState": "unsubscribe_outcome_unknown",
+      "runtimeState": "unknown",
+      "automaticRetryCount": 0
+    }
+  },
+  "ambiguousPostDispatchNoRetry": {
+    "response": { "result": {} },
+    "expectedSubscriptionState": "unsubscribe_outcome_unknown",
+    "expectedErrorKind": "malformed_response",
+    "expectedDispatchCount": 1,
+    "automaticRetryCount": 0
+  },
+  "writerObservationTransition": false
+}

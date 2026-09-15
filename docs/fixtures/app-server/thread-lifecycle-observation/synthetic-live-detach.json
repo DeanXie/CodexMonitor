@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "scenario": "synthetic_local_live_detach",
+  "scope": {
+    "workspaceSessionGeneration": "workspace-generation-a",
+    "appServerConnectionGeneration": "connection-generation-a",
+    "threadKey": { "codexHomeIdentity": "codex-home:fixture-host-a", "threadId": "fixture-thread-synthetic-detach" }
+  },
+  "operation": "thread_live_unsubscribe",
+  "classification": "local_synthetic_detach_only",
+  "localEvent": "thread/live_detached",
+  "upstreamDispatchCount": 0,
+  "upstreamOperation": "thread_upstream_unsubscribe",
+  "upstreamMethod": "thread/unsubscribe",
+  "observedAt": 140,
+  "attemptId": null,
+  "requestedFullThreadId": "fixture-thread-synthetic-detach",
+  "responseOrErrorEvidence": { "localOutcome": "ok" },
+  "runtimeEvidence": null,
+  "subscriptionObservationTransition": false,
+  "runtimeAvailabilityTransition": false,
+  "writerObservationTransition": false
+}

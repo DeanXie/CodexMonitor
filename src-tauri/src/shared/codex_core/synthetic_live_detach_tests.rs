@@ -13,6 +13,7 @@ use crate::shared::codex_identity::CodexThreadKey;
 use crate::types::{WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -21,6 +22,20 @@ use tokio::sync::Mutex;
 
 const WORKSPACE_ID: &str = "synthetic-detach-workspace";
 const THREAD_ID: &str = "01a08c05-7880-75a2-976c-2a5895b58723";
+
+fn compatibility_fixture() -> serde_json::Value {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("docs")
+        .join("fixtures")
+        .join("app-server")
+        .join("thread-lifecycle-observation")
+        .join("synthetic-live-detach.json");
+    let bytes = std::fs::read(&path)
+        .unwrap_or_else(|error| panic!("read fixture {}: {error}", path.display()));
+    serde_json::from_slice(&bytes)
+        .unwrap_or_else(|error| panic!("parse fixture {}: {error}", path.display()))
+}
 
 fn workspace_entry() -> WorkspaceEntry {
     WorkspaceEntry {
@@ -167,10 +182,15 @@ async fn stop_session(session: &WorkspaceSession) {
 #[tokio::test]
 async fn synthetic_detach_still_dispatches_zero_upstream_unsubscribe() {
     let (workspaces, sessions, session) = fixture().await;
+    let expected = compatibility_fixture();
 
     let outcome = detach(&workspaces, &sessions).await;
 
-    assert_eq!(outcome.event_method(), "thread/live_detached");
+    assert_eq!(outcome.event_method(), expected["localEvent"]);
+    assert_eq!(expected["operation"], "thread_live_unsubscribe");
+    assert_eq!(expected["upstreamOperation"], "thread_upstream_unsubscribe");
+    assert_eq!(expected["upstreamMethod"], "thread/unsubscribe");
+    assert_eq!(expected["upstreamDispatchCount"], 0);
     assert!(session.pending.lock().await.is_empty());
     assert_eq!(session.next_id.load(Ordering::SeqCst), 1);
     stop_session(&session).await;
@@ -281,10 +301,11 @@ async fn synthetic_detach_does_not_change_writer_observation() {
 #[tokio::test]
 async fn app_and_daemon_have_same_synthetic_detach_contract() {
     let (workspaces, sessions, session) = fixture().await;
+    let expected = compatibility_fixture();
 
     let outcome = detach(&workspaces, &sessions).await;
 
-    assert_eq!(outcome.event_method(), "thread/live_detached");
+    assert_eq!(outcome.event_method(), expected["localEvent"]);
     assert_eq!(
         outcome.event_params(),
         json!({

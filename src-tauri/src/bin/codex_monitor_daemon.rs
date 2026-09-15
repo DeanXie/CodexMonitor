@@ -1818,6 +1818,20 @@ mod tests {
             .unwrap_or_else(|error| panic!("parse fixture {}: {error}", path.display()))
     }
 
+    fn load_thread_lifecycle_fixture(name: &str) -> Value {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("docs")
+            .join("fixtures")
+            .join("app-server")
+            .join("thread-lifecycle-observation")
+            .join(name);
+        let bytes = std::fs::read(&path)
+            .unwrap_or_else(|error| panic!("read fixture {}: {error}", path.display()));
+        serde_json::from_slice(&bytes)
+            .unwrap_or_else(|error| panic!("parse fixture {}: {error}", path.display()))
+    }
+
     async fn seed_thread_subscription(session: &WorkspaceSession, thread_id: &str) {
         let codex_home_identity = session
             .workspace_reconciler
@@ -1861,91 +1875,110 @@ mod tests {
     }
 
     #[test]
-    fn app_and_daemon_share_same_unsubscribe_mapping() {
+    fn thread_lifecycle_protocol_fixture_app_daemon_parity() {
         run_async_test(async {
             let thread_id = "01a08c05-7880-75a2-976c-2a5895b58723";
-            let workspace_id = "upstream-unsubscribe-parity";
-            let tmp = make_temp_dir("upstream-unsubscribe-parity");
+            let fixture = load_thread_lifecycle_fixture("upstream-unsubscribe-outcomes.json");
 
-            let app_session =
-                make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
-            seed_thread_subscription(&app_session, thread_id).await;
-            let app_sessions = Arc::new(Mutex::new(HashMap::from([(
-                workspace_id.to_string(),
-                Arc::clone(&app_session),
-            )])));
-            let app_call = crate::shared::codex_core::thread_upstream_unsubscribe_core(
-                &app_sessions,
-                workspace_id.to_string(),
-                thread_id.to_string(),
-            );
-            let app_response = async {
-                respond_to_next_app_server_request(&app_session, "notLoaded").await;
-            };
-            let (app_result, ()) = tokio::join!(app_call, app_response);
+            for outcome_name in ["unsubscribed", "notSubscribed", "notLoaded"] {
+                let expected = &fixture["outcomes"][outcome_name];
+                let status = expected["responseOrErrorEvidence"]["status"]
+                    .as_str()
+                    .expect("fixture status");
+                let workspace_id = format!("upstream-unsubscribe-parity-{status}");
+                let tmp = make_temp_dir(&workspace_id);
 
-            let daemon_session =
-                make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
-            seed_thread_subscription(&daemon_session, thread_id).await;
-            let state = test_state(&tmp);
-            insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
-            state
-                .sessions
-                .lock()
-                .await
-                .insert(workspace_id.to_string(), Arc::clone(&daemon_session));
-            let daemon_call = rpc::handle_rpc_request(
-                &state,
-                "thread_upstream_unsubscribe",
-                json!({ "workspaceId": workspace_id, "threadId": thread_id }),
-                "daemon-test".to_string(),
-            );
-            let daemon_response = async {
-                respond_to_next_app_server_request(&daemon_session, "notLoaded").await;
-            };
-            let (daemon_result, ()) = tokio::join!(daemon_call, daemon_response);
+                let app_session =
+                    make_session(make_workspace_entry(&workspace_id, &tmp.to_string_lossy()));
+                seed_thread_subscription(&app_session, thread_id).await;
+                let app_sessions = Arc::new(Mutex::new(HashMap::from([(
+                    workspace_id.clone(),
+                    Arc::clone(&app_session),
+                )])));
+                let app_call = crate::shared::codex_core::thread_upstream_unsubscribe_core(
+                    &app_sessions,
+                    workspace_id.clone(),
+                    thread_id.to_string(),
+                );
+                let app_response = async {
+                    respond_to_next_app_server_request(&app_session, status).await;
+                };
+                let (app_result, ()) = tokio::join!(app_call, app_response);
 
-            assert_eq!(app_result, daemon_result);
-            assert_eq!(
-                app_result
-                    .expect("shared unsubscribe succeeds")
-                    .pointer("/result/status"),
-                Some(&json!("notLoaded"))
-            );
-
-            for session in [&app_session, &daemon_session] {
-                let codex_home_identity = session
-                    .workspace_reconciler
+                let daemon_session =
+                    make_session(make_workspace_entry(&workspace_id, &tmp.to_string_lossy()));
+                seed_thread_subscription(&daemon_session, thread_id).await;
+                let state = test_state(&tmp);
+                insert_workspace(&state, &workspace_id, &tmp.to_string_lossy()).await;
+                state
+                    .sessions
                     .lock()
                     .await
-                    .codex_home_identity()
-                    .to_string();
-                let key = crate::shared::codex_identity::CodexThreadKey::new(
-                    codex_home_identity,
-                    thread_id,
+                    .insert(workspace_id.clone(), Arc::clone(&daemon_session));
+                let daemon_call = rpc::handle_rpc_request(
+                    &state,
+                    "thread_upstream_unsubscribe",
+                    json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+                    "daemon-test".to_string(),
                 );
+                let daemon_response = async {
+                    respond_to_next_app_server_request(&daemon_session, status).await;
+                };
+                let (daemon_result, ()) = tokio::join!(daemon_call, daemon_response);
+
+                assert_eq!(app_result, daemon_result, "outcome {outcome_name}");
                 assert_eq!(
-                    session
-                        .thread_lifecycle_observations
-                        .subscription_snapshot(&key)
-                        .state,
-                    crate::shared::codex_core::thread_lifecycle_observation::ThreadSubscriptionObservationState::NotSubscribedForAppServerConnection
+                    app_result
+                        .expect("shared unsubscribe succeeds")
+                        .pointer("/result/status"),
+                    Some(&json!(status)),
+                    "outcome {outcome_name}"
                 );
-                assert_eq!(
-                    session.thread_lifecycle_observations.runtime_state(&key),
-                    crate::shared::codex_core::thread_lifecycle_observation::ThreadRuntimeAvailabilityState::NotLoadedObserved
-                );
-                let mut child = session.child.lock().await;
-                let _ = child.kill().await;
-                let _ = child.wait().await;
+
+                for session in [&app_session, &daemon_session] {
+                    let codex_home_identity = session
+                        .workspace_reconciler
+                        .lock()
+                        .await
+                        .codex_home_identity()
+                        .to_string();
+                    let key = crate::shared::codex_identity::CodexThreadKey::new(
+                        codex_home_identity,
+                        thread_id,
+                    );
+                    let subscription = serde_json::to_value(
+                        session
+                            .thread_lifecycle_observations
+                            .subscription_snapshot(&key),
+                    )
+                    .expect("subscription snapshot");
+                    let runtime = serde_json::to_value(
+                        session.thread_lifecycle_observations.runtime_state(&key),
+                    )
+                    .expect("runtime state");
+                    assert_eq!(
+                        subscription["state"], expected["subscriptionState"],
+                        "outcome {outcome_name}"
+                    );
+                    assert_eq!(runtime, expected["runtimeState"], "outcome {outcome_name}");
+                    assert_eq!(
+                        session.next_id.load(std::sync::atomic::Ordering::SeqCst),
+                        1,
+                        "one dispatch and zero retry for {outcome_name}"
+                    );
+                    let mut child = session.child.lock().await;
+                    let _ = child.kill().await;
+                    let _ = child.wait().await;
+                }
+                let _ = std::fs::remove_dir_all(tmp);
             }
-            let _ = std::fs::remove_dir_all(tmp);
         });
     }
 
     #[test]
     fn daemon_rpc_uses_shared_synthetic_live_detach_contract() {
         run_async_test(async {
+            let fixture = load_thread_lifecycle_fixture("synthetic-live-detach.json");
             let tmp = make_temp_dir("synthetic-live-detach");
             let workspace_id = "synthetic-live-detach-workspace";
             let thread_id = "01a08c05-7880-75a2-976c-2a5895b58723";
@@ -1974,12 +2007,13 @@ mod tests {
                 panic!("expected app-server event")
             };
 
+            assert_eq!(fixture["upstreamDispatchCount"], 0);
             assert_eq!(response, json!({ "ok": true }));
             assert_eq!(event.workspace_id, workspace_id);
             assert_eq!(
                 event.message,
                 json!({
-                    "method": "thread/live_detached",
+                    "method": fixture["localEvent"],
                     "params": {
                         "workspaceId": workspace_id,
                         "threadId": thread_id,

@@ -30,6 +30,14 @@ fn fixture(name: &str) -> Value {
         .expect("parse unsubscribe fixture")
 }
 
+fn lifecycle_fixture(name: &str) -> Value {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../docs/fixtures/app-server/thread-lifecycle-observation")
+        .join(name);
+    serde_json::from_str(&fs::read_to_string(path).expect("read lifecycle fixture"))
+        .expect("parse lifecycle fixture")
+}
+
 fn thread_key() -> CodexThreadKey {
     CodexThreadKey::new("codex-home-c3", THREAD_ID)
 }
@@ -576,6 +584,8 @@ async fn cancellation_before_dispatch_restores_subscribed_observation() {
 
 #[tokio::test]
 async fn malformed_response_records_unknown_without_retry() {
+    let fixture = lifecycle_fixture("upstream-unsubscribe-outcomes.json");
+    let scenario = &fixture["ambiguousPostDispatchNoRetry"];
     let (session, key) = make_session().await;
     let sessions = Arc::new(Mutex::new(HashMap::from([(
         "workspace-c3".to_string(),
@@ -593,7 +603,9 @@ async fn malformed_response_records_unknown_without_retry() {
         })
     };
     let request_id = await_pending_request(&session).await;
-    deliver_response(&session, request_id, json!({"id":request_id,"result":{}})).await;
+    let mut response = scenario["response"].clone();
+    response["id"] = json!(request_id);
+    deliver_response(&session, request_id, response).await;
     assert!(task.await.unwrap().is_err());
     let snapshot = session
         .thread_lifecycle_observations
@@ -606,7 +618,18 @@ async fn malformed_response_records_unknown_without_retry() {
         snapshot.evidence.unwrap().error_kind,
         Some(ThreadSubscriptionOutcomeErrorKind::MalformedResponse)
     );
+    assert_eq!(
+        scenario["expectedSubscriptionState"],
+        "unsubscribe_outcome_unknown"
+    );
+    assert_eq!(scenario["expectedErrorKind"], "malformed_response");
+    assert_eq!(scenario["expectedDispatchCount"], 1);
+    assert_eq!(scenario["automaticRetryCount"], 0);
     assert_eq!(session.next_id.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert!(
+        session.pending.lock().await.is_empty(),
+        "no second pending request may appear after an ambiguous response"
+    );
     stop_session(&session).await;
 }
 

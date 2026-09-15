@@ -43,3 +43,24 @@ shapes used by Phase 3.5.2c.4. `thread/closed` and
 evidence only; the fixtures do not encode unsubscribe success, writer release,
 ownership, or a lease. `protocol-provenance.json` binds those shapes to the
 bundled Codex version and freezes their non-transition contract.
+
+## Thread lifecycle observation compatibility
+
+`thread-lifecycle-observation/` is the Phase 3.5.2c.5 normalized contract
+fixture set. It freezes all subscription and runtime state spellings, synthetic
+local detach versus upstream unsubscribe, the three upstream response mappings,
+ambiguous no-retry outcomes, delayed `thread/closed`, connection and
+WorkspaceSession generation reset, reconnect isolation, and multi-subscriber
+connection isolation.
+
+The runtime and close fixtures include complete sanitized
+`thread/status/changed:notLoaded` and `thread/closed` messages so compatibility
+tests drive the production ingestion function. The upstream outcome fixture
+also drives the real shared App core and daemon RPC boundary for all three
+successful response statuses, including one-dispatch/zero-retry assertions.
+
+Every scenario carries a WorkspaceSession generation, app-server connection
+generation, `CodexThreadKey`, timestamps, attempt/request evidence when
+applicable, and separate runtime evidence. The fixtures contain no credentials,
+Remote-client subscription owner, writer owner, lease, or global writer
+freedom/release state.

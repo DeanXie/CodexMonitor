@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-16",
+  "bundledBehavior": {
+    "cliVersion": "codex-cli 0.153.4",
+    "platform": "windows-x64",
+    "executableSha256": "444A3F0008050605CAE73CD9B7A2DCAC61294062DFAAB56DD20430FD6498518B",
+    "officialSourceTag": "rust-v0.153.4",
+    "officialSourceCommit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+    "threadUnsubscribeStatuses": ["notLoaded", "notSubscribed", "unsubscribed"]
+  },
+  "currentUpstreamReference": {
+    "repository": "https://github.com/openai/codex",
+    "branch": "main",
+    "commit": "e9633d7a0226eac91c7a791dc4f92cf8f25df2ae",
+    "checkedAt": "2026-09-14"
+  },
+  "codexMonitorNormalizedContract": {
+    "syntheticDetachMethod": "thread_live_unsubscribe",
+    "syntheticDetachClassification": "local_synthetic_detach_only",
+    "syntheticDetachUpstreamDispatchCount": 0,
+    "upstreamUnsubscribeOperation": "thread_upstream_unsubscribe",
+    "upstreamMethod": "thread/unsubscribe",
+    "automaticRetryCount": 0,
+    "writerObservationTransition": false,
+    "writerReleaseAcknowledgement": false
+  },
+  "normalizedContract": {
+    "workspaceMissing": "query_error",
+    "workspaceSessionUnavailable": "query_error",
+    "subscriptionWithoutEvidence": "not_observed",
+    "runtimeWithoutEvidence": "unknown"
+  }
+}

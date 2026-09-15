@@ -292,6 +292,29 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   tests. The frozen state strings and snapshot fields are documented in the
   Phase 3.5.2b authority document; the fixtures contain no token, writer/lease
   identity, Remote-client ownership, or global freedom/release field.
+- `thread/unsubscribe`
+  Phase 3.5.2c.3 exposes this real upstream request through the explicit App
+  command and daemon RPC `thread_upstream_unsubscribe`. Both adapters call one
+  shared core and send `{ "threadId": <full Thread ID> }` exactly once. The
+  request is separate from the local-only `thread_live_unsubscribe` operation.
+
+  Each attempt is scoped to the current WorkspaceSession generation,
+  app-server connection generation, and `CodexThreadKey`. A response status of
+  `unsubscribed` records `UNSUBSCRIBED_FOR_APP_SERVER_CONNECTION`;
+  `notSubscribed` records `NOT_SUBSCRIBED_FOR_APP_SERVER_CONNECTION`; and
+  `notLoaded` records the same subscription state plus independent runtime
+  evidence `NOT_LOADED_OBSERVED`. Timeout, response loss, disconnect,
+  cancellation after dispatch, and malformed response record
+  `UNSUBSCRIBE_OUTCOME_UNKNOWN`. Ambiguous outcomes are never retried, stale
+  generations cannot update current evidence, and concurrent attempts for one
+  scoped Thread fail closed. Cancellation before the dispatch boundary restores
+  the prior subscribed evidence instead of leaving a false pending attempt. A
+  response containing both JSON-RPC `error` and a recognized result status is
+  malformed and cannot produce success evidence.
+
+  None of these outcomes transitions `WriterAdmissionObservation` or proves
+  writer release, availability, ownership, or a lease. Delayed
+  `thread/closed` and unload reconciliation remain outside this slice.
 - `thread/fork`
 - `thread/list`
 - `thread/archive`
@@ -361,12 +384,11 @@ Compared against Codex v2 request methods, CodexMonitor currently does not send:
 - `thread/rollback`
 - `thread/shellCommand`
 - `thread/unarchive`
-- `thread/unsubscribe`
 - `windowsSandbox/setupStart`
 
 CodexMonitor's similarly named `thread_live_unsubscribe` is not this upstream
-request. It is synthetic local subscription bookkeeping and currently sends no
-app-server RPC. Bundled `codex-cli 0.153.4` and checked upstream commit
+request. It is a synthetic local live detach and currently sends no app-server
+RPC. Bundled `codex-cli 0.153.4` and checked upstream commit
 `e9633d7a0226eac91c7a791dc4f92cf8f25df2ae` define real
 `thread/unsubscribe` as connection subscription lifecycle with delayed idle
 unload and response statuses `notLoaded`, `notSubscribed`, or `unsubscribed`.
@@ -375,8 +397,7 @@ the writer observation to `FREE`, `AVAILABLE`, or `RELEASED`.
 
 Phase 3.5.2c.1 defines crate-private, connection-generation-scoped subscription
 and runtime-availability observation reducers for this boundary. The two models
-are independent from each other and from `WriterAdmissionObservation`; they are
-not wired to an upstream request or UI.
+are independent from each other and from `WriterAdmissionObservation`.
 
 Phase 3.5.2c.2 freezes `thread_live_unsubscribe` as a local synthetic live
 detach shared by the App and daemon adapters. It validates Workspace/session
@@ -384,6 +405,10 @@ availability, emits `thread/live_detached`, and sends no app-server request.
 It does not transition subscription, runtime-availability, or writer-admission
 evidence, and it is excluded from automatic disconnect retry. See
 `docs/phase-3-5-2c-subscription-release-lifecycle.md`.
+
+Phase 3.5.2c.3 wires the explicit upstream request to those reducers through a
+single App/daemon shared core. It does not change the synthetic detach path and
+does not implement delayed `thread/closed` or unload reconciliation.
 
 ## Server Requests (App-Server -> CodexMonitor, v2)
 

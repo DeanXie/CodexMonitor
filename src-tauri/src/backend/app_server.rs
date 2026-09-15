@@ -15,6 +15,10 @@ use tokio::time::timeout;
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
+use crate::shared::codex_core::thread_lifecycle_observation::{
+    ThreadLifecycleObservationRuntime, ThreadSubscriptionEvidenceSource,
+    ThreadSubscriptionOutcomeErrorKind, ThreadUnsubscribeAttempt,
+};
 use crate::shared::codex_core::writer_admission_observation::{
     WriterAdmissionErrorKind, WriterAdmissionObservationRuntime,
     WriterAdmissionSessionEndEvidenceKind,
@@ -399,9 +403,9 @@ fn should_broadcast_global_workspace_notification(
 
 #[derive(Clone)]
 pub(crate) struct RequestContext {
-    workspace_id: String,
-    method: String,
-    params: Value,
+    pub(crate) workspace_id: String,
+    pub(crate) method: String,
+    pub(crate) params: Value,
 }
 
 fn unix_timestamp_ms() -> u64 {
@@ -828,6 +832,16 @@ pub(crate) fn classify_resume_dispatch_error(error: &str) -> WriterAdmissionErro
     }
 }
 
+pub(crate) fn classify_unsubscribe_dispatch_error(
+    error: &str,
+) -> ThreadSubscriptionOutcomeErrorKind {
+    if error.contains("timed out") {
+        ThreadSubscriptionOutcomeErrorKind::Timeout
+    } else {
+        ThreadSubscriptionOutcomeErrorKind::DispatchDisconnected
+    }
+}
+
 pub(crate) struct WorkspaceSession {
     pub(crate) codex_args: Option<String>,
     pub(crate) child: Mutex<Child>,
@@ -839,6 +853,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) execution_settings_evidence: ExecutionSettingsEvidenceRuntime,
     pub(crate) projection_observations: ProjectionObservationEngine,
     pub(crate) writer_admission_observations: WriterAdmissionObservationRuntime,
+    pub(crate) thread_lifecycle_observations: ThreadLifecycleObservationRuntime,
     // Shared process owner survives session reconnect; this is only an observer.
     pub(crate) creation_coordinator: Mutex<Option<CreationCoordinator>>,
     pub(crate) runtime_observation_keys: Mutex<HashSet<String>>,
@@ -857,6 +872,37 @@ struct ResumeAdmissionDispatchGuard<'a> {
     attempt_id: crate::shared::codex_core::writer_admission_observation::WriterAdmissionAttemptId,
     boundary: DispatchBoundary,
     completed: bool,
+}
+
+struct UnsubscribeDispatchGuard<'a> {
+    runtime: &'a ThreadLifecycleObservationRuntime,
+    attempt: ThreadUnsubscribeAttempt,
+    boundary: DispatchBoundary,
+    completed: bool,
+}
+
+impl UnsubscribeDispatchGuard<'_> {
+    fn complete(&mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for UnsubscribeDispatchGuard<'_> {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        if self.boundary.crossed() {
+            let _ = self.runtime.record_outcome_unknown(
+                &self.attempt,
+                ThreadSubscriptionOutcomeErrorKind::Cancellation,
+                "thread/unsubscribe operation was cancelled after dispatch",
+                unix_timestamp_ms() as i64,
+            );
+        } else {
+            let _ = self.runtime.restore_after_not_dispatched(&self.attempt);
+        }
+    }
 }
 
 impl ResumeAdmissionDispatchGuard<'_> {
@@ -1074,6 +1120,11 @@ impl WorkspaceSession {
                                 && message.to_ascii_lowercase().contains("active writer"))
                             .then_some((code, message))
                         });
+                let returned_thread_id = response
+                    .pointer("/result/thread/id")
+                    .and_then(Value::as_str);
+                let exact_success = response.get("error").is_none()
+                    && returned_thread_id == Some(requested_thread_id);
                 let observation_result = if let Some((code, message)) = active_writer {
                     self.writer_admission_observations
                         .record_active_writer_blocked(
@@ -1092,10 +1143,7 @@ impl WorkspaceSession {
                         observed_at,
                     )
                 } else {
-                    let returned_thread_id = response
-                        .pointer("/result/thread/id")
-                        .and_then(Value::as_str);
-                    if returned_thread_id == Some(requested_thread_id) {
+                    if exact_success {
                         self.writer_admission_observations
                             .record_exact_resume_success(
                                 &thread_key,
@@ -1115,6 +1163,17 @@ impl WorkspaceSession {
                 };
                 observation_result
                     .map_err(|error| format!("writer admission observation failed: {error:?}"))?;
+                if exact_success {
+                    self.thread_lifecycle_observations
+                        .record_subscribed(
+                            thread_key.clone(),
+                            ThreadSubscriptionEvidenceSource::ThreadResumeResponse,
+                            observed_at,
+                        )
+                        .map_err(|error| {
+                            format!("thread subscription observation failed: {error:?}")
+                        })?;
+                }
                 dispatch_guard.complete();
                 Ok(response)
             }
@@ -1132,6 +1191,109 @@ impl WorkspaceSession {
                         .map_err(|observation_error| {
                             format!(
                                 "{error}; writer admission observation failed: {observation_error:?}"
+                            )
+                        })?;
+                }
+                dispatch_guard.complete();
+                Err(error)
+            }
+        }
+    }
+
+    pub(crate) async fn send_upstream_unsubscribe_request_for_workspace(
+        &self,
+        workspace_id: &str,
+        requested_thread_id: &str,
+    ) -> Result<Value, String> {
+        self.send_upstream_unsubscribe_request_for_workspace_observed(
+            workspace_id,
+            requested_thread_id,
+            DispatchBoundary::default(),
+        )
+        .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn send_upstream_unsubscribe_request_for_workspace_with_boundary(
+        &self,
+        workspace_id: &str,
+        requested_thread_id: &str,
+        boundary: DispatchBoundary,
+    ) -> Result<Value, String> {
+        self.send_upstream_unsubscribe_request_for_workspace_observed(
+            workspace_id,
+            requested_thread_id,
+            boundary,
+        )
+        .await
+    }
+
+    async fn send_upstream_unsubscribe_request_for_workspace_observed(
+        &self,
+        workspace_id: &str,
+        requested_thread_id: &str,
+        boundary: DispatchBoundary,
+    ) -> Result<Value, String> {
+        let codex_home_identity = self
+            .workspace_reconciler
+            .lock()
+            .await
+            .codex_home_identity()
+            .to_string();
+        let thread_key = CodexThreadKey::new(codex_home_identity, requested_thread_id);
+        let attempt = self
+            .thread_lifecycle_observations
+            .begin_unsubscribe(thread_key, requested_thread_id, unix_timestamp_ms() as i64)
+            .map_err(|error| format!("thread subscription observation failed: {error:?}"))?;
+        let mut dispatch_guard = UnsubscribeDispatchGuard {
+            runtime: &self.thread_lifecycle_observations,
+            attempt: attempt.clone(),
+            boundary: boundary.clone(),
+            completed: false,
+        };
+        let response = self
+            .send_request_for_workspace_observed(
+                workspace_id,
+                "thread/unsubscribe",
+                json!({ "threadId": requested_thread_id }),
+                Some(&boundary),
+            )
+            .await;
+
+        match response {
+            Ok(response) => {
+                let recognized = response.get("error").is_none()
+                    && matches!(
+                        response.pointer("/result/status").and_then(Value::as_str),
+                        Some("unsubscribed" | "notSubscribed" | "notLoaded")
+                    );
+                self.thread_lifecycle_observations
+                    .record_response(&attempt, &response, unix_timestamp_ms() as i64)
+                    .map_err(|error| {
+                        format!("thread subscription observation failed: {error:?}")
+                    })?;
+                dispatch_guard.complete();
+                if recognized {
+                    Ok(response)
+                } else {
+                    Err(
+                        "thread/unsubscribe response did not contain a recognized status"
+                            .to_string(),
+                    )
+                }
+            }
+            Err(error) => {
+                if boundary.crossed() {
+                    self.thread_lifecycle_observations
+                        .record_outcome_unknown(
+                            &attempt,
+                            classify_unsubscribe_dispatch_error(&error),
+                            &error,
+                            unix_timestamp_ms() as i64,
+                        )
+                        .map_err(|observation_error| {
+                            format!(
+                                "{error}; thread subscription observation failed: {observation_error:?}"
                             )
                         })?;
                 }
@@ -1406,6 +1568,16 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
         runtime_reconciler_for_session(resolved_codex_home.as_deref(), execution_environment_key)?;
     workspace_reconciler.register_workspace(&entry.id, &entry.path);
 
+    let writer_admission_observations = WriterAdmissionObservationRuntime::default();
+    let thread_lifecycle_observations = ThreadLifecycleObservationRuntime::new(
+        writer_admission_observations
+            .workspace_session_generation()
+            .clone(),
+        crate::shared::codex_core::thread_lifecycle_observation::AppServerConnectionGeneration::new(
+            uuid::Uuid::new_v4().to_string(),
+        )
+        .expect("UUID app-server connection generation"),
+    );
     let session = Arc::new(WorkspaceSession {
         codex_args,
         child: Mutex::new(child),
@@ -1416,7 +1588,8 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
         workspace_reconciler: Mutex::new(workspace_reconciler),
         execution_settings_evidence,
         projection_observations: Default::default(),
-        writer_admission_observations: Default::default(),
+        writer_admission_observations,
+        thread_lifecycle_observations,
         creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),
@@ -1502,6 +1675,21 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
                 .await
                 .codex_home_identity()
                 .to_string();
+            if completed_request
+                .as_ref()
+                .is_some_and(|request| request.method == "thread/start")
+                && value.get("error").is_none()
+            {
+                if let Some(thread_id) = extract_thread_id(&value) {
+                    let _ = session_clone
+                        .thread_lifecycle_observations
+                        .record_subscribed(
+                            CodexThreadKey::new(codex_home_identity.clone(), thread_id),
+                            ThreadSubscriptionEvidenceSource::ThreadStartResponse,
+                            settings_observed_at as i64,
+                        );
+                }
+            }
             reconcile_execution_settings_message(
                 &session_clone.execution_settings_evidence,
                 &codex_home_identity,

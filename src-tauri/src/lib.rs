@@ -234,6 +234,7 @@ pub fn run() {
             codex::read_thread,
             codex::thread_live_subscribe,
             codex::thread_live_unsubscribe,
+            codex::thread_upstream_unsubscribe,
             codex::fork_thread,
             codex::list_threads,
             codex::list_mcp_server_status,

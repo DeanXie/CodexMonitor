@@ -808,6 +808,14 @@ impl DaemonState {
         Ok(outcome.response())
     }
 
+    async fn thread_upstream_unsubscribe(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+    ) -> Result<Value, String> {
+        codex_core::thread_upstream_unsubscribe_core(&self.sessions, workspace_id, thread_id).await
+    }
+
     async fn fork_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
         codex_core::fork_thread_core(&self.sessions, workspace_id, thread_id).await
     }
@@ -1776,6 +1784,7 @@ mod tests {
             execution_settings_evidence: Default::default(),
             projection_observations: Default::default(),
             writer_admission_observations,
+            thread_lifecycle_observations: Default::default(),
             codex_args: None,
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),
@@ -1807,6 +1816,131 @@ mod tests {
             .unwrap_or_else(|error| panic!("read fixture {}: {error}", path.display()));
         serde_json::from_slice(&bytes)
             .unwrap_or_else(|error| panic!("parse fixture {}: {error}", path.display()))
+    }
+
+    async fn seed_thread_subscription(session: &WorkspaceSession, thread_id: &str) {
+        let codex_home_identity = session
+            .workspace_reconciler
+            .lock()
+            .await
+            .codex_home_identity()
+            .to_string();
+        session
+            .thread_lifecycle_observations
+            .record_subscribed(
+                crate::shared::codex_identity::CodexThreadKey::new(
+                    codex_home_identity,
+                    thread_id,
+                ),
+                crate::shared::codex_core::thread_lifecycle_observation::ThreadSubscriptionEvidenceSource::ThreadResumeResponse,
+                10,
+            )
+            .expect("seed subscription evidence");
+    }
+
+    async fn respond_to_next_app_server_request(session: &WorkspaceSession, status: &str) {
+        for _ in 0..100 {
+            let request_id = session.pending.lock().await.keys().next().copied();
+            if let Some(request_id) = request_id {
+                session
+                    .pending
+                    .lock()
+                    .await
+                    .remove(&request_id)
+                    .expect("pending app-server request")
+                    .send(json!({
+                        "id": request_id,
+                        "result": { "status": status },
+                    }))
+                    .expect("deliver app-server response");
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("app-server request was not dispatched");
+    }
+
+    #[test]
+    fn app_and_daemon_share_same_unsubscribe_mapping() {
+        run_async_test(async {
+            let thread_id = "01a08c05-7880-75a2-976c-2a5895b58723";
+            let workspace_id = "upstream-unsubscribe-parity";
+            let tmp = make_temp_dir("upstream-unsubscribe-parity");
+
+            let app_session =
+                make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+            seed_thread_subscription(&app_session, thread_id).await;
+            let app_sessions = Arc::new(Mutex::new(HashMap::from([(
+                workspace_id.to_string(),
+                Arc::clone(&app_session),
+            )])));
+            let app_call = crate::shared::codex_core::thread_upstream_unsubscribe_core(
+                &app_sessions,
+                workspace_id.to_string(),
+                thread_id.to_string(),
+            );
+            let app_response = async {
+                respond_to_next_app_server_request(&app_session, "notLoaded").await;
+            };
+            let (app_result, ()) = tokio::join!(app_call, app_response);
+
+            let daemon_session =
+                make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+            seed_thread_subscription(&daemon_session, thread_id).await;
+            let state = test_state(&tmp);
+            insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+            state
+                .sessions
+                .lock()
+                .await
+                .insert(workspace_id.to_string(), Arc::clone(&daemon_session));
+            let daemon_call = rpc::handle_rpc_request(
+                &state,
+                "thread_upstream_unsubscribe",
+                json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+                "daemon-test".to_string(),
+            );
+            let daemon_response = async {
+                respond_to_next_app_server_request(&daemon_session, "notLoaded").await;
+            };
+            let (daemon_result, ()) = tokio::join!(daemon_call, daemon_response);
+
+            assert_eq!(app_result, daemon_result);
+            assert_eq!(
+                app_result
+                    .expect("shared unsubscribe succeeds")
+                    .pointer("/result/status"),
+                Some(&json!("notLoaded"))
+            );
+
+            for session in [&app_session, &daemon_session] {
+                let codex_home_identity = session
+                    .workspace_reconciler
+                    .lock()
+                    .await
+                    .codex_home_identity()
+                    .to_string();
+                let key = crate::shared::codex_identity::CodexThreadKey::new(
+                    codex_home_identity,
+                    thread_id,
+                );
+                assert_eq!(
+                    session
+                        .thread_lifecycle_observations
+                        .subscription_snapshot(&key)
+                        .state,
+                    crate::shared::codex_core::thread_lifecycle_observation::ThreadSubscriptionObservationState::NotSubscribedForAppServerConnection
+                );
+                assert_eq!(
+                    session.thread_lifecycle_observations.runtime_state(&key),
+                    crate::shared::codex_core::thread_lifecycle_observation::ThreadRuntimeAvailabilityState::NotLoadedObserved
+                );
+                let mut child = session.child.lock().await;
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+            }
+            let _ = std::fs::remove_dir_all(tmp);
+        });
     }
 
     #[test]

@@ -1445,6 +1445,11 @@ mod tests {
         assert!(!can_retry_after_disconnect("thread_live_unsubscribe"));
     }
 
+    #[test]
+    fn unsubscribe_has_no_automatic_retry() {
+        assert!(!can_retry_after_disconnect("thread_upstream_unsubscribe"));
+    }
+
     fn host(value: &str) -> RemoteHostIdentity {
         RemoteHostIdentity::parse(value).unwrap()
     }

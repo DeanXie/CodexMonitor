@@ -28,3 +28,11 @@ is subscription lifecycle evidence, not writer-release acknowledgement.
 These fixtures deliberately contain no token, authorization secret, writer or
 lease identity, Remote-client ownership, or global `FREE`, `AVAILABLE`, or
 `RELEASED` state.
+
+## Upstream thread unsubscribe
+
+`thread-unsubscribe/` freezes the bundled `thread/unsubscribe` request shape
+and the three normalized response statuses used by Phase 3.5.2c.3. The
+fixtures are protocol evidence for app-server connection subscription state;
+they do not acknowledge runtime unload or writer release. The provenance file
+also freezes the no-retry and writer-observation non-transition boundaries.

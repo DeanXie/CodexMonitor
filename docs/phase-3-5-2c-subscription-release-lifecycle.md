@@ -2,8 +2,9 @@
 
 Status: Phase 3.5.2c.1 shared subscription and runtime observation contracts
 are **PASS / COMPLETE / FROZEN**. Phase 3.5.2c.2 synthetic detach boundary
-freeze is **PASS / COMPLETE / FROZEN**. Phase 3.5.2c remains in progress.
-Phase 3.5.2c.3 has not started.
+freeze and Phase 3.5.2c.3 upstream unsubscribe instrumentation are
+**PASS / COMPLETE / FROZEN**. Phase 3.5.2c remains in progress. Phase 3.5.2c.4
+has not started.
 
 ## Authority separation
 
@@ -141,10 +142,64 @@ a current WorkspaceSession returns `workspace session unavailable`. Neither
 case emits a local detach event or manufactures subscription, runtime, or
 writer evidence.
 
+## Explicit upstream unsubscribe boundary
+
+Phase 3.5.2c.3 adds a separate explicit operation named
+`thread_upstream_unsubscribe` on both the App command and daemon RPC surfaces.
+Both adapters call `thread_upstream_unsubscribe_core`, which dispatches exactly
+one app-server `thread/unsubscribe` request with the requested full Thread ID.
+The mutation is excluded from automatic disconnect retry.
+
+Before dispatch, the shared runtime creates a unique attempt ID and records
+`UNSUBSCRIBE_PENDING` for the tuple:
+
+```text
+(
+  WorkspaceSession generation,
+  app-server connection generation,
+  CodexThreadKey
+)
+```
+
+The attempt ID is correlation evidence only. It is not a subscription owner,
+writer owner, or lease. A second concurrent attempt for the same scoped Thread
+fails closed, and an attempt from an old generation cannot update a replacement
+generation.
+
+The exact response mapping is:
+
+```text
+unsubscribed
+  -> UNSUBSCRIBED_FOR_APP_SERVER_CONNECTION
+
+notSubscribed
+  -> NOT_SUBSCRIBED_FOR_APP_SERVER_CONNECTION
+
+notLoaded
+  -> NOT_SUBSCRIBED_FOR_APP_SERVER_CONNECTION
+  +  NOT_LOADED_OBSERVED in the independent runtime model
+```
+
+Timeout, response loss, connection loss, cancellation after dispatch, or a
+malformed response records `UNSUBSCRIBE_OUTCOME_UNKNOWN`. No such outcome is
+automatically retried. Cancellation before the dispatch boundary restores the
+prior subscribed evidence, because upstream acceptance is known not to have
+been attempted. A response containing both JSON-RPC `error` and a recognized
+result status is malformed and cannot record successful unsubscribe evidence.
+Successful unsubscribe does not end the shared
+WorkspaceSession or app-server process, and every response or ambiguous outcome
+leaves `WriterAdmissionObservation` unchanged.
+
+The bundled request and response fixtures live in
+`docs/fixtures/app-server/thread-unsubscribe/`. No real production Thread was
+used to verify this slice.
+
 ## Slice boundary
 
 Phase 3.5.2c.1 contains crate-private shared reducers and contract tests only.
 Phase 3.5.2c.2 centralizes and freezes the pre-existing local App/daemon detach
-contract without adding an upstream request or public API. Upstream
-`thread/unsubscribe`, response mapping, runtime unload observation, and
-`thread/closed` ingestion remain outside this slice.
+contract without adding an upstream request or public API. Phase 3.5.2c.3 adds
+the explicit request, response/outcome mapping, attempt correlation, generation
+isolation, and no-retry boundary. Delayed `thread/closed` ingestion, unload
+timing reconciliation, reconnect reconciliation, and Phase 3.5.2c.4 remain
+outside this slice.

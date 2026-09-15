@@ -110,6 +110,7 @@ async fn make_session() -> Arc<WorkspaceSession> {
         execution_settings_evidence: Default::default(),
         projection_observations: Default::default(),
         writer_admission_observations,
+        thread_lifecycle_observations: Default::default(),
         creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),
@@ -164,7 +165,7 @@ async fn stop_session(session: &WorkspaceSession) {
 }
 
 #[tokio::test]
-async fn synthetic_detach_dispatches_zero_upstream_unsubscribe() {
+async fn synthetic_detach_still_dispatches_zero_upstream_unsubscribe() {
     let (workspaces, sessions, session) = fixture().await;
 
     let outcome = detach(&workspaces, &sessions).await;

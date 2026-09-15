@@ -55,6 +55,7 @@ impl QueryFixture {
             writer_admission_observations: WriterAdmissionObservationRuntime::new(
                 WorkspaceSessionGeneration::new(generation).unwrap(),
             ),
+            thread_lifecycle_observations: Default::default(),
             creation_coordinator: Mutex::new(None),
             runtime_observation_keys: Mutex::new(HashSet::new()),
             runtime_observation_clock: AtomicU64::new(0),

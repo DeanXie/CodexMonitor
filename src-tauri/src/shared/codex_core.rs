@@ -35,6 +35,10 @@ mod creation_coordination_tests;
 #[path = "codex_core/creation_acknowledgement_tests.rs"]
 mod creation_acknowledgement_tests;
 
+#[cfg(test)]
+#[path = "codex_core/upstream_unsubscribe_instrumentation_tests.rs"]
+mod upstream_unsubscribe_instrumentation_tests;
+
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
 #[allow(dead_code)]
 const MAX_INLINE_IMAGE_BYTES: u64 = 50 * 1024 * 1024;
@@ -514,6 +518,25 @@ pub(crate) async fn thread_live_unsubscribe_core(
         workspace_id,
         thread_id,
     })
+}
+
+/// Dispatch a real app-server `thread/unsubscribe` request.
+///
+/// This boundary is intentionally separate from `thread_live_unsubscribe`,
+/// which remains a local synthetic live detach.
+pub(crate) async fn thread_upstream_unsubscribe_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+) -> Result<Value, String> {
+    let thread_id = thread_id.trim();
+    if thread_id.is_empty() {
+        return Err("threadId is required".to_string());
+    }
+    let session = get_session_clone(sessions, &workspace_id).await?;
+    session
+        .send_upstream_unsubscribe_request_for_workspace(&workspace_id, thread_id)
+        .await
 }
 
 pub(crate) async fn fork_thread_core(

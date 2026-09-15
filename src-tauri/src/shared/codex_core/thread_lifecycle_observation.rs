@@ -10,6 +10,9 @@
 use super::writer_admission_observation::WorkspaceSessionGeneration;
 use crate::shared::codex_identity::CodexThreadKey;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 const UNSUBSCRIBE_METHOD: &str = "thread/unsubscribe";
 
@@ -127,6 +130,7 @@ pub(crate) enum ThreadSubscriptionOutcomeErrorKind {
     Timeout,
     DispatchDisconnected,
     Cancellation,
+    MalformedResponse,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -175,6 +179,8 @@ pub(crate) struct ThreadSubscriptionObservationSnapshot {
 pub(crate) enum ThreadSubscriptionTransitionError {
     InvalidTransition,
     ThreadIdentityMismatch,
+    AttemptMismatch,
+    ScopeMismatch,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -328,6 +334,17 @@ impl ThreadSubscriptionObservationTracker {
         self.record_response(
             ThreadSubscriptionObservationState::NotSubscribedForAppServerConnection,
             "notSubscribed",
+            observed_at,
+        )
+    }
+
+    pub(crate) fn record_not_loaded(
+        &mut self,
+        observed_at: i64,
+    ) -> Result<(), ThreadSubscriptionTransitionError> {
+        self.record_response(
+            ThreadSubscriptionObservationState::NotSubscribedForAppServerConnection,
+            "notLoaded",
             observed_at,
         )
     }
@@ -541,5 +558,253 @@ impl ThreadRuntimeAvailabilityTracker {
             observed_at,
             evidence_source,
         });
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ThreadUnsubscribeAttempt {
+    scope: ThreadLifecycleObservationScope,
+    attempt_id: ThreadSubscriptionAttemptId,
+    previous_observation: ThreadSubscriptionObservation,
+}
+
+impl ThreadUnsubscribeAttempt {
+    pub(crate) fn attempt_id(&self) -> &ThreadSubscriptionAttemptId {
+        &self.attempt_id
+    }
+}
+
+struct ThreadLifecycleThreadObservations {
+    subscription: ThreadSubscriptionObservationTracker,
+    runtime: ThreadRuntimeAvailabilityTracker,
+}
+
+/// Process-local subscription and runtime evidence for one WorkspaceSession
+/// and one concrete app-server connection generation.
+pub(crate) struct ThreadLifecycleObservationRuntime {
+    workspace_session_generation: WorkspaceSessionGeneration,
+    app_server_connection_generation: AppServerConnectionGeneration,
+    observations: Mutex<HashMap<CodexThreadKey, ThreadLifecycleThreadObservations>>,
+}
+
+impl Default for ThreadLifecycleObservationRuntime {
+    fn default() -> Self {
+        Self::new(
+            WorkspaceSessionGeneration::new(uuid::Uuid::new_v4().to_string())
+                .expect("UUID workspace session generation"),
+            AppServerConnectionGeneration::new(uuid::Uuid::new_v4().to_string())
+                .expect("UUID app-server connection generation"),
+        )
+    }
+}
+
+impl ThreadLifecycleObservationRuntime {
+    pub(crate) fn new(
+        workspace_session_generation: WorkspaceSessionGeneration,
+        app_server_connection_generation: AppServerConnectionGeneration,
+    ) -> Self {
+        Self {
+            workspace_session_generation,
+            app_server_connection_generation,
+            observations: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub(crate) fn workspace_session_generation(&self) -> &WorkspaceSessionGeneration {
+        &self.workspace_session_generation
+    }
+
+    pub(crate) fn app_server_connection_generation(&self) -> &AppServerConnectionGeneration {
+        &self.app_server_connection_generation
+    }
+
+    pub(crate) fn record_subscribed(
+        &self,
+        thread_key: CodexThreadKey,
+        source: ThreadSubscriptionEvidenceSource,
+        observed_at: i64,
+    ) -> Result<(), ThreadSubscriptionTransitionError> {
+        let mut observations = self.lock_observations();
+        if observations.get(&thread_key).is_some_and(|entry| {
+            entry.subscription.state() == ThreadSubscriptionObservationState::UnsubscribePending
+        }) {
+            return Err(ThreadSubscriptionTransitionError::InvalidTransition);
+        }
+        let scope = self.scope(thread_key.clone());
+        let mut subscription = ThreadSubscriptionObservationTracker::new(scope.clone());
+        subscription.record_subscribed(source, observed_at)?;
+        let runtime = observations
+            .remove(&thread_key)
+            .map(|entry| entry.runtime)
+            .unwrap_or_else(|| ThreadRuntimeAvailabilityTracker::new(scope));
+        observations.insert(
+            thread_key,
+            ThreadLifecycleThreadObservations {
+                subscription,
+                runtime,
+            },
+        );
+        Ok(())
+    }
+
+    pub(crate) fn begin_unsubscribe(
+        &self,
+        thread_key: CodexThreadKey,
+        requested_full_thread_id: &str,
+        observed_at: i64,
+    ) -> Result<ThreadUnsubscribeAttempt, ThreadSubscriptionTransitionError> {
+        let attempt_id = ThreadSubscriptionAttemptId::new(uuid::Uuid::new_v4().to_string())
+            .expect("UUID unsubscribe attempt id");
+        let mut observations = self.lock_observations();
+        let entry = observations
+            .get_mut(&thread_key)
+            .ok_or(ThreadSubscriptionTransitionError::InvalidTransition)?;
+        let previous_observation = entry
+            .subscription
+            .latest_observation()
+            .cloned()
+            .ok_or(ThreadSubscriptionTransitionError::InvalidTransition)?;
+        entry.subscription.begin_unsubscribe(
+            attempt_id.clone(),
+            requested_full_thread_id,
+            observed_at,
+        )?;
+        Ok(ThreadUnsubscribeAttempt {
+            scope: self.scope(thread_key),
+            attempt_id,
+            previous_observation,
+        })
+    }
+
+    pub(crate) fn restore_after_not_dispatched(
+        &self,
+        attempt: &ThreadUnsubscribeAttempt,
+    ) -> Result<(), ThreadSubscriptionTransitionError> {
+        self.validate_attempt_scope(attempt)?;
+        let mut observations = self.lock_observations();
+        let entry = self.pending_entry(&mut observations, attempt)?;
+        entry.subscription.latest_observation = Some(attempt.previous_observation.clone());
+        Ok(())
+    }
+
+    pub(crate) fn record_response(
+        &self,
+        attempt: &ThreadUnsubscribeAttempt,
+        response: &Value,
+        observed_at: i64,
+    ) -> Result<(), ThreadSubscriptionTransitionError> {
+        self.validate_attempt_scope(attempt)?;
+        let status = response
+            .get("error")
+            .is_none()
+            .then(|| response.pointer("/result/status").and_then(Value::as_str))
+            .flatten();
+        let mut observations = self.lock_observations();
+        let entry = self.pending_entry(&mut observations, attempt)?;
+        match status {
+            Some("unsubscribed") => entry.subscription.record_unsubscribed(observed_at),
+            Some("notSubscribed") => entry.subscription.record_not_subscribed(observed_at),
+            Some("notLoaded") => {
+                entry.subscription.record_not_loaded(observed_at)?;
+                entry.runtime.record_not_loaded(
+                    ThreadRuntimeAvailabilityEvidenceSource::ThreadUnsubscribeNotLoadedResponse,
+                    observed_at,
+                );
+                Ok(())
+            }
+            _ => entry.subscription.record_outcome_unknown(
+                ThreadSubscriptionOutcomeErrorKind::MalformedResponse,
+                "thread/unsubscribe response did not contain a recognized status".to_string(),
+                observed_at,
+            ),
+        }
+    }
+
+    pub(crate) fn record_outcome_unknown(
+        &self,
+        attempt: &ThreadUnsubscribeAttempt,
+        kind: ThreadSubscriptionOutcomeErrorKind,
+        diagnostic: impl Into<String>,
+        observed_at: i64,
+    ) -> Result<(), ThreadSubscriptionTransitionError> {
+        self.validate_attempt_scope(attempt)?;
+        let mut observations = self.lock_observations();
+        let entry = self.pending_entry(&mut observations, attempt)?;
+        entry
+            .subscription
+            .record_outcome_unknown(kind, diagnostic.into(), observed_at)
+    }
+
+    pub(crate) fn subscription_snapshot(
+        &self,
+        thread_key: &CodexThreadKey,
+    ) -> ThreadSubscriptionObservationSnapshot {
+        self.lock_observations()
+            .get(thread_key)
+            .map(|entry| entry.subscription.snapshot())
+            .unwrap_or_else(|| {
+                ThreadSubscriptionObservationTracker::new(self.scope(thread_key.clone())).snapshot()
+            })
+    }
+
+    pub(crate) fn runtime_state(
+        &self,
+        thread_key: &CodexThreadKey,
+    ) -> ThreadRuntimeAvailabilityState {
+        self.lock_observations()
+            .get(thread_key)
+            .map_or(ThreadRuntimeAvailabilityState::Unknown, |entry| {
+                entry.runtime.state()
+            })
+    }
+
+    fn scope(&self, thread_key: CodexThreadKey) -> ThreadLifecycleObservationScope {
+        ThreadLifecycleObservationScope::new(
+            self.workspace_session_generation.clone(),
+            self.app_server_connection_generation.clone(),
+            thread_key,
+        )
+    }
+
+    fn validate_attempt_scope(
+        &self,
+        attempt: &ThreadUnsubscribeAttempt,
+    ) -> Result<(), ThreadSubscriptionTransitionError> {
+        if attempt.scope.workspace_session_generation() != &self.workspace_session_generation
+            || attempt.scope.app_server_connection_generation()
+                != &self.app_server_connection_generation
+        {
+            return Err(ThreadSubscriptionTransitionError::ScopeMismatch);
+        }
+        Ok(())
+    }
+
+    fn pending_entry<'a>(
+        &self,
+        observations: &'a mut HashMap<CodexThreadKey, ThreadLifecycleThreadObservations>,
+        attempt: &ThreadUnsubscribeAttempt,
+    ) -> Result<&'a mut ThreadLifecycleThreadObservations, ThreadSubscriptionTransitionError> {
+        let entry = observations
+            .get_mut(attempt.scope.thread_key())
+            .ok_or(ThreadSubscriptionTransitionError::InvalidTransition)?;
+        let current_attempt_id = entry
+            .subscription
+            .latest_observation()
+            .and_then(|observation| observation.attempt_id.as_ref());
+        if current_attempt_id != Some(&attempt.attempt_id) {
+            return Err(ThreadSubscriptionTransitionError::AttemptMismatch);
+        }
+        if entry.subscription.state() != ThreadSubscriptionObservationState::UnsubscribePending {
+            return Err(ThreadSubscriptionTransitionError::InvalidTransition);
+        }
+        Ok(entry)
+    }
+
+    fn lock_observations(
+        &self,
+    ) -> std::sync::MutexGuard<'_, HashMap<CodexThreadKey, ThreadLifecycleThreadObservations>> {
+        self.observations
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }

@@ -1147,6 +1147,10 @@ export async function threadLiveUnsubscribe(workspaceId: string, threadId: strin
   return invoke<any>("thread_live_unsubscribe", { workspaceId, threadId });
 }
 
+export async function threadUpstreamUnsubscribe(workspaceId: string, threadId: string) {
+  return invoke<any>("thread_upstream_unsubscribe", { workspaceId, threadId });
+}
+
 export async function archiveThread(workspaceId: string, threadId: string) {
   return invoke<any>("archive_thread", { workspaceId, threadId });
 }

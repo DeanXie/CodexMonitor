@@ -313,8 +313,10 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   malformed and cannot produce success evidence.
 
   None of these outcomes transitions `WriterAdmissionObservation` or proves
-  writer release, availability, ownership, or a lease. Delayed
-  `thread/closed` and unload reconciliation remain outside this slice.
+  writer release, availability, ownership, or a lease. A later
+  `thread/closed` or `thread/status/changed(notLoaded)` is reconciled as
+  independent `NOT_LOADED_OBSERVED` runtime evidence and never rewrites the
+  subscription response or unknown outcome.
 - `thread/fork`
 - `thread/list`
 - `thread/archive`
@@ -407,8 +409,13 @@ evidence, and it is excluded from automatic disconnect retry. See
 `docs/phase-3-5-2c-subscription-release-lifecycle.md`.
 
 Phase 3.5.2c.3 wires the explicit upstream request to those reducers through a
-single App/daemon shared core. It does not change the synthetic detach path and
-does not implement delayed `thread/closed` or unload reconciliation.
+single App/daemon shared core. Phase 3.5.2c.4 adds shared ingestion for
+`thread/closed` and `thread/status/changed(status.type = notLoaded)`, preserving
+runtime evidence independently of subscription response order. Transport end,
+confirmed app-server process end, and last shared-route teardown are recorded
+as connection-generation lifecycle evidence rather than unsubscribe success.
+Replacement connection and WorkspaceSession generations start without inherited
+current subscription/runtime observations or retried unsubscribe attempts.
 
 ## Server Requests (App-Server -> CodexMonitor, v2)
 

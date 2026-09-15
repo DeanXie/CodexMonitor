@@ -1,10 +1,7 @@
 # Phase 3.5.2c — Subscription / Release Lifecycle
 
-Status: Phase 3.5.2c.1 shared subscription and runtime observation contracts
-are **PASS / COMPLETE / FROZEN**. Phase 3.5.2c.2 synthetic detach boundary
-freeze and Phase 3.5.2c.3 upstream unsubscribe instrumentation are
-**PASS / COMPLETE / FROZEN**. Phase 3.5.2c remains in progress. Phase 3.5.2c.4
-has not started.
+Status: Phase 3.5.2c.1 through Phase 3.5.2c.4 are **PASS / COMPLETE /
+FROZEN**. Phase 3.5.2c remains in progress.
 
 ## Authority separation
 
@@ -194,12 +191,60 @@ The bundled request and response fixtures live in
 `docs/fixtures/app-server/thread-unsubscribe/`. No real production Thread was
 used to verify this slice.
 
+## Lifecycle reconciliation
+
+Phase 3.5.2c.4 ingests `thread/closed` and
+`thread/status/changed(status.type = notLoaded)` in the shared app-server
+message boundary used by both the App and daemon. Either notification is
+direct runtime evidence and records `NOT_LOADED_OBSERVED`. It does not change
+the connection-scoped subscription observation or writer-admission
+observation.
+
+Unsubscribe responses and runtime notifications remain separate evidence, so
+ordering does not rewrite either fact:
+
+```text
+unsubscribe response -> delayed thread/closed
+thread/closed -> later unsubscribe response
+unknown unsubscribe outcome -> later thread/closed
+```
+
+In the third sequence, the subscription state remains
+`UNSUBSCRIBE_OUTCOME_UNKNOWN` while runtime availability becomes
+`NOT_LOADED_OBSERVED`. A notification cannot manufacture a missing unsubscribe
+response.
+
+The lifecycle runtime also preserves direct end evidence for its app-server
+connection generation. Stdout transport end is recorded as transport
+disconnect; confirmed child exit and explicit final shared-route teardown are
+recorded separately as process exit or process termination. These records are
+not unsubscribe responses. A replacement app-server connection generation
+starts subscription at `NOT_OBSERVED`; a replacement WorkspaceSession
+generation starts subscription at `NOT_OBSERVED`, runtime availability at
+`UNKNOWN`, and writer admission at `NOT_OBSERVED`. No ambiguous unsubscribe is
+replayed or retried.
+
+Multiple app-server connections may hold independent subscriptions for the
+same `CodexThreadKey`. An unsubscribe response for one connection changes only
+that connection's observation; it does not unsubscribe another connection,
+establish global unsubscribe, or immediately establish runtime unload.
+CodexMonitor does not assign those connection subscriptions to Remote clients.
+Attaching a new workspace route and removing the last route share one lifecycle
+mutex, so a route cannot be attached to a generation concurrently selected for
+termination.
+
+Only confirmed WorkspaceSession generation end retains the separately frozen
+writer transition to `SESSION_ENDED_RELEASE_UNOBSERVED`. `thread/closed`,
+`notLoaded`, transport disconnect without confirmed session end, and every
+unsubscribe outcome add no writer-free, writer-available, writer-released,
+owner, or lease fact.
+
 ## Slice boundary
 
-Phase 3.5.2c.1 contains crate-private shared reducers and contract tests only.
-Phase 3.5.2c.2 centralizes and freezes the pre-existing local App/daemon detach
-contract without adding an upstream request or public API. Phase 3.5.2c.3 adds
-the explicit request, response/outcome mapping, attempt correlation, generation
-isolation, and no-retry boundary. Delayed `thread/closed` ingestion, unload
-timing reconciliation, reconnect reconciliation, and Phase 3.5.2c.4 remain
-outside this slice.
+Phase 3.5.2c.1 contains the shared reducers. Phase 3.5.2c.2 freezes the local
+App/daemon detach contract. Phase 3.5.2c.3 adds the explicit upstream request,
+response/outcome mapping, attempt correlation, generation isolation, and
+no-retry boundary. Phase 3.5.2c.4 adds direct runtime-not-loaded notification
+ingestion, order-independent evidence reconciliation, connection-end history,
+generation reset, reconnect isolation, and multi-subscriber coverage. It adds
+no new public mutation or Remote-client ownership model.

@@ -467,6 +467,25 @@ pub(crate) enum ThreadRuntimeAvailabilityEvidenceSource {
     ThreadUnsubscribeNotLoadedResponse,
 }
 
+/// Direct lifecycle evidence for one app-server connection generation.
+///
+/// This is deliberately not an unsubscribe response and carries no writer
+/// release semantics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AppServerConnectionEndEvidenceKind {
+    TransportDisconnected,
+    AppServerProcessExited,
+    AppServerProcessTerminated,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AppServerConnectionEndObservation {
+    pub app_server_connection_generation: AppServerConnectionGeneration,
+    pub kind: AppServerConnectionEndEvidenceKind,
+    pub observed_at: i64,
+    pub diagnostic: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ThreadRuntimeAvailabilityObservation {
     pub scope: ThreadLifecycleObservationScope,
@@ -585,6 +604,7 @@ pub(crate) struct ThreadLifecycleObservationRuntime {
     workspace_session_generation: WorkspaceSessionGeneration,
     app_server_connection_generation: AppServerConnectionGeneration,
     observations: Mutex<HashMap<CodexThreadKey, ThreadLifecycleThreadObservations>>,
+    connection_end_history: Mutex<Vec<AppServerConnectionEndObservation>>,
 }
 
 impl Default for ThreadLifecycleObservationRuntime {
@@ -607,6 +627,7 @@ impl ThreadLifecycleObservationRuntime {
             workspace_session_generation,
             app_server_connection_generation,
             observations: Mutex::new(HashMap::new()),
+            connection_end_history: Mutex::new(Vec::new()),
         }
     }
 
@@ -616,6 +637,27 @@ impl ThreadLifecycleObservationRuntime {
 
     pub(crate) fn app_server_connection_generation(&self) -> &AppServerConnectionGeneration {
         &self.app_server_connection_generation
+    }
+
+    pub(crate) fn for_new_workspace_session_generation(
+        &self,
+        workspace_session_generation: WorkspaceSessionGeneration,
+        app_server_connection_generation: AppServerConnectionGeneration,
+    ) -> Self {
+        Self::new(
+            workspace_session_generation,
+            app_server_connection_generation,
+        )
+    }
+
+    pub(crate) fn for_new_app_server_connection_generation(
+        &self,
+        app_server_connection_generation: AppServerConnectionGeneration,
+    ) -> Self {
+        Self::new(
+            self.workspace_session_generation.clone(),
+            app_server_connection_generation,
+        )
     }
 
     pub(crate) fn record_subscribed(
@@ -756,6 +798,63 @@ impl ThreadLifecycleObservationRuntime {
             .map_or(ThreadRuntimeAvailabilityState::Unknown, |entry| {
                 entry.runtime.state()
             })
+    }
+
+    pub(crate) fn runtime_observation(
+        &self,
+        thread_key: &CodexThreadKey,
+    ) -> Option<ThreadRuntimeAvailabilityObservation> {
+        self.lock_observations()
+            .get(thread_key)
+            .and_then(|entry| entry.runtime.latest_observation().cloned())
+    }
+
+    pub(crate) fn record_runtime_not_loaded(
+        &self,
+        thread_key: CodexThreadKey,
+        evidence_source: ThreadRuntimeAvailabilityEvidenceSource,
+        observed_at: i64,
+    ) {
+        let mut observations = self.lock_observations();
+        let scope = self.scope(thread_key.clone());
+        let entry =
+            observations
+                .entry(thread_key)
+                .or_insert_with(|| ThreadLifecycleThreadObservations {
+                    subscription: ThreadSubscriptionObservationTracker::new(scope.clone()),
+                    runtime: ThreadRuntimeAvailabilityTracker::new(scope),
+                });
+        entry
+            .runtime
+            .record_not_loaded(evidence_source, observed_at);
+    }
+
+    pub(crate) fn record_connection_ended(
+        &self,
+        kind: AppServerConnectionEndEvidenceKind,
+        diagnostic: impl Into<String>,
+        observed_at: i64,
+    ) {
+        let observation = AppServerConnectionEndObservation {
+            app_server_connection_generation: self.app_server_connection_generation.clone(),
+            kind,
+            observed_at,
+            diagnostic: diagnostic.into(),
+        };
+        let mut history = self
+            .connection_end_history
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !history.iter().any(|existing| existing.kind == kind) {
+            history.push(observation);
+        }
+    }
+
+    pub(crate) fn connection_end_history(&self) -> Vec<AppServerConnectionEndObservation> {
+        self.connection_end_history
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     fn scope(&self, thread_key: CodexThreadKey) -> ThreadLifecycleObservationScope {

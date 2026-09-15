@@ -1,0 +1,9 @@
+{
+  "method": "thread/status/changed",
+  "params": {
+    "threadId": "01a08c05-7880-75a2-976c-2a5895b58723",
+    "status": {
+      "type": "notLoaded"
+    }
+  }
+}

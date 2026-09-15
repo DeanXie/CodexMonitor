@@ -133,6 +133,7 @@ pub(crate) async fn kill_session_by_id(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     id: &str,
 ) {
+    let _spawn_guard = workspace_session_spawn_lock().lock().await;
     let (removed, still_referenced) = {
         let mut sessions = sessions.lock().await;
         let removed = sessions.remove(id);
@@ -160,10 +161,12 @@ mod tests {
     use std::process::Stdio;
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::time::Duration;
 
     use tokio::process::Command;
     use tokio::sync::Mutex;
 
+    use crate::shared::codex_core::thread_lifecycle_observation::AppServerConnectionEndEvidenceKind;
     use crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationState;
     use crate::shared::codex_identity::CodexThreadKey;
     use crate::types::{WorkspaceKind, WorkspaceSettings};
@@ -323,7 +326,76 @@ mod tests {
                 session.writer_admission_observations.state(&thread_key),
                 WriterAdmissionObservationState::AdmittedForSession
             );
+            assert!(session
+                .thread_lifecycle_observations
+                .connection_end_history()
+                .is_empty());
             assert!(session_process_is_alive(&session).await);
+            kill_session_by_id(&sessions, "ws-b").await;
+        });
+    }
+
+    #[test]
+    fn concurrent_attach_and_last_route_teardown_preserves_reused_session() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let existing = make_session(make_workspace_entry("ws-a"));
+            let workspaces = Arc::new(Mutex::new(HashMap::from([(
+                "ws-b".to_string(),
+                make_workspace_entry("ws-b"),
+            )])));
+            let sessions = Arc::new(Mutex::new(HashMap::from([(
+                "ws-a".to_string(),
+                Arc::clone(&existing),
+            )])));
+            let app_settings = Arc::new(Mutex::new(AppSettings::default()));
+
+            let lifecycle_guard = workspace_session_spawn_lock().lock().await;
+            let workspace_ids_guard = existing.workspace_ids.lock().await;
+            let connect_task = tokio::spawn({
+                let workspaces = Arc::clone(&workspaces);
+                let sessions = Arc::clone(&sessions);
+                let app_settings = Arc::clone(&app_settings);
+                async move {
+                    connect_workspace_core(
+                        "ws-b".to_string(),
+                        &workspaces,
+                        &sessions,
+                        &app_settings,
+                        |_entry, _default_bin, _codex_args, _codex_home| async move {
+                            Err("shared session should be reused".to_string())
+                        },
+                    )
+                    .await
+                }
+            });
+            tokio::time::sleep(Duration::from_millis(10)).await;
+
+            let teardown_task = tokio::spawn({
+                let sessions = Arc::clone(&sessions);
+                async move { kill_session_by_id(&sessions, "ws-a").await }
+            });
+            tokio::time::sleep(Duration::from_millis(50)).await;
+
+            assert!(
+                sessions.lock().await.contains_key("ws-a"),
+                "last-route teardown escaped the attach lifecycle boundary"
+            );
+            assert!(!teardown_task.is_finished());
+
+            drop(lifecycle_guard);
+            tokio::task::yield_now().await;
+            drop(workspace_ids_guard);
+            connect_task
+                .await
+                .expect("join connect task")
+                .expect("reuse shared session");
+            teardown_task.await.expect("join teardown task");
+
+            let remaining = sessions.lock().await.get("ws-b").cloned();
+            assert!(remaining
+                .as_ref()
+                .is_some_and(|session| Arc::ptr_eq(session, &existing)));
+            assert!(session_process_is_alive(&existing).await);
             kill_session_by_id(&sessions, "ws-b").await;
         });
     }
@@ -340,6 +412,14 @@ mod tests {
             assert_eq!(
                 session.writer_admission_observations.state(&thread_key),
                 WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+            );
+            let connection_history = session
+                .thread_lifecycle_observations
+                .connection_end_history();
+            assert_eq!(connection_history.len(), 1);
+            assert_eq!(
+                connection_history[0].kind,
+                AppServerConnectionEndEvidenceKind::AppServerProcessTerminated
             );
         });
     }
@@ -358,6 +438,14 @@ mod tests {
             assert_eq!(
                 session.writer_admission_observations.state(&thread_key),
                 WriterAdmissionObservationState::SessionEndedReleaseUnobserved
+            );
+            let connection_history = session
+                .thread_lifecycle_observations
+                .connection_end_history();
+            assert_eq!(connection_history.len(), 1);
+            assert_eq!(
+                connection_history[0].kind,
+                AppServerConnectionEndEvidenceKind::AppServerProcessExited
             );
         });
     }

@@ -16,7 +16,8 @@ use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
 use crate::shared::codex_core::thread_lifecycle_observation::{
-    ThreadLifecycleObservationRuntime, ThreadSubscriptionEvidenceSource,
+    AppServerConnectionEndEvidenceKind, ThreadLifecycleObservationRuntime,
+    ThreadRuntimeAvailabilityEvidenceSource, ThreadSubscriptionEvidenceSource,
     ThreadSubscriptionOutcomeErrorKind, ThreadUnsubscribeAttempt,
 };
 use crate::shared::codex_core::writer_admission_observation::{
@@ -630,6 +631,41 @@ fn confirmed_parent_thread_id(value: &Value) -> Option<String> {
     .map(str::to_string)
 }
 
+/// Reconcile only direct Thread lifecycle evidence from an app-server message.
+/// Subscription responses remain owned by the explicit unsubscribe request
+/// boundary, and writer admission is intentionally untouched here.
+pub(crate) fn reconcile_thread_lifecycle_message(
+    runtime: &ThreadLifecycleObservationRuntime,
+    codex_home_identity: &str,
+    value: &Value,
+    observed_at: i64,
+) -> bool {
+    let evidence_source = match value.get("method").and_then(Value::as_str) {
+        Some("thread/closed") => ThreadRuntimeAvailabilityEvidenceSource::ThreadClosedNotification,
+        Some("thread/status/changed")
+            if value.pointer("/params/status/type").and_then(Value::as_str)
+                == Some("notLoaded") =>
+        {
+            ThreadRuntimeAvailabilityEvidenceSource::ThreadStatusChangedNotification
+        }
+        _ => return false,
+    };
+    let Some(thread_id) = value
+        .pointer("/params/threadId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|thread_id| !thread_id.is_empty())
+    else {
+        return false;
+    };
+    runtime.record_runtime_not_loaded(
+        CodexThreadKey::new(codex_home_identity, thread_id),
+        evidence_source,
+        observed_at,
+    );
+    true
+}
+
 fn reconcile_runtime_message(
     runtime: &mut RuntimeWorkspaceReconciler,
     request: Option<&RequestContext>,
@@ -932,11 +968,31 @@ impl WorkspaceSession {
         kind: WriterAdmissionSessionEndEvidenceKind,
         diagnostic: impl Into<String>,
     ) -> usize {
-        self.writer_admission_observations.record_session_ended(
-            kind,
+        let diagnostic = diagnostic.into();
+        let observed_at = unix_timestamp_ms() as i64;
+        let connection_kind = match kind {
+            WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited => {
+                AppServerConnectionEndEvidenceKind::AppServerProcessExited
+            }
+            WriterAdmissionSessionEndEvidenceKind::AppServerProcessTerminated => {
+                AppServerConnectionEndEvidenceKind::AppServerProcessTerminated
+            }
+        };
+        self.thread_lifecycle_observations.record_connection_ended(
+            connection_kind,
+            diagnostic.clone(),
+            observed_at,
+        );
+        self.writer_admission_observations
+            .record_session_ended(kind, diagnostic, observed_at)
+    }
+
+    pub(crate) fn record_app_server_transport_disconnected(&self, diagnostic: impl Into<String>) {
+        self.thread_lifecycle_observations.record_connection_ended(
+            AppServerConnectionEndEvidenceKind::TransportDisconnected,
             diagnostic,
             unix_timestamp_ms() as i64,
-        )
+        );
     }
 
     pub(crate) async fn register_workspace(&self, workspace_id: &str) {
@@ -1675,6 +1731,12 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
                 .await
                 .codex_home_identity()
                 .to_string();
+            reconcile_thread_lifecycle_message(
+                &session_clone.thread_lifecycle_observations,
+                &codex_home_identity,
+                &value,
+                settings_observed_at as i64,
+            );
             if completed_request
                 .as_ref()
                 .is_some_and(|request| request.method == "thread/start")
@@ -1925,6 +1987,7 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
         // Ensure pending foreground requests cannot accumulate after process output ends.
         session_clone.pending.lock().await.clear();
         session_clone.request_context.lock().await.clear();
+        session_clone.record_app_server_transport_disconnected("app-server stdout transport ended");
         let exit_status = session_clone.child.lock().await.try_wait();
         if let Ok(Some(status)) = exit_status {
             session_clone.record_app_server_generation_ended(

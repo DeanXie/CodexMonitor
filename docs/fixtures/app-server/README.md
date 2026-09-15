@@ -36,3 +36,10 @@ and the three normalized response statuses used by Phase 3.5.2c.3. The
 fixtures are protocol evidence for app-server connection subscription state;
 they do not acknowledge runtime unload or writer release. The provenance file
 also freezes the no-retry and writer-observation non-transition boundaries.
+
+`thread-lifecycle-reconciliation/` contains sanitized bundled notification
+shapes used by Phase 3.5.2c.4. `thread/closed` and
+`thread/status/changed(status.type = notLoaded)` are runtime-availability
+evidence only; the fixtures do not encode unsubscribe success, writer release,
+ownership, or a lease. `protocol-provenance.json` binds those shapes to the
+bundled Codex version and freezes their non-transition contract.

@@ -1445,5 +1445,9 @@ mod writer_admission_protocol_fixture_tests;
 mod thread_lifecycle_observation_tests;
 
 #[cfg(test)]
+#[path = "codex_core/lifecycle_reconciliation_tests.rs"]
+mod lifecycle_reconciliation_tests;
+
+#[cfg(test)]
 #[path = "codex_core/synthetic_live_detach_tests.rs"]
 mod synthetic_live_detach_tests;

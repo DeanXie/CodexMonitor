@@ -1,7 +1,7 @@
 # Phase 3.5.2d — Remote Transport Coordination
 
-Status: Phase 3.5.2d.1 is **PASS / COMPLETE / FROZEN**. Later Phase 3.5.2d
-slices are not started.
+Status: Phase 3.5.2d.1 and Phase 3.5.2d.2 are **PASS / COMPLETE / FROZEN**.
+Phase 3.5.2d.3 is not started.
 
 ## Authority boundary
 
@@ -51,8 +51,10 @@ dispatching it again.
 - received timestamp;
 - current dispatch state;
 - optional dispatch/session-attempt/response/transport-loss timestamps; and
-- optional `SessionAttemptProvenance` containing Workspace ID,
-  WorkspaceSession generation, and attempt ID.
+- optional `SessionAttemptProvenance` containing attempt kind, Workspace ID,
+  WorkspaceSession generation, `CodexThreadKey`, and the existing session
+  attempt ID; upstream unsubscribe correlation also records the app-server
+  connection generation.
 
 It stores no token, request payload, writer owner, subscription owner,
 Remote-client owner, lease, or takeover information. Session attempt IDs are
@@ -76,6 +78,49 @@ dispatch preserves any bound session attempt and records that the transport
 was lost. A detached daemon task may still finish, and a later directly
 observed response or app-server outcome remains stronger evidence; transport
 loss cannot erase that evidence.
+
+The pre-dispatch liveness transition is atomic only with respect to the
+transport provenance record. It is not a transaction around the shared
+session mutation. Once dispatch starts, a later transport loss cannot cancel
+the daemon task. If the shared session creates an attempt or crosses its
+upstream dispatch boundary, that direct session evidence remains authoritative
+even when the caller cannot observe the response.
+
+## Dispatch correlation
+
+Phase 3.5.2d.2 passes an optional daemon-only request context through the RPC
+adapter for exactly two explicit mutation methods:
+
+```text
+resume_thread
+thread_upstream_unsubscribe
+```
+
+The shared `WorkspaceSession` creates the real writer-admission or unsubscribe
+attempt first, then binds that existing ID to the Remote request provenance.
+No second business attempt ID is minted. App-local calls use the same shared
+business paths without a transport context.
+
+Resume correlation records the Remote compound request key, WorkspaceSession
+generation, `CodexThreadKey`, and writer-admission attempt ID. Upstream
+unsubscribe correlation additionally records the app-server connection
+generation and unsubscribe attempt ID. These links answer only which transport
+request triggered which shared attempt. They do not identify a person or
+client and do not establish writer or subscriber ownership.
+
+The daemon checks transport liveness immediately before entering RPC dispatch.
+When loss is already recorded, the task stops before session attempt creation
+and upstream mutation. When loss follows dispatch, the shared task continues;
+direct writer/subscription results are not replaced by transport-level
+unknown evidence.
+
+Two authenticated transports may reuse the same numeric request ID because
+their compound keys differ. Concurrent resume requests receive distinct
+writer-admission attempts and upstream remains the admission authority.
+Concurrent unsubscribe requests retain distinct transport records, while the
+existing shared pending gate permits at most one unsubscribe attempt and one
+upstream dispatch. A duplicate request ID on the same transport is rejected
+before a second daemon task or session attempt is created.
 
 ## Reconnect and stale evidence
 
@@ -109,7 +154,8 @@ provenance.
 
 ## Slice boundary
 
-Phase 3.5.2d.1 changes no resume/unsubscribe business semantics, writer or
-subscription transitions, runtime transitions, notification delivery gates,
-or daemon restart recovery. It adds no public UI API and performs no real
-writer mutation or upstream unsubscribe capture.
+Phase 3.5.2d.1 and d.2 change no resume/unsubscribe business response schema,
+writer or subscription transitions, runtime transitions, retry/replay policy,
+notification delivery gates, or daemon restart recovery. They add no public UI
+API and perform no real writer mutation or upstream unsubscribe capture.
+Notification generation gating remains Phase 3.5.2d.3 scope.

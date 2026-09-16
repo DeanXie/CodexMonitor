@@ -7,7 +7,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+
+use crate::shared::codex_identity::CodexThreadKey;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -51,20 +53,69 @@ pub(crate) enum RemoteRequestDispatchState {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SessionAttemptProvenance {
+    pub kind: SessionAttemptKind,
     pub workspace_id: String,
     pub workspace_session_generation: String,
+    pub app_server_connection_generation: Option<String>,
+    pub thread_key: CodexThreadKey,
     pub attempt_id: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SessionAttemptKind {
+    WriterAdmission,
+    UpstreamUnsubscribe,
+}
+
 impl SessionAttemptProvenance {
-    pub(crate) fn new(
+    pub(crate) fn writer_admission(
         workspace_id: impl Into<String>,
         workspace_session_generation: impl Into<String>,
+        thread_key: CodexThreadKey,
+        attempt_id: impl Into<String>,
+    ) -> Result<Self, String> {
+        Self::new(
+            SessionAttemptKind::WriterAdmission,
+            workspace_id,
+            workspace_session_generation,
+            None,
+            thread_key,
+            attempt_id,
+        )
+    }
+
+    pub(crate) fn upstream_unsubscribe(
+        workspace_id: impl Into<String>,
+        workspace_session_generation: impl Into<String>,
+        app_server_connection_generation: impl Into<String>,
+        thread_key: CodexThreadKey,
+        attempt_id: impl Into<String>,
+    ) -> Result<Self, String> {
+        Self::new(
+            SessionAttemptKind::UpstreamUnsubscribe,
+            workspace_id,
+            workspace_session_generation,
+            Some(app_server_connection_generation.into()),
+            thread_key,
+            attempt_id,
+        )
+    }
+
+    fn new(
+        kind: SessionAttemptKind,
+        workspace_id: impl Into<String>,
+        workspace_session_generation: impl Into<String>,
+        app_server_connection_generation: Option<String>,
+        thread_key: CodexThreadKey,
         attempt_id: impl Into<String>,
     ) -> Result<Self, String> {
         let value = Self {
+            kind,
             workspace_id: workspace_id.into(),
             workspace_session_generation: workspace_session_generation.into(),
+            app_server_connection_generation,
+            thread_key,
             attempt_id: attempt_id.into(),
         };
         if value.workspace_id.trim().is_empty() {
@@ -75,6 +126,19 @@ impl SessionAttemptProvenance {
         }
         if value.attempt_id.trim().is_empty() {
             return Err("session attempt id is required".to_string());
+        }
+        if value.thread_key.codex_home_identity.trim().is_empty()
+            || value.thread_key.thread_id.trim().is_empty()
+        {
+            return Err("CodexThreadKey is required".to_string());
+        }
+        if value.kind == SessionAttemptKind::UpstreamUnsubscribe
+            && value
+                .app_server_connection_generation
+                .as_deref()
+                .is_none_or(|generation| generation.trim().is_empty())
+        {
+            return Err("app-server connection generation is required".to_string());
         }
         Ok(value)
     }
@@ -100,6 +164,7 @@ pub(crate) enum RemoteRequestTransitionError {
     DuplicateRequest,
     RequestNotFound,
     TransportGenerationMismatch,
+    TransportLostBeforeDispatch,
     InvalidTransition,
 }
 
@@ -165,6 +230,9 @@ impl RemoteRequestProvenanceRuntime {
         let observation = observations
             .get_mut(key)
             .ok_or(RemoteRequestTransitionError::RequestNotFound)?;
+        if observation.transport_lost_at.is_some() {
+            return Err(RemoteRequestTransitionError::TransportLostBeforeDispatch);
+        }
         if observation.dispatch_started_at.is_some() || observation.response_observed_at.is_some() {
             return Err(RemoteRequestTransitionError::InvalidTransition);
         }
@@ -214,7 +282,9 @@ impl RemoteRequestProvenanceRuntime {
             return Err(RemoteRequestTransitionError::InvalidTransition);
         }
         observation.response_observed_at = Some(observed_at);
-        observation.dispatch_state = RemoteRequestDispatchState::ResponseObserved;
+        if observation.transport_lost_at.is_none() {
+            observation.dispatch_state = RemoteRequestDispatchState::ResponseObserved;
+        }
         Ok(())
     }
 
@@ -255,5 +325,35 @@ impl RemoteRequestProvenanceRuntime {
             return Err(RemoteRequestTransitionError::TransportGenerationMismatch);
         }
         Ok(())
+    }
+}
+
+/// Daemon-only correlation handle for one authenticated transport request.
+///
+/// This binds transport provenance to an attempt created by the shared session
+/// authority. It is not an attempt-ID generator, client identity, owner, or
+/// lease.
+#[derive(Clone)]
+pub(crate) struct RemoteRequestDispatchContext {
+    runtime: Arc<RemoteRequestProvenanceRuntime>,
+    key: RemoteRequestKey,
+}
+
+impl RemoteRequestDispatchContext {
+    pub(crate) fn new(runtime: Arc<RemoteRequestProvenanceRuntime>, key: RemoteRequestKey) -> Self {
+        Self { runtime, key }
+    }
+
+    pub(crate) fn bind_session_attempt(
+        &self,
+        session_attempt: SessionAttemptProvenance,
+    ) -> Result<(), String> {
+        self.runtime
+            .record_session_attempt_bound(
+                &self.key,
+                session_attempt,
+                chrono::Utc::now().timestamp_millis(),
+            )
+            .map_err(|error| format!("remote request correlation failed: {error:?}"))
     }
 }

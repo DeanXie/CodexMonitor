@@ -83,7 +83,9 @@ use shared::remote_host_identity::{
     load_or_initialize_remote_host_identity, RemoteDaemonCapabilities, RemoteDaemonInfo,
     RemoteHostIdentity, REMOTE_DAEMON_PROTOCOL_VERSION,
 };
-use shared::remote_request_provenance::{RemoteRequestKey, RemoteRequestProvenanceRuntime};
+use shared::remote_request_provenance::{
+    RemoteRequestDispatchContext, RemoteRequestKey, RemoteRequestProvenanceRuntime,
+};
 use shared::workspace_interop_core::{remote_execution_environment_key, ExecutionEnvironmentKey};
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
@@ -736,6 +738,22 @@ impl DaemonState {
         .await
     }
 
+    async fn resume_thread_with_remote_context(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+        remote_context: &RemoteRequestDispatchContext,
+    ) -> Result<Value, String> {
+        codex_core::resume_thread_core_with_remote_context(
+            &self.sessions,
+            workspace_id,
+            thread_id,
+            &self.creation_coordinator,
+            Some(remote_context),
+        )
+        .await
+    }
+
     async fn get_writer_admission_observation(
         &self,
         workspace_id: String,
@@ -815,6 +833,21 @@ impl DaemonState {
         thread_id: String,
     ) -> Result<Value, String> {
         codex_core::thread_upstream_unsubscribe_core(&self.sessions, workspace_id, thread_id).await
+    }
+
+    async fn thread_upstream_unsubscribe_with_remote_context(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+        remote_context: &RemoteRequestDispatchContext,
+    ) -> Result<Value, String> {
+        codex_core::thread_upstream_unsubscribe_core_with_remote_context(
+            &self.sessions,
+            workspace_id,
+            thread_id,
+            Some(remote_context),
+        )
+        .await
     }
 
     async fn fork_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
@@ -1648,6 +1681,10 @@ fn parse_args() -> Result<DaemonConfig, String> {
 
 #[cfg(test)]
 mod tests {
+    mod remote_dispatch_correlation_tests {
+        include!("codex_monitor_daemon/remote_dispatch_correlation_tests.rs");
+    }
+
     use super::*;
     use crate::shared::process_core::kill_child_process_tree;
     use crate::storage::write_workspaces;

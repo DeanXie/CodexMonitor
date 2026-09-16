@@ -16,6 +16,7 @@ use crate::codex::config as codex_config;
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::rules;
 use crate::shared::account::{build_account_response, read_auth_account};
+use crate::shared::remote_request_provenance::RemoteRequestDispatchContext;
 use crate::types::WorkspaceEntry;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -433,12 +434,37 @@ pub(crate) async fn resume_thread_core(
     thread_id: String,
     coordinator: &creation_coordination::CreationCoordinator,
 ) -> Result<Value, String> {
+    resume_thread_core_with_remote_context(sessions, workspace_id, thread_id, coordinator, None)
+        .await
+}
+
+pub(crate) async fn resume_thread_core_with_remote_context(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+    coordinator: &creation_coordination::CreationCoordinator,
+    remote_context: Option<&RemoteRequestDispatchContext>,
+) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     *session.creation_coordinator.lock().await = Some(coordinator.clone());
     let request = build_exact_thread_request(ExactThreadMethod::Resume, &thread_id)?;
-    let response = session
-        .send_resume_request_for_workspace(&workspace_id, &thread_id, request.params)
-        .await?;
+    let response = match remote_context {
+        Some(remote_context) => {
+            session
+                .send_resume_request_for_workspace_with_remote_context(
+                    &workspace_id,
+                    &thread_id,
+                    request.params,
+                    remote_context,
+                )
+                .await?
+        }
+        None => {
+            session
+                .send_resume_request_for_workspace(&workspace_id, &thread_id, request.params)
+                .await?
+        }
+    };
     validate_exact_thread_response(&thread_id, classify_exact_resume_response(response))
 }
 
@@ -529,14 +555,37 @@ pub(crate) async fn thread_upstream_unsubscribe_core(
     workspace_id: String,
     thread_id: String,
 ) -> Result<Value, String> {
+    thread_upstream_unsubscribe_core_with_remote_context(sessions, workspace_id, thread_id, None)
+        .await
+}
+
+pub(crate) async fn thread_upstream_unsubscribe_core_with_remote_context(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+    remote_context: Option<&RemoteRequestDispatchContext>,
+) -> Result<Value, String> {
     let thread_id = thread_id.trim();
     if thread_id.is_empty() {
         return Err("threadId is required".to_string());
     }
     let session = get_session_clone(sessions, &workspace_id).await?;
-    session
-        .send_upstream_unsubscribe_request_for_workspace(&workspace_id, thread_id)
-        .await
+    match remote_context {
+        Some(remote_context) => {
+            session
+                .send_upstream_unsubscribe_request_for_workspace_with_remote_context(
+                    &workspace_id,
+                    thread_id,
+                    remote_context,
+                )
+                .await
+        }
+        None => {
+            session
+                .send_upstream_unsubscribe_request_for_workspace(&workspace_id, thread_id)
+                .await
+        }
+    }
 }
 
 pub(crate) async fn fork_thread_core(

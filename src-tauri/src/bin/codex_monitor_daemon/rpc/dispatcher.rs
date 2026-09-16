@@ -5,6 +5,7 @@ pub(super) async fn dispatch_rpc_request(
     method: &str,
     params: &Value,
     client_version: &str,
+    remote_context: Option<&RemoteRequestDispatchContext>,
 ) -> Result<Value, String> {
     if let Some(result) = daemon::try_handle(state, method, params).await {
         return result;
@@ -14,7 +15,7 @@ pub(super) async fn dispatch_rpc_request(
         return result;
     }
 
-    if let Some(result) = codex::try_handle(state, method, params).await {
+    if let Some(result) = codex::try_handle(state, method, params, remote_context).await {
         return result;
     }
 

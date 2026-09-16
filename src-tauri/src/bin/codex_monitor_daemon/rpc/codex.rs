@@ -14,6 +14,7 @@ pub(super) async fn try_handle(
     state: &DaemonState,
     method: &str,
     params: &Value,
+    remote_context: Option<&RemoteRequestDispatchContext>,
 ) -> Option<Result<Value, String>> {
     match method {
         "get_creation_context" => Some(Ok(state.creation_coordinator.context())),
@@ -66,7 +67,14 @@ pub(super) async fn try_handle(
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            Some(state.resume_thread(workspace_id, thread_id).await)
+            Some(match remote_context {
+                Some(remote_context) => {
+                    state
+                        .resume_thread_with_remote_context(workspace_id, thread_id, remote_context)
+                        .await
+                }
+                None => state.resume_thread(workspace_id, thread_id).await,
+            })
         }
         "get_writer_admission_observation" => {
             let workspace_id = match parse_string(params, "workspaceId") {
@@ -128,11 +136,22 @@ pub(super) async fn try_handle(
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            Some(
-                state
-                    .thread_upstream_unsubscribe(workspace_id, thread_id)
-                    .await,
-            )
+            Some(match remote_context {
+                Some(remote_context) => {
+                    state
+                        .thread_upstream_unsubscribe_with_remote_context(
+                            workspace_id,
+                            thread_id,
+                            remote_context,
+                        )
+                        .await
+                }
+                None => {
+                    state
+                        .thread_upstream_unsubscribe(workspace_id, thread_id)
+                        .await
+                }
+            })
         }
         "fork_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {

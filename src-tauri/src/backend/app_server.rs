@@ -27,6 +27,9 @@ use crate::shared::codex_core::writer_admission_observation::{
 use crate::shared::codex_identity::CodexThreadKey;
 use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
+use crate::shared::remote_request_provenance::{
+    RemoteRequestDispatchContext, SessionAttemptProvenance,
+};
 use crate::shared::surface_projection_core::{
     ObservationCoverage, SurfaceProjectionKind, SurfaceProjectionSurface,
 };
@@ -1130,6 +1133,38 @@ impl WorkspaceSession {
         requested_thread_id: &str,
         params: Value,
     ) -> Result<Value, String> {
+        self.send_resume_request_for_workspace_observed(
+            workspace_id,
+            requested_thread_id,
+            params,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn send_resume_request_for_workspace_with_remote_context(
+        &self,
+        workspace_id: &str,
+        requested_thread_id: &str,
+        params: Value,
+        remote_context: &RemoteRequestDispatchContext,
+    ) -> Result<Value, String> {
+        self.send_resume_request_for_workspace_observed(
+            workspace_id,
+            requested_thread_id,
+            params,
+            Some(remote_context),
+        )
+        .await
+    }
+
+    async fn send_resume_request_for_workspace_observed(
+        &self,
+        workspace_id: &str,
+        requested_thread_id: &str,
+        params: Value,
+        remote_context: Option<&RemoteRequestDispatchContext>,
+    ) -> Result<Value, String> {
         let codex_home_identity = self
             .workspace_reconciler
             .lock()
@@ -1145,6 +1180,16 @@ impl WorkspaceSession {
                 unix_timestamp_ms() as i64,
             )
             .map_err(|error| format!("writer admission observation failed: {error:?}"))?;
+        if let Some(remote_context) = remote_context {
+            remote_context.bind_session_attempt(SessionAttemptProvenance::writer_admission(
+                workspace_id,
+                self.writer_admission_observations
+                    .workspace_session_generation()
+                    .as_str(),
+                thread_key.clone(),
+                attempt_id.as_str(),
+            )?)?;
+        }
         let boundary = DispatchBoundary::default();
         let mut dispatch_guard = ResumeAdmissionDispatchGuard {
             runtime: &self.writer_admission_observations,
@@ -1265,6 +1310,22 @@ impl WorkspaceSession {
             workspace_id,
             requested_thread_id,
             DispatchBoundary::default(),
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn send_upstream_unsubscribe_request_for_workspace_with_remote_context(
+        &self,
+        workspace_id: &str,
+        requested_thread_id: &str,
+        remote_context: &RemoteRequestDispatchContext,
+    ) -> Result<Value, String> {
+        self.send_upstream_unsubscribe_request_for_workspace_observed(
+            workspace_id,
+            requested_thread_id,
+            DispatchBoundary::default(),
+            Some(remote_context),
         )
         .await
     }
@@ -1280,6 +1341,7 @@ impl WorkspaceSession {
             workspace_id,
             requested_thread_id,
             boundary,
+            None,
         )
         .await
     }
@@ -1289,6 +1351,7 @@ impl WorkspaceSession {
         workspace_id: &str,
         requested_thread_id: &str,
         boundary: DispatchBoundary,
+        remote_context: Option<&RemoteRequestDispatchContext>,
     ) -> Result<Value, String> {
         let codex_home_identity = self
             .workspace_reconciler
@@ -1299,8 +1362,25 @@ impl WorkspaceSession {
         let thread_key = CodexThreadKey::new(codex_home_identity, requested_thread_id);
         let attempt = self
             .thread_lifecycle_observations
-            .begin_unsubscribe(thread_key, requested_thread_id, unix_timestamp_ms() as i64)
+            .begin_unsubscribe(
+                thread_key.clone(),
+                requested_thread_id,
+                unix_timestamp_ms() as i64,
+            )
             .map_err(|error| format!("thread subscription observation failed: {error:?}"))?;
+        if let Some(remote_context) = remote_context {
+            remote_context.bind_session_attempt(SessionAttemptProvenance::upstream_unsubscribe(
+                workspace_id,
+                self.thread_lifecycle_observations
+                    .workspace_session_generation()
+                    .as_str(),
+                self.thread_lifecycle_observations
+                    .app_server_connection_generation()
+                    .as_str(),
+                thread_key,
+                attempt.attempt_id().as_str(),
+            )?)?;
+        }
         let mut dispatch_guard = UnsubscribeDispatchGuard {
             runtime: &self.thread_lifecycle_observations,
             attempt: attempt.clone(),

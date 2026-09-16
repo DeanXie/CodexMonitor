@@ -2,6 +2,7 @@ use super::remote_request_provenance::{
     RemoteRequestDispatchState, RemoteRequestProvenanceRuntime, RemoteRequestTransitionError,
     RemoteTransportGeneration, SessionAttemptProvenance,
 };
+use crate::shared::codex_identity::CodexThreadKey;
 
 fn generation(value: &str) -> RemoteTransportGeneration {
     RemoteTransportGeneration::new(value).expect("valid generation")
@@ -85,8 +86,13 @@ fn disconnect_after_dispatch_preserves_session_attempt_provenance() {
     runtime
         .record_session_attempt_bound(
             &key,
-            SessionAttemptProvenance::new("workspace-a", "session-generation-a", "attempt-a")
-                .unwrap(),
+            SessionAttemptProvenance::writer_admission(
+                "workspace-a",
+                "session-generation-a",
+                CodexThreadKey::new("codex-home-a", "thread-a"),
+                "attempt-a",
+            )
+            .unwrap(),
             12,
         )
         .unwrap();
@@ -104,6 +110,59 @@ fn disconnect_after_dispatch_preserves_session_attempt_provenance() {
             .map(|value| value.attempt_id.as_str()),
         Some("attempt-a")
     );
+}
+
+#[test]
+fn response_after_transport_loss_does_not_overwrite_transport_loss() {
+    let runtime = RemoteRequestProvenanceRuntime::new(generation("transport-a"));
+    let key = runtime.record_received(10, "resume_thread", 10).unwrap();
+    runtime.record_dispatch_started(&key, 11).unwrap();
+    runtime.record_transport_lost(12);
+    runtime.record_response_observed(&key, 13).unwrap();
+    let snapshot = runtime.snapshot(&key).unwrap();
+    assert_eq!(
+        snapshot.dispatch_state,
+        RemoteRequestDispatchState::TransportLost
+    );
+    assert_eq!(snapshot.response_observed_at, Some(13));
+    assert_eq!(snapshot.transport_lost_at, Some(12));
+}
+
+#[test]
+fn bound_attempt_provenance_contains_no_client_or_ownership_semantics() {
+    let runtime = RemoteRequestProvenanceRuntime::new(generation("transport-a"));
+    let key = runtime.record_received(11, "resume_thread", 10).unwrap();
+    runtime.record_dispatch_started(&key, 11).unwrap();
+    runtime
+        .record_session_attempt_bound(
+            &key,
+            SessionAttemptProvenance::writer_admission(
+                "workspace-a",
+                "session-generation-a",
+                CodexThreadKey::new("codex-home-a", "thread-a"),
+                "attempt-a",
+            )
+            .unwrap(),
+            12,
+        )
+        .unwrap();
+    let serialized = serde_json::to_string(&runtime.snapshot(&key).unwrap())
+        .unwrap()
+        .to_ascii_lowercase();
+    for forbidden in [
+        "remoteclientidentity",
+        "clientowner",
+        "writerowner",
+        "subscriptionowner",
+        "leaseid",
+        "force",
+        "takeover",
+    ] {
+        assert!(
+            !serialized.contains(forbidden),
+            "forbidden field {forbidden}"
+        );
+    }
 }
 
 #[test]

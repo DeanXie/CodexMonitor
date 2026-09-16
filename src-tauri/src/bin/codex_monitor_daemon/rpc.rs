@@ -149,7 +149,17 @@ pub(super) async fn handle_rpc_request(
     params: Value,
     client_version: String,
 ) -> Result<Value, String> {
-    dispatcher::dispatch_rpc_request(state, method, &params, &client_version).await
+    handle_rpc_request_with_context(state, method, params, client_version, None).await
+}
+
+pub(super) async fn handle_rpc_request_with_context(
+    state: &DaemonState,
+    method: &str,
+    params: Value,
+    client_version: String,
+    remote_context: Option<&RemoteRequestDispatchContext>,
+) -> Result<Value, String> {
+    dispatcher::dispatch_rpc_request(state, method, &params, &client_version, remote_context).await
 }
 
 pub(super) async fn forward_events(
@@ -188,11 +198,28 @@ pub(super) fn spawn_rpc_response_task(
         let Ok(_permit) = request_limiter.acquire_owned().await else {
             return;
         };
-        if let Some(request_key) = request_key.as_ref() {
-            let _ = request_provenance
-                .record_dispatch_started(request_key, chrono::Utc::now().timestamp_millis());
-        }
-        let result = handle_rpc_request(&state, &method, params, client_version).await;
+        let remote_context = if let Some(request_key) = request_key.as_ref() {
+            if request_provenance
+                .record_dispatch_started(request_key, chrono::Utc::now().timestamp_millis())
+                .is_err()
+            {
+                return;
+            }
+            Some(RemoteRequestDispatchContext::new(
+                Arc::clone(&request_provenance),
+                request_key.clone(),
+            ))
+        } else {
+            None
+        };
+        let result = handle_rpc_request_with_context(
+            &state,
+            &method,
+            params,
+            client_version,
+            remote_context.as_ref(),
+        )
+        .await;
         if let Some(request_key) = request_key.as_ref() {
             let _ = request_provenance
                 .record_response_observed(request_key, chrono::Utc::now().timestamp_millis());

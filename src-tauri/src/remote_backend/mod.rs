@@ -1,4 +1,6 @@
 mod protocol;
+#[cfg(test)]
+mod stale_delivery_tests;
 mod tcp_transport;
 mod transport;
 
@@ -24,8 +26,8 @@ use crate::types::{BackendMode, RemoteBackendProvider, RemoteBackendTarget};
 use self::protocol::{build_request_line, RemoteCallError, DEFAULT_REMOTE_HOST};
 use self::tcp_transport::TcpTransport;
 use self::transport::{
-    PendingMap, RemoteTransport, RemoteTransportConfig, RemoteTransportKind,
-    TransportAvailabilityObserver,
+    PendingMap, RemoteNotificationDeliveryAuthority, RemoteNotificationDeliveryGate,
+    RemoteTransport, RemoteTransportConfig, RemoteTransportKind, TransportAvailabilityObserver,
 };
 
 const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
@@ -79,6 +81,7 @@ struct RemoteBackendNegativeResult {
 pub(crate) struct RemoteBackendCache {
     state: Mutex<RemoteBackendCacheState>,
     initialization: Mutex<()>,
+    notification_delivery: RemoteNotificationDeliveryAuthority,
 }
 
 #[derive(Default)]
@@ -126,6 +129,13 @@ impl RemoteBackendCache {
         let generation = self.state.lock().await.generation;
         match initialize().await {
             Ok(client) => {
+                let notification_generation =
+                    client.notification_generation().ok_or_else(|| {
+                        RemoteBackendInitializationError::from(
+                            "authenticated remote backend has no notification delivery generation"
+                                .to_string(),
+                        )
+                    })?;
                 let mut state = self.state.lock().await;
                 if state.generation != generation {
                     return Err(RemoteBackendInitializationError::from(
@@ -134,6 +144,8 @@ impl RemoteBackendCache {
                 }
                 state.negative = None;
                 state.current = Some(client.clone());
+                self.notification_delivery
+                    .publish_current(notification_generation);
                 Ok(client)
             }
             Err(error) => {
@@ -188,9 +200,13 @@ impl RemoteBackendCache {
             .as_ref()
             .is_some_and(|candidate| candidate.same_connection(client))
         {
+            let notification_generation = client.notification_generation();
             state.current = None;
             state.negative = None;
             state.generation = state.generation.wrapping_add(1);
+            if let Some(generation) = notification_generation.as_ref() {
+                self.notification_delivery.clear_if_current(generation);
+            }
             return true;
         }
         false
@@ -201,6 +217,11 @@ impl RemoteBackendCache {
         state.current = None;
         state.negative = None;
         state.generation = state.generation.wrapping_add(1);
+        self.notification_delivery.clear_current();
+    }
+
+    fn new_notification_delivery_gate(&self) -> RemoteNotificationDeliveryGate {
+        self.notification_delivery.new_connection_gate()
     }
 }
 
@@ -260,6 +281,7 @@ struct RemoteBackendInner {
     ready: AtomicBool,
     availability: TransportAvailabilityObserver,
     request_provenance: StdMutex<Option<Arc<RemoteRequestProvenanceRuntime>>>,
+    notification_delivery: RemoteNotificationDeliveryGate,
 }
 
 impl RemoteBackend {
@@ -412,17 +434,26 @@ impl RemoteBackend {
         self.inner.ready.store(true, Ordering::SeqCst);
     }
 
-    fn mark_authenticated(&self) {
+    fn mark_authenticated(&self) -> Result<(), String> {
         let mut request_provenance = self
             .inner
             .request_provenance
             .lock()
             .expect("remote request provenance lock");
         if request_provenance.is_none() {
-            *request_provenance = Some(Arc::new(
-                RemoteRequestProvenanceRuntime::new_authenticated_transport(),
-            ));
+            let runtime = Arc::new(RemoteRequestProvenanceRuntime::new_authenticated_transport());
+            self.inner
+                .notification_delivery
+                .bind_authenticated_generation(runtime.transport_generation().clone())?;
+            *request_provenance = Some(runtime);
         }
+        Ok(())
+    }
+
+    fn notification_generation(
+        &self,
+    ) -> Option<crate::shared::remote_request_provenance::RemoteTransportGeneration> {
+        self.inner.notification_delivery.authenticated_generation()
     }
 
     #[cfg(test)]
@@ -629,8 +660,14 @@ async fn initialize_remote_backend(
     let transport: Box<dyn RemoteTransport> = match transport_config.kind() {
         RemoteTransportKind::Tcp => Box::new(TcpTransport),
     };
+    let notification_delivery = state.remote_backend.new_notification_delivery_gate();
     let connection = match transport
-        .connect(app, transport_config, availability.clone())
+        .connect(
+            app,
+            transport_config,
+            availability.clone(),
+            notification_delivery.clone(),
+        )
         .await
     {
         Ok(connection) => connection,
@@ -662,6 +699,7 @@ async fn initialize_remote_backend(
             ready: AtomicBool::new(false),
             availability,
             request_provenance: StdMutex::new(None),
+            notification_delivery,
         }),
     };
 
@@ -673,7 +711,7 @@ async fn initialize_remote_backend(
         {
             Ok(_) => {
                 client.observe(AvailabilityEvent::AuthSucceeded);
-                client.mark_authenticated();
+                client.mark_authenticated()?;
             }
             Err(RemoteCallError::RpcRejected { message }) => {
                 client.observe(AvailabilityEvent::AuthRejected {
@@ -879,7 +917,9 @@ mod tests {
         RemoteBackend, RemoteBackendCache, RemoteBackendInitializationError, RemoteBackendInner,
         RemoteRequestProvenanceRuntime, StdMutex,
     };
-    use crate::remote_backend::transport::{RemoteTransportConfig, TransportAvailabilityObserver};
+    use crate::remote_backend::transport::{
+        RemoteNotificationDeliveryAuthority, RemoteTransportConfig, TransportAvailabilityObserver,
+    };
     use crate::shared::remote_host_availability::RemoteHostAvailabilityRuntime;
     use crate::shared::remote_host_identity::RemoteHostIdentity;
     use crate::types::AppSettings;
@@ -895,6 +935,13 @@ mod tests {
     ) -> (RemoteBackend, tokio::sync::mpsc::Receiver<String>) {
         let (out_tx, out_rx) = tokio::sync::mpsc::channel(8);
         let attempt = availability.begin_attempt(target, None, observed_at);
+        let request_provenance =
+            Arc::new(RemoteRequestProvenanceRuntime::new_authenticated_transport());
+        let notification_delivery =
+            RemoteNotificationDeliveryAuthority::default().new_connection_gate();
+        notification_delivery
+            .bind_authenticated_generation(request_provenance.transport_generation().clone())
+            .expect("bind test transport generation");
         (
             RemoteBackend {
                 inner: Arc::new(RemoteBackendInner {
@@ -907,9 +954,8 @@ mod tests {
                         runtime: availability,
                         attempt,
                     },
-                    request_provenance: StdMutex::new(Some(Arc::new(
-                        RemoteRequestProvenanceRuntime::new_authenticated_transport(),
-                    ))),
+                    request_provenance: StdMutex::new(Some(request_provenance)),
+                    notification_delivery,
                 }),
             },
             out_rx,
@@ -1610,6 +1656,8 @@ mod tests {
                     attempt,
                 },
                 request_provenance: StdMutex::new(None),
+                notification_delivery: RemoteNotificationDeliveryAuthority::default()
+                    .new_connection_gate(),
             }),
         };
         assert!(client.transport_generation().is_none());
@@ -1758,6 +1806,8 @@ mod tests {
                     attempt,
                 },
                 request_provenance: StdMutex::new(None),
+                notification_delivery: RemoteNotificationDeliveryAuthority::default()
+                    .new_connection_gate(),
             }),
         };
         let error = client

@@ -59,6 +59,15 @@ mounted while the user moves between Chat, Home, Git, and Agent Monitor. Raw
 app-server notifications, `thread/start` responses, and client `turn/start`
 requests enter the same normalizer while any page is visible.
 
+For a Remote App backend, notification delivery is additionally gated by the
+authenticated `RemoteTransportGeneration`. A reader may publish
+`app-server-event`, `terminal-output`, or `terminal-exit` only after its backend
+has completed the full host-readiness handshake and that generation is the
+current cached backend. Notifications from replaced, initializing, cleared, or
+unauthenticated generations are dropped immediately before the Tauri event
+hub. This transport gate changes no app-server method or payload schema and
+does not infer WorkspaceSession, subscription, runtime, or writer state.
+
 Runtime catch-up uses explicit `HYDRATION` provenance. It projects only currently
 processing threads (plus their known ancestors and descendants) from the app's
 current thread identity, parent, thread-status, and active-turn state. Those

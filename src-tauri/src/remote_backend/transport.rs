@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
@@ -13,9 +13,110 @@ use super::protocol::{parse_incoming_line, IncomingMessage, RemoteCallError};
 use crate::shared::remote_host_availability::{
     AvailabilityAttempt, AvailabilityEvent, RemoteHostAvailabilityRuntime,
 };
+use crate::shared::remote_request_provenance::RemoteTransportGeneration;
 
 pub(crate) type PendingMap = HashMap<u64, oneshot::Sender<Result<Value, RemoteCallError>>>;
 const OUTBOUND_QUEUE_CAPACITY: usize = 512;
+
+#[derive(Clone, Default)]
+pub(crate) struct RemoteNotificationDeliveryAuthority {
+    current_generation: Arc<StdMutex<Option<RemoteTransportGeneration>>>,
+}
+
+impl RemoteNotificationDeliveryAuthority {
+    pub(crate) fn new_connection_gate(&self) -> RemoteNotificationDeliveryGate {
+        RemoteNotificationDeliveryGate {
+            authority: self.clone(),
+            authenticated_generation: Arc::new(StdMutex::new(None)),
+        }
+    }
+
+    pub(crate) fn publish_current(&self, generation: RemoteTransportGeneration) {
+        *self
+            .current_generation
+            .lock()
+            .expect("remote notification delivery authority lock") = Some(generation);
+    }
+
+    pub(crate) fn clear_current(&self) {
+        *self
+            .current_generation
+            .lock()
+            .expect("remote notification delivery authority lock") = None;
+    }
+
+    pub(crate) fn clear_if_current(&self, generation: &RemoteTransportGeneration) {
+        let mut current = self
+            .current_generation
+            .lock()
+            .expect("remote notification delivery authority lock");
+        if current.as_ref() == Some(generation) {
+            *current = None;
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct RemoteNotificationDeliveryGate {
+    authority: RemoteNotificationDeliveryAuthority,
+    authenticated_generation: Arc<StdMutex<Option<RemoteTransportGeneration>>>,
+}
+
+impl RemoteNotificationDeliveryGate {
+    pub(crate) fn bind_authenticated_generation(
+        &self,
+        generation: RemoteTransportGeneration,
+    ) -> Result<(), String> {
+        let mut authenticated = self
+            .authenticated_generation
+            .lock()
+            .expect("remote notification generation lock");
+        match authenticated.as_ref() {
+            None => {
+                *authenticated = Some(generation);
+                Ok(())
+            }
+            Some(existing) if existing == &generation => Ok(()),
+            Some(_) => Err(
+                "remote notification delivery gate is already bound to another generation"
+                    .to_string(),
+            ),
+        }
+    }
+
+    pub(crate) fn authenticated_generation(&self) -> Option<RemoteTransportGeneration> {
+        self.authenticated_generation
+            .lock()
+            .expect("remote notification generation lock")
+            .clone()
+    }
+}
+
+pub(crate) fn dispatch_notification_if_current<F>(
+    delivery: &RemoteNotificationDeliveryGate,
+    method: &str,
+    params: Value,
+    mut emit: F,
+) where
+    F: FnMut(&str, Value),
+{
+    let Some(generation) = delivery.authenticated_generation() else {
+        return;
+    };
+    let current = delivery
+        .authority
+        .current_generation
+        .lock()
+        .expect("remote notification delivery authority lock");
+    if current.as_ref() != Some(&generation) {
+        return;
+    }
+
+    match method {
+        "app-server-event" | "terminal-output" | "terminal-exit" => emit(method, params),
+        _ => {}
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(crate) enum RemoteTransportConfig {
@@ -82,6 +183,7 @@ pub(crate) trait RemoteTransport: Send + Sync {
         app: AppHandle,
         config: RemoteTransportConfig,
         availability: TransportAvailabilityObserver,
+        notification_delivery: RemoteNotificationDeliveryGate,
     ) -> TransportFuture;
 }
 
@@ -90,6 +192,7 @@ pub(crate) fn spawn_transport_io<R, W>(
     reader: R,
     mut writer: W,
     availability: TransportAvailabilityObserver,
+    notification_delivery: RemoteNotificationDeliveryGate,
 ) -> TransportConnection
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -129,6 +232,7 @@ where
             pending_for_reader,
             connected_for_reader,
             availability,
+            notification_delivery,
         )
         .await;
     });
@@ -146,6 +250,7 @@ async fn read_loop<R>(
     pending: Arc<Mutex<PendingMap>>,
     connected: Arc<AtomicBool>,
     availability: TransportAvailabilityObserver,
+    notification_delivery: RemoteNotificationDeliveryGate,
 ) where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -156,7 +261,7 @@ async fn read_loop<R>(
         if trimmed.is_empty() {
             continue;
         }
-        dispatch_incoming_line(&app, &pending, trimmed).await;
+        dispatch_incoming_line(&app, &pending, &notification_delivery, trimmed).await;
     }
 
     mark_disconnected(&pending, &connected, &availability, "transport read ended").await;
@@ -165,6 +270,7 @@ async fn read_loop<R>(
 pub(crate) async fn dispatch_incoming_line(
     app: &AppHandle,
     pending: &Arc<Mutex<PendingMap>>,
+    notification_delivery: &RemoteNotificationDeliveryGate,
     line: &str,
 ) {
     let Some(message) = parse_incoming_line(line) else {
@@ -178,18 +284,16 @@ pub(crate) async fn dispatch_incoming_line(
                 let _ = sender.send(payload);
             }
         }
-        IncomingMessage::Notification { method, params } => match method.as_str() {
-            "app-server-event" => {
-                let _ = app.emit("app-server-event", params);
-            }
-            "terminal-output" => {
-                let _ = app.emit("terminal-output", params);
-            }
-            "terminal-exit" => {
-                let _ = app.emit("terminal-exit", params);
-            }
-            _ => {}
-        },
+        IncomingMessage::Notification { method, params } => {
+            dispatch_notification_if_current(
+                notification_delivery,
+                &method,
+                params,
+                |event, payload| {
+                    let _ = app.emit(event, payload);
+                },
+            );
+        }
     }
 }
 

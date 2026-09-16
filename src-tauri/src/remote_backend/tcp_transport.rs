@@ -2,8 +2,8 @@ use tauri::AppHandle;
 use tokio::net::TcpStream;
 
 use super::transport::{
-    spawn_transport_io, RemoteTransport, RemoteTransportConfig, RemoteTransportError,
-    TransportAvailabilityObserver, TransportFuture,
+    spawn_transport_io, RemoteNotificationDeliveryGate, RemoteTransport, RemoteTransportConfig,
+    RemoteTransportError, TransportAvailabilityObserver, TransportFuture,
 };
 
 pub(crate) struct TcpTransport;
@@ -14,6 +14,7 @@ impl RemoteTransport for TcpTransport {
         app: AppHandle,
         config: RemoteTransportConfig,
         availability: TransportAvailabilityObserver,
+        notification_delivery: RemoteNotificationDeliveryGate,
     ) -> TransportFuture {
         Box::pin(async move {
             let RemoteTransportConfig::Tcp { host, .. } = config;
@@ -25,7 +26,13 @@ impl RemoteTransport for TcpTransport {
                         message: format!("Failed to connect to remote backend at {host}: {error}"),
                     })?;
             let (reader, writer) = stream.into_split();
-            Ok(spawn_transport_io(app, reader, writer, availability))
+            Ok(spawn_transport_io(
+                app,
+                reader,
+                writer,
+                availability,
+                notification_delivery,
+            ))
         })
     }
 }

@@ -1,7 +1,7 @@
 # Phase 3.5.2d — Remote Transport Coordination
 
-Status: Phase 3.5.2d.1 and Phase 3.5.2d.2 are **PASS / COMPLETE / FROZEN**.
-Phase 3.5.2d.3 is not started.
+Status: Phase 3.5.2d.1, Phase 3.5.2d.2, and Phase 3.5.2d.3 are
+**PASS / COMPLETE / FROZEN**.
 
 ## Authority boundary
 
@@ -133,10 +133,26 @@ The model does not replay mutations after reconnect. `resume_thread` and
 user action is a new explicit intent with a new transport provenance record,
 not replay of the old request.
 
-Notification generation gating remains deferred to Phase 3.5.2d.3. The
-connection-scoped generation authority introduced here is sufficient to label
-the source transport when that gate is implemented; this slice does not change
-event routing.
+## Notification delivery isolation
+
+Phase 3.5.2d.3 binds each Remote reader to the opaque generation minted after
+that transport authenticates. Notification publication is disabled until the
+backend completes `daemon_info`, service/mode/protocol validation, the
+`RemoteHostIdentity` check, and current-cache publication. The generation gate
+is checked immediately before the Tauri event hub for `app-server-event`,
+`terminal-output`, and `terminal-exit`.
+
+Only the generation published as current may emit those events. Replacing or
+clearing the current backend changes the delivery authority used by all
+overlapping readers, so late notifications from an older reader are dropped.
+Response correlation remains connection-local and unchanged.
+
+Old-connection EOF, read/write failure, and disconnect handling still drains
+only that connection's pending map. Existing cache pointer checks and
+availability-attempt checks prevent stale teardown from clearing or degrading
+the current backend or availability snapshot. These transport events do not
+change WorkspaceSession, writer-admission, subscription, runtime-availability,
+or canonical Thread truth, and they do not trigger retry or replay.
 
 ## Generation separation
 
@@ -154,8 +170,9 @@ provenance.
 
 ## Slice boundary
 
-Phase 3.5.2d.1 and d.2 change no resume/unsubscribe business response schema,
+Phase 3.5.2d.1-d.3 change no resume/unsubscribe business response schema,
 writer or subscription transitions, runtime transitions, retry/replay policy,
-notification delivery gates, or daemon restart recovery. They add no public UI
-API and perform no real writer mutation or upstream unsubscribe capture.
-Notification generation gating remains Phase 3.5.2d.3 scope.
+or daemon restart recovery. They add no public UI API and perform no real
+writer mutation or upstream unsubscribe capture. Phase 3.5.2d.3 changes only
+the App-side Remote notification publication boundary; daemon restart/session
+reconstruction remains outside this slice.

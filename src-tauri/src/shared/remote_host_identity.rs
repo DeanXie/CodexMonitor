@@ -50,6 +50,41 @@ impl RemoteHostIdentity {
     }
 }
 
+/// Opaque identity for one concrete daemon process lifetime.
+///
+/// Unlike `RemoteHostIdentity`, this value is never persisted. It is not an
+/// authentication credential, transport generation, WorkspaceSession
+/// generation, or app-server connection generation.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub(crate) struct DaemonProcessGeneration(String);
+
+impl DaemonProcessGeneration {
+    pub(crate) fn new(value: impl Into<String>) -> Result<Self, String> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err("daemon process generation is required".to_string());
+        }
+        Ok(Self(value))
+    }
+
+    pub(crate) fn generate() -> Self {
+        Self(Uuid::new_v4().to_string())
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DaemonProcessContinuity {
+    SameProcess,
+    RestartedProcess,
+    HostIdentityMismatch,
+    Unknown,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RemoteThreadLocator {
@@ -78,6 +113,8 @@ impl Default for RemoteDaemonCapabilities {
 pub(crate) struct RemoteDaemonInfo {
     pub name: String,
     pub remote_host_identity: RemoteHostIdentity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daemon_process_generation: Option<DaemonProcessGeneration>,
     pub version: String,
     pub protocol_version: u32,
     pub mode: String,
@@ -86,9 +123,44 @@ pub(crate) struct RemoteDaemonInfo {
     pub capabilities: RemoteDaemonCapabilities,
 }
 
+pub(crate) fn classify_daemon_process_continuity(
+    previous: &RemoteDaemonInfo,
+    current: &RemoteDaemonInfo,
+) -> DaemonProcessContinuity {
+    if previous.remote_host_identity != current.remote_host_identity {
+        return DaemonProcessContinuity::HostIdentityMismatch;
+    }
+    classify_same_host_daemon_process_continuity(
+        previous.daemon_process_generation.as_ref(),
+        current.daemon_process_generation.as_ref(),
+    )
+}
+
+pub(crate) fn classify_same_host_daemon_process_continuity(
+    previous: Option<&DaemonProcessGeneration>,
+    current: Option<&DaemonProcessGeneration>,
+) -> DaemonProcessContinuity {
+    match (previous, current) {
+        (Some(previous), Some(current)) if previous == current => {
+            DaemonProcessContinuity::SameProcess
+        }
+        (Some(_), Some(_)) => DaemonProcessContinuity::RestartedProcess,
+        _ => DaemonProcessContinuity::Unknown,
+    }
+}
+
 pub(crate) fn validate_daemon_info(info: &RemoteDaemonInfo) -> Result<(), String> {
     if info.name != "codex-monitor-daemon" {
         return Err("remote daemon identity response has an unexpected service name".to_string());
+    }
+    if info
+        .daemon_process_generation
+        .as_ref()
+        .is_some_and(|generation| generation.as_str().trim().is_empty())
+    {
+        return Err(
+            "remote daemon identity response has an invalid process generation".to_string(),
+        );
     }
     if info.mode != "tcp" {
         return Err("remote daemon identity response has an unexpected mode".to_string());
@@ -423,12 +495,62 @@ mod tests {
             name: "codex-monitor-daemon".to_string(),
             remote_host_identity: RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
                 .unwrap(),
+            daemon_process_generation: Some(
+                DaemonProcessGeneration::new("daemon-process-generation").unwrap(),
+            ),
             version: "1.0.0".to_string(),
             protocol_version: 2,
             mode: "tcp".to_string(),
             display_name: None,
             capabilities: RemoteDaemonCapabilities::default(),
         };
+        assert!(validate_daemon_info(&info).is_err());
+    }
+
+    #[test]
+    fn missing_process_generation_keeps_process_continuity_unknown() {
+        let current = RemoteDaemonInfo {
+            name: "codex-monitor-daemon".to_string(),
+            remote_host_identity: RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+                .unwrap(),
+            daemon_process_generation: Some(
+                DaemonProcessGeneration::new("daemon-process-generation").unwrap(),
+            ),
+            version: "1.0.0".to_string(),
+            protocol_version: REMOTE_DAEMON_PROTOCOL_VERSION,
+            mode: "tcp".to_string(),
+            display_name: None,
+            capabilities: RemoteDaemonCapabilities::default(),
+        };
+        let mut legacy_value = serde_json::to_value(current).unwrap();
+        legacy_value
+            .as_object_mut()
+            .unwrap()
+            .remove("daemonProcessGeneration");
+        let legacy: RemoteDaemonInfo = serde_json::from_value(legacy_value)
+            .expect("legacy daemon info without process generation");
+
+        assert!(legacy.daemon_process_generation.is_none());
+        assert_eq!(
+            classify_daemon_process_continuity(&legacy, &legacy),
+            DaemonProcessContinuity::Unknown
+        );
+    }
+
+    #[test]
+    fn empty_process_generation_fails_closed() {
+        let info = RemoteDaemonInfo {
+            name: "codex-monitor-daemon".to_string(),
+            remote_host_identity: RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+                .unwrap(),
+            daemon_process_generation: Some(DaemonProcessGeneration(String::new())),
+            version: "1.0.0".to_string(),
+            protocol_version: REMOTE_DAEMON_PROTOCOL_VERSION,
+            mode: "tcp".to_string(),
+            display_name: None,
+            capabilities: RemoteDaemonCapabilities::default(),
+        };
+
         assert!(validate_daemon_info(&info).is_err());
     }
 }

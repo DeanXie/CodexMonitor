@@ -1,6 +1,6 @@
 # Phase 3.5.2d — Remote Transport Coordination
 
-Status: Phase 3.5.2d.1, Phase 3.5.2d.2, and Phase 3.5.2d.3 are
+Status: Phase 3.5.2d.1 through Phase 3.5.2d.4 are
 **PASS / COMPLETE / FROZEN**.
 
 ## Authority boundary
@@ -154,13 +154,49 @@ the current backend or availability snapshot. These transport events do not
 change WorkspaceSession, writer-admission, subscription, runtime-availability,
 or canonical Thread truth, and they do not trigger retry or replay.
 
+## Daemon restart and session re-establishment
+
+Phase 3.5.2d.4 gives each daemon process lifetime an opaque, non-persisted
+`DaemonProcessGeneration`. Authenticated `daemon_info` returns this generation
+alongside the persisted `RemoteHostIdentity`. A reconnect that observes the
+same generation is a reconnect to the same daemon process; a different
+generation on the same pinned host is a daemon restart. If either side lacks
+process-generation evidence, process continuity remains `UNKNOWN`.
+
+`RemoteHostIdentity` continues to prove only the pinned execution host. It is
+not a daemon-process, transport, WorkspaceSession, app-server, writer, or
+subscription continuity token. A changed Host identity still fails closed and
+is never accepted as an automatic rotation.
+
+Each new daemon process starts with an empty in-memory sessions map. Persisted
+Workspace route metadata may be loaded, but `route exists` does not imply
+`WorkspaceSession exists` or runtime readiness. An explicit
+`connect_workspace` establishes a new shared `WorkspaceSession` and app-server
+connection. Concurrent callers retain the existing single-flight behavior and
+share one re-established session.
+
+The new WorkspaceSession generations do not copy old current observations.
+For the same `CodexThreadKey`, writer admission starts at `NOT_OBSERVED`,
+subscription starts at `NOT_OBSERVED`, and runtime availability starts at
+`UNKNOWN`. Old-generation observations remain historical evidence only. A
+daemon restart does not delete a canonical Thread, mark a writer free, mark a
+subscription released, or infer runtime `NOT_LOADED`.
+
+An in-flight resume or upstream unsubscribe whose response was not observed
+when the old daemon died remains unknown to its caller. It is not replayed,
+retried, or rebound to the new daemon or WorkspaceSession generation. Late
+old-transport responses, notifications, teardown, and request provenance are
+still excluded by the d.1-d.3 generation gates and cannot mutate new-daemon
+current state.
+
 ## Generation separation
 
-The three generation types solve different problems:
+The four generation types solve different problems:
 
 | Generation | Scope | Purpose | Must not imply |
 | --- | --- | --- | --- |
 | `RemoteTransportGeneration` | One authenticated Remote TCP connection in one process | Request/response correlation, reconnect isolation, stale transport evidence | Remote-client identity or any ownership |
+| `DaemonProcessGeneration` | One daemon process lifetime | Distinguish same-process reconnect from same-host daemon restart | Host identity, transport identity, session continuity, or ownership |
 | `WorkspaceSessionGeneration` | One WorkspaceSession/app-server process lifetime | Writer-admission evidence and session replacement isolation | TCP connection identity |
 | `AppServerConnectionGeneration` | One app-server protocol connection within a WorkspaceSession | Subscription and runtime-observation isolation | Remote transport or subscriber ownership |
 
@@ -170,9 +206,9 @@ provenance.
 
 ## Slice boundary
 
-Phase 3.5.2d.1-d.3 change no resume/unsubscribe business response schema,
+Phase 3.5.2d.1-d.4 change no resume/unsubscribe business response schema,
 writer or subscription transitions, runtime transitions, retry/replay policy,
-or daemon restart recovery. They add no public UI API and perform no real
-writer mutation or upstream unsubscribe capture. Phase 3.5.2d.3 changes only
-the App-side Remote notification publication boundary; daemon restart/session
-reconstruction remains outside this slice.
+or canonical Thread authority. They add no public UI API and perform no real
+writer mutation or upstream unsubscribe capture. Phase 3.5.2d.4 freezes daemon
+restart detection and session re-establishment; final compatibility closeout
+remains Phase 3.5.2d.5.

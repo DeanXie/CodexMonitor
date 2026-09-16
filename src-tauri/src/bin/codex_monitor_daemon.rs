@@ -80,8 +80,8 @@ use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
 use shared::prompts_core::{self, CustomPromptEntry};
 use shared::remote_host_identity::{
-    load_or_initialize_remote_host_identity, RemoteDaemonCapabilities, RemoteDaemonInfo,
-    RemoteHostIdentity, REMOTE_DAEMON_PROTOCOL_VERSION,
+    load_or_initialize_remote_host_identity, DaemonProcessGeneration, RemoteDaemonCapabilities,
+    RemoteDaemonInfo, RemoteHostIdentity, REMOTE_DAEMON_PROTOCOL_VERSION,
 };
 use shared::remote_request_provenance::{
     RemoteRequestDispatchContext, RemoteRequestKey, RemoteRequestProvenanceRuntime,
@@ -165,6 +165,7 @@ struct DaemonState {
         shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
     data_dir: PathBuf,
     remote_host_identity: RemoteHostIdentity,
+    daemon_process_generation: DaemonProcessGeneration,
     execution_environment_key: ExecutionEnvironmentKey,
     workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -192,10 +193,12 @@ impl DaemonState {
             .ok()
             .and_then(|path| path.to_str().map(str::to_string));
         let remote_host_identity = load_or_initialize_remote_host_identity(&config.data_dir)?;
+        let daemon_process_generation = DaemonProcessGeneration::generate();
         let execution_environment_key = remote_execution_environment_key(&remote_host_identity);
         Ok(Self {
             data_dir: config.data_dir.clone(),
             remote_host_identity,
+            daemon_process_generation,
             execution_environment_key,
             creation_coordinator: Default::default(),
             execution_settings_evidence: Default::default(),
@@ -214,6 +217,7 @@ impl DaemonState {
         let mut value = serde_json::to_value(RemoteDaemonInfo {
             name: DAEMON_NAME.to_string(),
             remote_host_identity: self.remote_host_identity.clone(),
+            daemon_process_generation: Some(self.daemon_process_generation.clone()),
             version: env!("CARGO_PKG_VERSION").to_string(),
             protocol_version: REMOTE_DAEMON_PROTOCOL_VERSION,
             mode: "tcp".to_string(),
@@ -1681,6 +1685,10 @@ fn parse_args() -> Result<DaemonConfig, String> {
 
 #[cfg(test)]
 mod tests {
+    mod daemon_restart_tests {
+        include!("codex_monitor_daemon/daemon_restart_tests.rs");
+    }
+
     mod remote_dispatch_correlation_tests {
         include!("codex_monitor_daemon/remote_dispatch_correlation_tests.rs");
     }
@@ -1728,6 +1736,7 @@ mod tests {
             data_dir: data_dir.to_path_buf(),
             remote_host_identity: RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
                 .expect("test remote host identity"),
+            daemon_process_generation: DaemonProcessGeneration::generate(),
             execution_environment_key: ExecutionEnvironmentKey::new(
                 "remote:6ba7b810-9dad-41d1-80b4-00c04fd430c8",
             )
@@ -2507,6 +2516,12 @@ mod tests {
                 Some("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
             );
             assert_eq!(
+                result
+                    .get("daemonProcessGeneration")
+                    .and_then(Value::as_str),
+                Some(state.daemon_process_generation.as_str())
+            );
+            assert_eq!(
                 result.get("protocolVersion").and_then(Value::as_u64),
                 Some(REMOTE_DAEMON_PROTOCOL_VERSION as u64)
             );
@@ -2531,6 +2546,10 @@ mod tests {
         let first = DaemonState::load(&config, DaemonEventSink { tx: events.clone() }).unwrap();
         let second = DaemonState::load(&config, DaemonEventSink { tx: events.clone() }).unwrap();
         assert_eq!(first.remote_host_identity, second.remote_host_identity);
+        assert_ne!(
+            first.daemon_process_generation,
+            second.daemon_process_generation
+        );
         std::fs::write(tmp.join("remote-host-identity.json"), "malformed").unwrap();
         assert!(DaemonState::load(&config, DaemonEventSink { tx: events }).is_err());
         let _ = std::fs::remove_dir_all(tmp);
@@ -2541,6 +2560,7 @@ mod tests {
         run_async_test(async {
             let tmp = make_temp_dir("authenticated-daemon-info");
             let state = Arc::new(test_state(&tmp));
+            let daemon_process_generation = state.daemon_process_generation.clone();
             let (events, _) = broadcast::channel(16);
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let address = listener.local_addr().unwrap();
@@ -2589,6 +2609,12 @@ mod tests {
                     .pointer("/result/remoteHostIdentity")
                     .and_then(Value::as_str),
                 Some("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+            );
+            assert_eq!(
+                response
+                    .pointer("/result/daemonProcessGeneration")
+                    .and_then(Value::as_str),
+                Some(daemon_process_generation.as_str())
             );
             drop(writer);
             server.await.unwrap();

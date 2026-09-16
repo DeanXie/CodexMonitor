@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod daemon_process_continuity_tests;
 mod protocol;
 #[cfg(test)]
 mod stale_delivery_tests;
@@ -16,7 +18,8 @@ use tokio::time::timeout;
 
 use crate::shared::remote_host_availability::{AvailabilityEvent, RemoteHostAvailabilitySnapshot};
 use crate::shared::remote_host_identity::{
-    validate_daemon_info, RemoteDaemonInfo, RemoteHostIdentity,
+    classify_same_host_daemon_process_continuity, validate_daemon_info, DaemonProcessContinuity,
+    DaemonProcessGeneration, RemoteDaemonInfo, RemoteHostIdentity,
 };
 use crate::shared::remote_request_provenance::RemoteRequestProvenanceRuntime;
 use crate::state::AppState;
@@ -89,6 +92,7 @@ struct RemoteBackendCacheState {
     generation: u64,
     current: Option<RemoteBackend>,
     negative: Option<RemoteBackendNegativeResult>,
+    last_daemon_process_generation: Option<DaemonProcessGeneration>,
 }
 
 impl RemoteBackendCache {
@@ -136,6 +140,7 @@ impl RemoteBackendCache {
                                 .to_string(),
                         )
                     })?;
+                let daemon_process_generation = client.daemon_process_generation();
                 let mut state = self.state.lock().await;
                 if state.generation != generation {
                     return Err(RemoteBackendInitializationError::from(
@@ -143,6 +148,11 @@ impl RemoteBackendCache {
                     ));
                 }
                 state.negative = None;
+                client.set_daemon_process_continuity(classify_same_host_daemon_process_continuity(
+                    state.last_daemon_process_generation.as_ref(),
+                    daemon_process_generation.as_ref(),
+                ));
+                state.last_daemon_process_generation = daemon_process_generation;
                 state.current = Some(client.clone());
                 self.notification_delivery
                     .publish_current(notification_generation);
@@ -216,6 +226,7 @@ impl RemoteBackendCache {
         let mut state = self.state.lock().await;
         state.current = None;
         state.negative = None;
+        state.last_daemon_process_generation = None;
         state.generation = state.generation.wrapping_add(1);
         self.notification_delivery.clear_current();
     }
@@ -282,6 +293,8 @@ struct RemoteBackendInner {
     availability: TransportAvailabilityObserver,
     request_provenance: StdMutex<Option<Arc<RemoteRequestProvenanceRuntime>>>,
     notification_delivery: RemoteNotificationDeliveryGate,
+    daemon_process_generation: StdMutex<Option<DaemonProcessGeneration>>,
+    daemon_process_continuity: StdMutex<DaemonProcessContinuity>,
 }
 
 impl RemoteBackend {
@@ -454,6 +467,51 @@ impl RemoteBackend {
         &self,
     ) -> Option<crate::shared::remote_request_provenance::RemoteTransportGeneration> {
         self.inner.notification_delivery.authenticated_generation()
+    }
+
+    fn bind_daemon_process_generation(
+        &self,
+        generation: Option<DaemonProcessGeneration>,
+    ) -> Result<(), String> {
+        let mut current = self
+            .inner
+            .daemon_process_generation
+            .lock()
+            .expect("daemon process generation lock");
+        match (current.as_ref(), generation.as_ref()) {
+            (Some(existing), Some(candidate)) if existing != candidate => Err(
+                "remote backend is already bound to another daemon process generation".to_string(),
+            ),
+            (None, Some(candidate)) => {
+                *current = Some(candidate.clone());
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn daemon_process_generation(&self) -> Option<DaemonProcessGeneration> {
+        self.inner
+            .daemon_process_generation
+            .lock()
+            .expect("daemon process generation lock")
+            .clone()
+    }
+
+    fn set_daemon_process_continuity(&self, continuity: DaemonProcessContinuity) {
+        *self
+            .inner
+            .daemon_process_continuity
+            .lock()
+            .expect("daemon process continuity lock") = continuity;
+    }
+
+    fn daemon_process_continuity(&self) -> DaemonProcessContinuity {
+        *self
+            .inner
+            .daemon_process_continuity
+            .lock()
+            .expect("daemon process continuity lock")
     }
 
     #[cfg(test)]
@@ -700,6 +758,8 @@ async fn initialize_remote_backend(
             availability,
             request_provenance: StdMutex::new(None),
             notification_delivery,
+            daemon_process_generation: StdMutex::new(None),
+            daemon_process_continuity: StdMutex::new(DaemonProcessContinuity::Unknown),
         }),
     };
 
@@ -770,6 +830,7 @@ async fn initialize_remote_backend(
         });
         return Err(error.into());
     }
+    client.bind_daemon_process_generation(daemon_info.daemon_process_generation.clone())?;
     client.observe(AvailabilityEvent::DaemonAvailable {
         identity: daemon_info.remote_host_identity.clone(),
     });
@@ -921,7 +982,7 @@ mod tests {
         RemoteNotificationDeliveryAuthority, RemoteTransportConfig, TransportAvailabilityObserver,
     };
     use crate::shared::remote_host_availability::RemoteHostAvailabilityRuntime;
-    use crate::shared::remote_host_identity::RemoteHostIdentity;
+    use crate::shared::remote_host_identity::{DaemonProcessContinuity, RemoteHostIdentity};
     use crate::types::AppSettings;
     use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -956,6 +1017,8 @@ mod tests {
                     },
                     request_provenance: StdMutex::new(Some(request_provenance)),
                     notification_delivery,
+                    daemon_process_generation: StdMutex::new(None),
+                    daemon_process_continuity: StdMutex::new(DaemonProcessContinuity::Unknown),
                 }),
             },
             out_rx,
@@ -1658,6 +1721,8 @@ mod tests {
                 request_provenance: StdMutex::new(None),
                 notification_delivery: RemoteNotificationDeliveryAuthority::default()
                     .new_connection_gate(),
+                daemon_process_generation: StdMutex::new(None),
+                daemon_process_continuity: StdMutex::new(DaemonProcessContinuity::Unknown),
             }),
         };
         assert!(client.transport_generation().is_none());
@@ -1808,6 +1873,8 @@ mod tests {
                 request_provenance: StdMutex::new(None),
                 notification_delivery: RemoteNotificationDeliveryAuthority::default()
                     .new_connection_gate(),
+                daemon_process_generation: StdMutex::new(None),
+                daemon_process_continuity: StdMutex::new(DaemonProcessContinuity::Unknown),
             }),
         };
         let error = client

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    { "event": "stale_response", "sourceGeneration": "old", "deliveredToCurrent": false, "currentStateChanged": false },
+    { "event": "stale_notification", "sourceGeneration": "old", "deliveredToCurrent": false, "currentStateChanged": false },
+    { "event": "stale_disconnect", "sourceGeneration": "old", "deliveredToCurrent": false, "currentStateChanged": false },
+    { "event": "stale_eof", "sourceGeneration": "old", "deliveredToCurrent": false, "currentStateChanged": false },
+    { "event": "stale_read_error", "sourceGeneration": "old", "deliveredToCurrent": false, "currentStateChanged": false },
+    { "event": "overlapping_old_reader", "sourceGeneration": "old", "deliveredToCurrent": false, "currentStateChanged": false }
+  ]
+}

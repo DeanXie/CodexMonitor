@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "generations": {
+    "remoteHostIdentity": { "scope": "host", "sample": "014383f2-41f8-4b13-b9d7-30c511e47cec", "persistsAcrossDaemonRestart": true },
+    "daemonProcessGeneration": { "scope": "daemon_process", "sample": "daemon-process-current", "changesOnDaemonRestart": true },
+    "remoteTransportGeneration": { "scope": "tcp_transport", "sample": "transport-current", "changesOnReconnect": true },
+    "workspaceSessionGeneration": { "scope": "workspace_session", "sample": "workspace-session-current", "changesOnReestablishment": true },
+    "appServerConnectionGeneration": { "scope": "app_server_connection", "sample": "app-server-connection-current", "changesOnReestablishment": true }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "crossGenerationRequestId": 41,
+  "scenarios": [
+    {
+      "transportGeneration": "transport-a",
+      "transportRequestId": 41,
+      "method": "resume_thread",
+      "receivedAt": 10,
+      "dispatchStartedAt": 11,
+      "sessionAttemptBoundAt": 12,
+      "sessionAttempt": {
+        "kind": "writer_admission",
+        "workspaceId": "workspace-a",
+        "workspaceSessionGeneration": "workspace-session-a",
+        "appServerConnectionGeneration": null,
+        "threadKey": { "codexHomeIdentity": "codex-home-a", "threadId": "thread-a" },
+        "attemptId": "writer-attempt-a"
+      },
+      "expectedSnapshot": {
+        "transportGeneration": "transport-a",
+        "transportRequestId": 41,
+        "method": "resume_thread",
+        "receivedAt": 10,
+        "dispatchState": "session_attempt_bound",
+        "dispatchStartedAt": 11,
+        "sessionAttemptBoundAt": 12,
+        "sessionAttempt": {
+          "kind": "writer_admission",
+          "workspaceId": "workspace-a",
+          "workspaceSessionGeneration": "workspace-session-a",
+          "appServerConnectionGeneration": null,
+          "threadKey": { "codexHomeIdentity": "codex-home-a", "threadId": "thread-a" },
+          "attemptId": "writer-attempt-a"
+        },
+        "responseObservedAt": null,
+        "transportLostAt": null
+      }
+    },
+    {
+      "transportGeneration": "transport-b",
+      "transportRequestId": 42,
+      "method": "thread_upstream_unsubscribe",
+      "receivedAt": 20,
+      "dispatchStartedAt": 21,
+      "sessionAttemptBoundAt": 22,
+      "sessionAttempt": {
+        "kind": "upstream_unsubscribe",
+        "workspaceId": "workspace-a",
+        "workspaceSessionGeneration": "workspace-session-a",
+        "appServerConnectionGeneration": "app-server-connection-a",
+        "threadKey": { "codexHomeIdentity": "codex-home-a", "threadId": "thread-a" },
+        "attemptId": "unsubscribe-attempt-a"
+      },
+      "expectedSnapshot": {
+        "transportGeneration": "transport-b",
+        "transportRequestId": 42,
+        "method": "thread_upstream_unsubscribe",
+        "receivedAt": 20,
+        "dispatchState": "session_attempt_bound",
+        "dispatchStartedAt": 21,
+        "sessionAttemptBoundAt": 22,
+        "sessionAttempt": {
+          "kind": "upstream_unsubscribe",
+          "workspaceId": "workspace-a",
+          "workspaceSessionGeneration": "workspace-session-a",
+          "appServerConnectionGeneration": "app-server-connection-a",
+          "threadKey": { "codexHomeIdentity": "codex-home-a", "threadId": "thread-a" },
+          "attemptId": "unsubscribe-attempt-a"
+        },
+        "responseObservedAt": null,
+        "transportLostAt": null
+      }
+    }
+  ]
+}

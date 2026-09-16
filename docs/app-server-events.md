@@ -68,6 +68,23 @@ unauthenticated generations are dropped immediately before the Tauri event
 hub. This transport gate changes no app-server method or payload schema and
 does not infer WorkspaceSession, subscription, runtime, or writer state.
 
+Phase 3.5.2d freezes five distinct continuity authorities around this delivery
+path: `RemoteHostIdentity` identifies the host;
+`DaemonProcessGeneration`, `RemoteTransportGeneration`,
+`WorkspaceSessionGeneration`, and `AppServerConnectionGeneration` identify
+their respective process, TCP transport, session, and protocol-connection
+lifetimes. Reconnect creates a new transport generation. Daemon restart keeps
+the pinned Host identity but creates a new daemon-process generation and an
+empty sessions map; explicit re-establishment creates new WorkspaceSession and
+app-server generations. Multiple transports may share one WorkspaceSession,
+but request provenance remains transport-scoped, writer/runtime truth remains
+session-scoped, and subscription truth remains app-server-connection-scoped.
+No generation is a client identity or ownership record. Stale transport
+response, notification, disconnect, EOF, and read-error evidence cannot enter
+the current generation, and no mutation is retried or replayed across reconnect
+or restart. The sanitized compatibility authority is
+`docs/fixtures/remote-transport-coordination/`.
+
 Runtime catch-up uses explicit `HYDRATION` provenance. It projects only currently
 processing threads (plus their known ancestors and descendants) from the app's
 current thread identity, parent, thread-status, and active-turn state. Those

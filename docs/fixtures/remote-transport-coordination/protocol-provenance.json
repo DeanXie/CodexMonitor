@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "slices": {
+    "d1": "084fd6b22e7a34035397da5536d5dc82b91761a7",
+    "d2": "3d80a22600bae91cbd964c8ce597380e860fe863",
+    "d3": "2e8729cf27ff2a7a0953a48966c251f55a78cbd3",
+    "d4": "a01d65d6c0820bc572f4a7da44cdab3dfb3b9fb3"
+  },
+  "implementation": { "appCore": "shared_core", "daemonCore": "shared_core" },
+  "mutationPolicy": {
+    "resumeThreadRetryCount": 0,
+    "upstreamUnsubscribeRetryCount": 0,
+    "reconnectReplayCount": 0,
+    "daemonRestartReplayCount": 0,
+    "newExplicitIntent": "new_attempt"
+  }
+}

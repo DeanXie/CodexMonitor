@@ -58,6 +58,10 @@ mod surface_projection_engine_tests;
 #[path = "remote_request_provenance_tests.rs"]
 mod remote_request_provenance_tests;
 
+#[cfg(test)]
+#[path = "remote_transport_compatibility_tests.rs"]
+mod remote_transport_compatibility_tests;
+
 #[cfg(all(test, desktop))]
 #[path = "desktop_projection_handling_tests.rs"]
 mod desktop_projection_handling_tests;

@@ -46,3 +46,11 @@ in `../fixtures/app-server/thread-lifecycle-observation/`. They freeze the
 existing c.1-c.4 reducers and lifecycle reconciliation without executing a new
 unsubscribe or writer mutation. The c.5 RED/GREEN and regression index is
 `phase-3-5-2c/protocol-compatibility-freeze.md`.
+
+Phase 3.5.2d Remote transport/request coordination compatibility fixtures are
+stored in `../fixtures/remote-transport-coordination/`. They freeze generation
+separation, transport-scoped request provenance, stale-delivery isolation,
+daemon-restart session reset, multi-client shared-session semantics, and the
+zero retry/replay contract without executing a writer or unsubscribe mutation.
+The d.5 RED/GREEN and regression index is
+`phase-3-5-2d/protocol-compatibility-freeze.md`.

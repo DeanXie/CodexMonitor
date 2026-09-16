@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "remoteHostIdentity": "014383f2-41f8-4b13-b9d7-30c511e47cec",
+  "threadKey": { "codexHomeIdentity": "codex-home-a", "threadId": "thread-a" },
+  "beforeRestart": {
+    "daemonProcessGeneration": "daemon-process-a",
+    "workspaceSessionGeneration": "workspace-session-a",
+    "appServerConnectionGeneration": "app-server-connection-a",
+    "sessionsMapCount": 1
+  },
+  "afterRestart": {
+    "daemonProcessGeneration": "daemon-process-b",
+    "workspaceSessionGeneration": "workspace-session-b",
+    "appServerConnectionGeneration": "app-server-connection-b",
+    "sessionsMapCount": 0,
+    "canonicalThreadPreserved": true,
+    "canonicalThreadState": "unchanged",
+    "workspaceRoutePersisted": true,
+    "workspaceConnectedBeforeExplicitConnect": false
+  },
+  "reestablishment": { "concurrentClientCount": 2, "sessionSpawnCount": 1, "currentSessionCount": 1 }
+}

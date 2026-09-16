@@ -1,7 +1,7 @@
 # Phase 3.5.2d — Remote Transport Coordination
 
-Status: Phase 3.5.2d.1 through Phase 3.5.2d.4 are
-**PASS / COMPLETE / FROZEN**.
+Status: Phase 3.5.2d.1 through Phase 3.5.2d.5 and Phase 3.5.2d overall are
+**PASS / COMPLETE / FROZEN**. Current blocker: **NONE**.
 
 ## Authority boundary
 
@@ -189,9 +189,23 @@ old-transport responses, notifications, teardown, and request provenance are
 still excluded by the d.1-d.3 generation gates and cannot mutate new-daemon
 current state.
 
-## Generation separation
+## Generation hierarchy and separation
 
-The four generation types solve different problems:
+The authority hierarchy is descriptive, not substitutive:
+
+```text
+RemoteHostIdentity                 host identity
+DaemonProcessGeneration           daemon process continuity
+RemoteTransportGeneration         authenticated TCP transport continuity
+WorkspaceSessionGeneration        WorkspaceSession continuity
+AppServerConnectionGeneration     app-server connection continuity
+```
+
+`RemoteHostIdentity` may persist while every process, transport, session, and
+app-server generation changes. None of the generation values is a stable
+Remote-client identity, writer owner, subscription owner, or lease.
+
+The four process-local generation types solve different problems:
 
 | Generation | Scope | Purpose | Must not imply |
 | --- | --- | --- | --- |
@@ -204,11 +218,51 @@ None may substitute for another. Multiple Remote transports may share the same
 daemon and WorkspaceSession truth while retaining independent request
 provenance.
 
+## Frozen multi-client, reconnect, and stale-evidence contract
+
+Multiple authenticated Remote transports may share one `WorkspaceSession`.
+Request provenance remains transport-scoped, writer/runtime truth remains
+WorkspaceSession-scoped, and subscription truth remains app-server-connection
+scoped. No client ownership follows from this sharing.
+
+A reconnect to a surviving daemon creates a new transport generation and may
+retain the same WorkspaceSession. A daemon restart creates a new daemon-process
+generation, begins with an empty sessions map, and requires explicit
+WorkspaceSession re-establishment with new WorkspaceSession and app-server
+connection generations. The same `RemoteHostIdentity` proves the same pinned
+host, not session continuity.
+
+Stale responses, notifications, disconnects, EOF, and read errors remain
+historical transport evidence. They cannot enter current-generation delivery,
+clear the current backend, downgrade current availability, or replace direct
+shared-session business evidence.
+
+Mutation replay remains disabled: resume retry is zero, upstream-unsubscribe
+retry is zero, reconnect replay is zero, and daemon-restart replay is zero. A
+new explicit user intent creates new request provenance and a new session
+attempt; it is not replay.
+
+Transport, authentication, daemon, and runtime availability do not determine
+canonical Thread existence. Disconnect or restart does not delete a canonical
+Thread, mark it absent, or create writer/subscription release evidence.
+
+## Compatibility fixtures
+
+Sanitized schema and scenario fixtures live in
+`docs/fixtures/remote-transport-coordination/`. Shared compatibility tests in
+`src-tauri/src/shared/remote_transport_compatibility_tests.rs` execute in both
+the App/lib and daemon test targets. They freeze the generation hierarchy,
+compound request provenance, cross-generation request-ID safety, stale-delivery
+isolation, daemon-restart reset, multi-client shared-session behavior, absence
+of mutation replay, and the separation of availability from canonical Thread
+truth.
+
 ## Slice boundary
 
-Phase 3.5.2d.1-d.4 change no resume/unsubscribe business response schema,
+Phase 3.5.2d.1-d.5 change no resume/unsubscribe business response schema,
 writer or subscription transitions, runtime transitions, retry/replay policy,
 or canonical Thread authority. They add no public UI API and perform no real
 writer mutation or upstream unsubscribe capture. Phase 3.5.2d.4 freezes daemon
-restart detection and session re-establishment; final compatibility closeout
-remains Phase 3.5.2d.5.
+restart detection and session re-establishment. Phase 3.5.2d.5 freezes these
+contracts in fixtures, compatibility tests, and authoritative documentation;
+it adds no product behavior.

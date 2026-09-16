@@ -5,6 +5,7 @@ use crate::shared::remote_request_provenance::{
 };
 use crate::shared::codex_core::thread_lifecycle_observation::ThreadSubscriptionObservationState;
 use crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationState;
+use crate::shared::codex_core::approval_decision_provenance::ApprovalDecisionState;
 use std::sync::atomic::Ordering;
 
 async fn respond_to_resume(session: &WorkspaceSession, thread_id: &str) {
@@ -55,6 +56,213 @@ async fn stop_session(session: &WorkspaceSession) {
     let mut child = session.child.lock().await;
     let _ = child.kill().await;
     let _ = child.wait().await;
+}
+
+fn seed_command_approval(session: &WorkspaceSession, request_id: u64) {
+    session
+        .approval_observations
+        .observe_request(
+            &json!({
+                "id": request_id,
+                "method": "item/commandExecution/requestApproval",
+                "params": {
+                    "threadId": "thread-approval",
+                    "turnId": "turn-approval",
+                    "itemId": "item-approval",
+                    "approvalId": "approval-callback"
+                }
+            }),
+            10,
+        )
+        .expect("seed approval");
+}
+
+#[test]
+fn remote_approval_decision_binds_transport_to_exact_session_attempt() {
+    run_async_test(async {
+        let tmp = make_temp_dir("remote-approval-correlation-red");
+        let workspace_id = "remote-approval-correlation-workspace";
+        let state = test_state(&tmp);
+        insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+        let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+        seed_command_approval(&session, 7);
+        state.sessions.lock().await.insert(workspace_id.to_string(), Arc::clone(&session));
+        let (provenance, key, context) =
+            remote_context("transport-approval-a", 41, "respond_to_server_request");
+
+        let result = rpc::handle_rpc_request_with_context(
+            &state,
+            "respond_to_server_request",
+            json!({"workspaceId":workspace_id,"requestId":7,"result":{"decision":"accept"}}),
+            "daemon-test".to_string(),
+            Some(&context),
+        )
+        .await;
+        assert!(result.is_ok());
+        let attempts = session.approval_observations.decision_attempts();
+        assert_eq!(attempts.len(), 1);
+        assert_eq!(attempts[0].state, ApprovalDecisionState::DecisionDispatched);
+        assert_eq!(attempts[0].dispatch_count, 1);
+        let correlation = provenance
+            .snapshot(&key)
+            .unwrap()
+            .session_attempt
+            .expect("decision attempt correlation");
+        assert_eq!(correlation.kind, SessionAttemptKind::ApprovalDecision);
+        assert_eq!(correlation.workspace_id, workspace_id);
+        assert_eq!(correlation.thread_key.thread_id, "thread-approval");
+        assert_eq!(
+            correlation.app_server_connection_generation.as_deref(),
+            Some(session.approval_observations.app_server_connection_generation().as_str())
+        );
+        stop_session(&session).await;
+        let _ = std::fs::remove_dir_all(tmp);
+    });
+}
+
+#[test]
+fn simultaneous_remote_approval_decisions_write_at_most_once() {
+    run_async_test(async {
+        let tmp = make_temp_dir("remote-approval-simultaneous");
+        let workspace_id = "remote-approval-simultaneous-workspace";
+        let state = test_state(&tmp);
+        insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+        let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+        seed_command_approval(&session, 7);
+        state.sessions.lock().await.insert(workspace_id.to_string(), Arc::clone(&session));
+        let (_, _, first_context) =
+            remote_context("transport-approval-a", 1, "respond_to_server_request");
+        let (_, _, second_context) =
+            remote_context("transport-approval-b", 1, "respond_to_server_request");
+        let first = rpc::handle_rpc_request_with_context(
+            &state,
+            "respond_to_server_request",
+            json!({"workspaceId":workspace_id,"requestId":7,"result":{"decision":"accept"}}),
+            "daemon-test".to_string(),
+            Some(&first_context),
+        );
+        let second = rpc::handle_rpc_request_with_context(
+            &state,
+            "respond_to_server_request",
+            json!({"workspaceId":workspace_id,"requestId":7,"result":{"decision":"decline"}}),
+            "daemon-test".to_string(),
+            Some(&second_context),
+        );
+        let (first, second) = tokio::join!(first, second);
+        assert_eq!([first.is_ok(), second.is_ok()].into_iter().filter(|ok| *ok).count(), 1);
+        let attempts = session.approval_observations.decision_attempts();
+        assert_eq!(attempts.len(), 2);
+        assert_eq!(attempts.iter().map(|attempt| attempt.dispatch_count).sum::<u32>(), 1);
+        stop_session(&session).await;
+        let _ = std::fs::remove_dir_all(tmp);
+    });
+}
+
+#[test]
+fn wrong_approval_response_schema_dispatches_zero_messages() {
+    run_async_test(async {
+        let tmp = make_temp_dir("remote-approval-wrong-schema");
+        let workspace_id = "remote-approval-wrong-schema-workspace";
+        let state = test_state(&tmp);
+        insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+        let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+        seed_command_approval(&session, 7);
+        state
+            .sessions
+            .lock()
+            .await
+            .insert(workspace_id.to_string(), Arc::clone(&session));
+        let (_, _, context) =
+            remote_context("transport-approval-invalid", 1, "respond_to_server_request");
+
+        let result = rpc::handle_rpc_request_with_context(
+            &state,
+            "respond_to_server_request",
+            json!({"workspaceId":workspace_id,"requestId":7,"result":{"decision":"acceptAlways"}}),
+            "daemon-test".to_string(),
+            Some(&context),
+        )
+        .await;
+        assert!(result.is_err());
+        let attempt = session.approval_observations.decision_attempts().remove(0);
+        assert_eq!(attempt.state, ApprovalDecisionState::DecisionNotDispatched);
+        assert_eq!(attempt.dispatch_count, 0);
+        assert_eq!(attempt.retry_count, 0);
+        stop_session(&session).await;
+        let _ = std::fs::remove_dir_all(tmp);
+    });
+}
+
+#[test]
+fn approval_transport_loss_after_write_records_outcome_unknown() {
+    run_async_test(async {
+        let tmp = make_temp_dir("remote-approval-post-write-loss");
+        let workspace_id = "remote-approval-post-write-loss-workspace";
+        let state = test_state(&tmp);
+        insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+        let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+        seed_command_approval(&session, 7);
+        state.sessions.lock().await.insert(workspace_id.to_string(), Arc::clone(&session));
+        let (provenance, _, context) =
+            remote_context("transport-approval-loss", 1, "respond_to_server_request");
+        rpc::handle_rpc_request_with_context(
+            &state,
+            "respond_to_server_request",
+            json!({"workspaceId":workspace_id,"requestId":7,"result":{"decision":"accept"}}),
+            "daemon-test".to_string(),
+            Some(&context),
+        )
+        .await
+        .expect("response write");
+        provenance.record_transport_lost(30);
+        let attempt = session.approval_observations.decision_attempts().remove(0);
+        assert_eq!(attempt.state, ApprovalDecisionState::DecisionOutcomeUnknown);
+        assert_eq!(attempt.dispatch_count, 1);
+        assert_eq!(attempt.retry_count, 0);
+        stop_session(&session).await;
+        let _ = std::fs::remove_dir_all(tmp);
+    });
+}
+
+#[test]
+fn stale_old_transport_cannot_start_approval_decision_but_new_transport_can() {
+    run_async_test(async {
+        let tmp = make_temp_dir("remote-approval-reconnect");
+        let workspace_id = "remote-approval-reconnect-workspace";
+        let state = test_state(&tmp);
+        insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+        let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+        seed_command_approval(&session, 7);
+        state.sessions.lock().await.insert(workspace_id.to_string(), Arc::clone(&session));
+        let (old_runtime, _, old_context) =
+            remote_context("transport-approval-old", 1, "respond_to_server_request");
+        old_runtime.record_transport_lost(25);
+        let old = rpc::handle_rpc_request_with_context(
+            &state,
+            "respond_to_server_request",
+            json!({"workspaceId":workspace_id,"requestId":7,"result":{"decision":"accept"}}),
+            "daemon-test".to_string(),
+            Some(&old_context),
+        )
+        .await;
+        assert!(old.is_err());
+        assert!(session.approval_observations.decision_attempts().is_empty());
+
+        let (_, _, new_context) =
+            remote_context("transport-approval-new", 1, "respond_to_server_request");
+        let new = rpc::handle_rpc_request_with_context(
+            &state,
+            "respond_to_server_request",
+            json!({"workspaceId":workspace_id,"requestId":7,"result":{"decision":"accept"}}),
+            "daemon-test".to_string(),
+            Some(&new_context),
+        )
+        .await;
+        assert!(new.is_ok());
+        assert_eq!(session.approval_observations.decision_attempts().len(), 1);
+        stop_session(&session).await;
+        let _ = std::fs::remove_dir_all(tmp);
+    });
 }
 
 #[test]

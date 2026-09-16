@@ -1,0 +1,16 @@
+{
+  "requestKind": "permissions",
+  "response": {
+    "permissions": {
+      "network": { "enabled": true },
+      "fileSystem": {
+        "read": ["C:/fixture/read"],
+        "write": null,
+        "globScanMaxDepth": 2,
+        "entries": []
+      }
+    },
+    "scope": "turn",
+    "strictAutoReview": true
+  }
+}

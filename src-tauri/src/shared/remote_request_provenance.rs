@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+pub(crate) type TransportLossHook = Arc<dyn Fn(i64) + Send + Sync>;
+
 use crate::shared::codex_identity::CodexThreadKey;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -66,6 +68,7 @@ pub(crate) struct SessionAttemptProvenance {
 pub(crate) enum SessionAttemptKind {
     WriterAdmission,
     UpstreamUnsubscribe,
+    ApprovalDecision,
 }
 
 impl SessionAttemptProvenance {
@@ -94,6 +97,23 @@ impl SessionAttemptProvenance {
     ) -> Result<Self, String> {
         Self::new(
             SessionAttemptKind::UpstreamUnsubscribe,
+            workspace_id,
+            workspace_session_generation,
+            Some(app_server_connection_generation.into()),
+            thread_key,
+            attempt_id,
+        )
+    }
+
+    pub(crate) fn approval_decision(
+        workspace_id: impl Into<String>,
+        workspace_session_generation: impl Into<String>,
+        app_server_connection_generation: impl Into<String>,
+        thread_key: CodexThreadKey,
+        attempt_id: impl Into<String>,
+    ) -> Result<Self, String> {
+        Self::new(
+            SessionAttemptKind::ApprovalDecision,
             workspace_id,
             workspace_session_generation,
             Some(app_server_connection_generation.into()),
@@ -132,11 +152,13 @@ impl SessionAttemptProvenance {
         {
             return Err("CodexThreadKey is required".to_string());
         }
-        if value.kind == SessionAttemptKind::UpstreamUnsubscribe
-            && value
-                .app_server_connection_generation
-                .as_deref()
-                .is_none_or(|generation| generation.trim().is_empty())
+        if matches!(
+            value.kind,
+            SessionAttemptKind::UpstreamUnsubscribe | SessionAttemptKind::ApprovalDecision
+        ) && value
+            .app_server_connection_generation
+            .as_deref()
+            .is_none_or(|generation| generation.trim().is_empty())
         {
             return Err("app-server connection generation is required".to_string());
         }
@@ -171,6 +193,7 @@ pub(crate) enum RemoteRequestTransitionError {
 pub(crate) struct RemoteRequestProvenanceRuntime {
     transport_generation: RemoteTransportGeneration,
     observations: Mutex<HashMap<RemoteRequestKey, RemoteRequestProvenance>>,
+    transport_loss_hooks: Mutex<HashMap<RemoteRequestKey, Vec<TransportLossHook>>>,
 }
 
 impl RemoteRequestProvenanceRuntime {
@@ -178,6 +201,7 @@ impl RemoteRequestProvenanceRuntime {
         Self {
             transport_generation,
             observations: Mutex::new(HashMap::new()),
+            transport_loss_hooks: Mutex::new(HashMap::new()),
         }
     }
 
@@ -285,19 +309,66 @@ impl RemoteRequestProvenanceRuntime {
         if observation.transport_lost_at.is_none() {
             observation.dispatch_state = RemoteRequestDispatchState::ResponseObserved;
         }
+        self.transport_loss_hooks
+            .lock()
+            .expect("transport loss hooks")
+            .remove(key);
         Ok(())
     }
 
     pub(crate) fn record_transport_lost(&self, observed_at: i64) {
-        let mut observations = self.observations.lock().expect("provenance lock");
-        for observation in observations.values_mut() {
-            if observation.transport_lost_at.is_none() {
-                observation.transport_lost_at = Some(observed_at);
+        let pending_keys = {
+            let mut observations = self.observations.lock().expect("provenance lock");
+            let mut pending_keys = Vec::new();
+            for (key, observation) in observations.iter_mut() {
+                let newly_lost = observation.transport_lost_at.is_none();
+                if newly_lost {
+                    observation.transport_lost_at = Some(observed_at);
+                }
+                if newly_lost && observation.response_observed_at.is_none() {
+                    observation.dispatch_state = RemoteRequestDispatchState::TransportLost;
+                    pending_keys.push(key.clone());
+                }
             }
-            if observation.response_observed_at.is_none() {
-                observation.dispatch_state = RemoteRequestDispatchState::TransportLost;
+            pending_keys
+        };
+        let mut hooks = self
+            .transport_loss_hooks
+            .lock()
+            .expect("transport loss hooks");
+        for key in pending_keys {
+            if let Some(callbacks) = hooks.remove(&key) {
+                for callback in callbacks {
+                    callback(observed_at);
+                }
             }
         }
+    }
+
+    fn register_transport_loss_hook(
+        &self,
+        key: &RemoteRequestKey,
+        hook: TransportLossHook,
+    ) -> Result<(), RemoteRequestTransitionError> {
+        self.validate_generation(key)?;
+        let observations = self.observations.lock().expect("provenance lock");
+        let lost_at = observations
+            .get(key)
+            .ok_or(RemoteRequestTransitionError::RequestNotFound)?
+            .transport_lost_at;
+        if lost_at.is_none() {
+            self.transport_loss_hooks
+                .lock()
+                .expect("transport loss hooks")
+                .entry(key.clone())
+                .or_default()
+                .push(hook.clone());
+        }
+        drop(observations);
+        if let Some(lost_at) = lost_at {
+            hook(lost_at);
+        }
+        Ok(())
     }
 
     pub(crate) fn snapshot(&self, key: &RemoteRequestKey) -> Option<RemoteRequestProvenance> {
@@ -355,5 +426,35 @@ impl RemoteRequestDispatchContext {
                 chrono::Utc::now().timestamp_millis(),
             )
             .map_err(|error| format!("remote request correlation failed: {error:?}"))
+    }
+
+    pub(crate) fn bind_session_attempt_with_transport_loss_hook(
+        &self,
+        session_attempt: SessionAttemptProvenance,
+        hook: TransportLossHook,
+    ) -> Result<(), String> {
+        self.bind_session_attempt(session_attempt)?;
+        self.runtime
+            .register_transport_loss_hook(&self.key, hook)
+            .map_err(|error| format!("remote request correlation failed: {error:?}"))
+    }
+
+    pub(crate) fn ensure_transport_active(&self) -> Result<(), String> {
+        let observation = self
+            .runtime
+            .snapshot(&self.key)
+            .ok_or_else(|| "remote request provenance is unavailable".to_string())?;
+        if observation.transport_lost_at.is_some() {
+            return Err("remote transport was lost before approval dispatch".to_string());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn transport_generation(&self) -> &RemoteTransportGeneration {
+        &self.key.transport_generation
+    }
+
+    pub(crate) fn transport_request_id(&self) -> u64 {
+        self.key.transport_request_id
     }
 }

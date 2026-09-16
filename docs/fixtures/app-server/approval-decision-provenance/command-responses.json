@@ -1,0 +1,26 @@
+{
+  "requestKind": "command_execution",
+  "responses": [
+    { "decision": "accept" },
+    { "decision": "acceptForSession" },
+    { "decision": "decline" },
+    { "decision": "cancel" },
+    {
+      "decision": {
+        "acceptWithExecpolicyAmendment": {
+          "execpolicy_amendment": ["fixture-command", "fixture-argument"]
+        }
+      }
+    },
+    {
+      "decision": {
+        "applyNetworkPolicyAmendment": {
+          "network_policy_amendment": {
+            "host": "fixture.invalid",
+            "action": "allow"
+          }
+        }
+      }
+    }
+  ]
+}

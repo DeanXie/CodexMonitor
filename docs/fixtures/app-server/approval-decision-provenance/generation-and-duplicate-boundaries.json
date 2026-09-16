@@ -1,0 +1,15 @@
+{
+  "identityScope": [
+    "workspaceSessionGeneration",
+    "appServerConnectionGeneration",
+    "requestId",
+    "threadId",
+    "turnId",
+    "itemId"
+  ],
+  "oneAdmittedAttemptPerIdentity": true,
+  "oldGenerationRejected": true,
+  "remoteTransportGenerationIsNotRemoteClientIdentity": true,
+  "automaticRetry": false,
+  "automaticReplay": false
+}

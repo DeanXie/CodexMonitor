@@ -72,3 +72,11 @@ command-execution, file-change, and permissions approval requests, exact
 `serverRequest/resolved`, exact request-correlated `item/completed`, and
 auto-review lifecycle annotation. It contains no command text, path, token,
 decision result, Remote-client identity, owner, or lease evidence.
+
+## Approval decision provenance
+
+`approval-decision-provenance/` freezes the Phase 3.5.3b bundled response
+families, exact generation/approval identity scope, single-admitted-attempt
+gate, write-boundary classification, and zero retry/replay contract. The
+fixtures are deterministic fake-authority inputs only; they do not answer a
+real approval request or claim that a dispatched response was applied.

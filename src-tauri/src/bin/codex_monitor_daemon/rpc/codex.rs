@@ -549,11 +549,23 @@ pub(super) async fn try_handle(
                 Ok(value) => value,
                 Err(err) => return Some(Err(err.to_string())),
             };
-            Some(
-                state
-                    .respond_to_server_request(workspace_id, request_id, result)
-                    .await,
-            )
+            Some(match remote_context {
+                Some(remote_context) => {
+                    state
+                        .respond_to_server_request_with_remote_context(
+                            workspace_id,
+                            request_id,
+                            result,
+                            remote_context,
+                        )
+                        .await
+                }
+                None => {
+                    state
+                        .respond_to_server_request(workspace_id, request_id, result)
+                        .await
+                }
+            })
         }
         "remember_approval_rule" => {
             let workspace_id = match parse_string(params, "workspaceId") {

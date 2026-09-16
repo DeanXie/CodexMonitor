@@ -1,0 +1,9 @@
+{
+  "requestKind": "file_change",
+  "responses": [
+    { "decision": "accept" },
+    { "decision": "acceptForSession" },
+    { "decision": "decline" },
+    { "decision": "cancel" }
+  ]
+}

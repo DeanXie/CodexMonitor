@@ -227,9 +227,24 @@ pending request to `session_ended_unresolved`. Remote TCP disconnect, page
 close, and transport reconnect are non-transitions. Multiple Remote transports
 share this session registry without acquiring client ownership.
 
-This authority sends no approval decision, performs no retry or Thread delete,
-and exposes no approver identity, owner, or lease. Sanitized fixtures live in
+The request-observation authority itself sends no decision and exposes no
+approver identity, owner, or lease. Sanitized fixtures live in
 `docs/fixtures/app-server/approval-request-observation/`.
+
+Phase 3.5.3b instruments only explicit Remote approval decisions sent through
+`respond_to_server_request`. The shared decision core requires an exact current
+approval identity, validates the bundled command/file/permissions response
+schema, admits at most one attempt, and binds the attempt to both session
+generations and Remote transport/request provenance.
+
+An app-server stdin write records `decision_dispatched`, not decision
+application or approval ownership. Pre-write loss with zero writes records
+`decision_not_dispatched`; an unobserved outcome after the write boundary
+records `decision_outcome_unknown`. There is no automatic retry or replay.
+Resolved/completed events may annotate the exact related attempt but do not
+prove which attempt won. App-local responses retain their existing path and do
+not acquire Remote transport provenance. Deterministic fixtures live in
+`docs/fixtures/app-server/approval-decision-provenance/`.
 
 ## Conversation Compaction Signals (Codex v2)
 

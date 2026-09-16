@@ -1,8 +1,10 @@
 use super::remote_request_provenance::{
-    RemoteRequestDispatchState, RemoteRequestProvenanceRuntime, RemoteRequestTransitionError,
-    RemoteTransportGeneration, SessionAttemptProvenance,
+    RemoteRequestDispatchContext, RemoteRequestDispatchState, RemoteRequestProvenanceRuntime,
+    RemoteRequestTransitionError, RemoteTransportGeneration, SessionAttemptProvenance,
 };
 use crate::shared::codex_identity::CodexThreadKey;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 fn generation(value: &str) -> RemoteTransportGeneration {
     RemoteTransportGeneration::new(value).expect("valid generation")
@@ -110,6 +112,38 @@ fn disconnect_after_dispatch_preserves_session_attempt_provenance() {
             .map(|value| value.attempt_id.as_str()),
         Some("attempt-a")
     );
+}
+
+#[test]
+fn transport_loss_hook_is_delivered_once() {
+    let runtime = Arc::new(RemoteRequestProvenanceRuntime::new(generation(
+        "transport-a",
+    )));
+    let key = runtime
+        .record_received(12, "respond_to_server_request", 10)
+        .unwrap();
+    runtime.record_dispatch_started(&key, 11).unwrap();
+    let context = RemoteRequestDispatchContext::new(Arc::clone(&runtime), key);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let callback_calls = Arc::clone(&calls);
+    context
+        .bind_session_attempt_with_transport_loss_hook(
+            SessionAttemptProvenance::approval_decision(
+                "workspace-a",
+                "session-generation-a",
+                "connection-generation-a",
+                CodexThreadKey::new("codex-home-a", "thread-a"),
+                "decision-attempt-a",
+            )
+            .unwrap(),
+            Arc::new(move |_| {
+                callback_calls.fetch_add(1, Ordering::SeqCst);
+            }),
+        )
+        .unwrap();
+    runtime.record_transport_lost(20);
+    runtime.record_transport_lost(21);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
 #[test]

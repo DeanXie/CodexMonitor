@@ -1,0 +1,12 @@
+{
+  "beforeWrite": {
+    "state": "decision_not_dispatched",
+    "dispatchCount": 0,
+    "retryCount": 0
+  },
+  "afterWriteWithoutCallerResponse": {
+    "state": "decision_outcome_unknown",
+    "dispatchCount": 1,
+    "retryCount": 0
+  }
+}

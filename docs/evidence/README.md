@@ -61,3 +61,11 @@ supported request families, exact resolution/completion correlation, upstream
 auto-review annotation, generation isolation, and the no-decision/no-delete
 boundary. The implementation evidence index is
 `phase-3-5-3a/approval-observation-freeze.md`.
+
+Phase 3.5.3b approval-decision fixtures are stored in
+`../fixtures/app-server/approval-decision-provenance/`. They freeze typed
+bundled response validation, exact current-generation identity admission,
+transport-to-session attempt correlation, dispatch-boundary ambiguity, and
+zero retry/replay using fake app-server and daemon transport authority only.
+The implementation evidence index is
+`phase-3-5-3b/approval-decision-provenance-freeze.md`.

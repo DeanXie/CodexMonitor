@@ -1049,6 +1049,24 @@ impl DaemonState {
         Ok(json!({ "ok": true }))
     }
 
+    async fn respond_to_server_request_with_remote_context(
+        &self,
+        workspace_id: String,
+        request_id: Value,
+        result: Value,
+        remote_context: &RemoteRequestDispatchContext,
+    ) -> Result<Value, String> {
+        codex_core::respond_to_server_request_core_with_remote_context(
+            &self.sessions,
+            workspace_id,
+            request_id,
+            result,
+            remote_context,
+        )
+        .await?;
+        Ok(json!({ "ok": true }))
+    }
+
     async fn remember_approval_rule(
         &self,
         workspace_id: String,

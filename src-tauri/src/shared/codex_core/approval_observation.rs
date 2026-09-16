@@ -5,12 +5,16 @@
 
 #![cfg_attr(not(test), allow(dead_code))]
 
+use super::approval_decision_provenance::{
+    ApprovalDecisionAttemptId, ApprovalDecisionAttemptSnapshot, ApprovalDecisionFailureKind,
+    ApprovalDecisionRemoteProvenance, ApprovalDecisionStore,
+};
 use super::thread_lifecycle_observation::AppServerConnectionGeneration;
 use super::writer_admission_observation::WorkspaceSessionGeneration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 const COMMAND_APPROVAL_METHOD: &str = "item/commandExecution/requestApproval";
 const FILE_CHANGE_APPROVAL_METHOD: &str = "item/fileChange/requestApproval";
@@ -24,7 +28,7 @@ pub(crate) enum ApprovalRequestId {
 }
 
 impl ApprovalRequestId {
-    fn from_value(value: &Value) -> Option<Self> {
+    pub(crate) fn from_value(value: &Value) -> Option<Self> {
         value
             .as_i64()
             .map(Self::Number)
@@ -56,7 +60,7 @@ pub(crate) enum ApprovalSessionEndEvidenceKind {
     AppServerProcessTerminated,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ApprovalRequestIdentity {
     pub workspace_session_generation: String,
@@ -96,12 +100,14 @@ pub(crate) struct ApprovalObservationSnapshot {
 struct ApprovalObservationStore {
     pending: HashMap<(ApprovalRequestId, String), ApprovalObservationSnapshot>,
     history: Vec<ApprovalObservationSnapshot>,
+    decisions: ApprovalDecisionStore,
 }
 
+#[derive(Clone)]
 pub(crate) struct ApprovalObservationRuntime {
     workspace_session_generation: WorkspaceSessionGeneration,
     app_server_connection_generation: AppServerConnectionGeneration,
-    store: Mutex<ApprovalObservationStore>,
+    store: Arc<Mutex<ApprovalObservationStore>>,
 }
 
 impl Default for ApprovalObservationRuntime {
@@ -123,7 +129,7 @@ impl ApprovalObservationRuntime {
         Self {
             workspace_session_generation,
             app_server_connection_generation,
-            store: Mutex::new(ApprovalObservationStore::default()),
+            store: Arc::new(Mutex::new(ApprovalObservationStore::default())),
         }
     }
 
@@ -296,6 +302,9 @@ impl ApprovalObservationRuntime {
             return false;
         }
         let mut snapshot = store.pending.remove(&key).expect("exact pending request");
+        store
+            .decisions
+            .record_resolution(&snapshot.identity, "item/completed", observed_at);
         snapshot.state = ApprovalObservationState::ResolvedOrCleared;
         snapshot.observed_at = observed_at;
         snapshot.resolution_method = Some("item/completed".to_string());
@@ -365,6 +374,7 @@ impl ApprovalObservationRuntime {
         let mut store = self.store.lock().expect("approval observation store");
         let pending = std::mem::take(&mut store.pending);
         let count = pending.len();
+        store.decisions.record_session_ended(observed_at);
         for (_, mut snapshot) in pending {
             snapshot.state = ApprovalObservationState::SessionEndedUnresolved;
             snapshot.observed_at = observed_at;
@@ -392,6 +402,95 @@ impl ApprovalObservationRuntime {
             .clone()
     }
 
+    pub(crate) fn begin_remote_decision(
+        &self,
+        request_id: &Value,
+        result: &Value,
+        remote: ApprovalDecisionRemoteProvenance,
+        observed_at: i64,
+    ) -> Result<ApprovalDecisionAttemptSnapshot, String> {
+        let request_id = ApprovalRequestId::from_value(request_id)
+            .ok_or_else(|| "approval decision requestId must be a string or integer".to_string())?;
+        let mut store = self.store.lock().expect("approval observation store");
+        let matches = store
+            .pending
+            .values()
+            .filter(|snapshot| snapshot.identity.request_id == request_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        if matches.len() > 1 {
+            return Err("approval decision rejected: requestId is ambiguous".to_string());
+        }
+        let pending = matches.first();
+        store.decisions.begin(
+            request_id,
+            pending,
+            result,
+            remote,
+            self.workspace_session_generation.as_str(),
+            self.app_server_connection_generation.as_str(),
+            observed_at,
+        )
+    }
+
+    pub(crate) fn decision_attempts(&self) -> Vec<ApprovalDecisionAttemptSnapshot> {
+        self.store
+            .lock()
+            .expect("approval observation store")
+            .decisions
+            .attempts()
+    }
+
+    pub(crate) fn has_observed_request_id(&self, request_id: &Value) -> bool {
+        let Some(request_id) = ApprovalRequestId::from_value(request_id) else {
+            return false;
+        };
+        let store = self.store.lock().expect("approval observation store");
+        store
+            .pending
+            .values()
+            .chain(store.history.iter())
+            .any(|snapshot| snapshot.identity.request_id == request_id)
+    }
+
+    pub(crate) fn record_decision_dispatched(
+        &self,
+        attempt_id: &ApprovalDecisionAttemptId,
+        observed_at: i64,
+    ) -> Result<(), String> {
+        self.store
+            .lock()
+            .expect("approval observation store")
+            .decisions
+            .record_dispatched(attempt_id, observed_at)
+    }
+
+    pub(crate) fn record_decision_not_dispatched(
+        &self,
+        attempt_id: &ApprovalDecisionAttemptId,
+        failure_kind: ApprovalDecisionFailureKind,
+        observed_at: i64,
+    ) -> Result<(), String> {
+        self.store
+            .lock()
+            .expect("approval observation store")
+            .decisions
+            .record_not_dispatched(attempt_id, failure_kind, observed_at)
+    }
+
+    pub(crate) fn record_decision_outcome_unknown(
+        &self,
+        attempt_id: &ApprovalDecisionAttemptId,
+        failure_kind: ApprovalDecisionFailureKind,
+        observed_at: i64,
+    ) -> Result<(), String> {
+        self.store
+            .lock()
+            .expect("approval observation store")
+            .decisions
+            .record_outcome_unknown(attempt_id, failure_kind, observed_at)
+    }
+
     pub(crate) fn record_local_allowlist_non_transition(&self) {}
 
     pub(crate) fn record_remote_transport_non_transition(&self) {}
@@ -416,6 +515,9 @@ impl ApprovalObservationRuntime {
         let Some(mut snapshot) = store.pending.remove(key) else {
             return false;
         };
+        store
+            .decisions
+            .record_resolution(&snapshot.identity, method, observed_at);
         snapshot.state = ApprovalObservationState::ResolvedOrCleared;
         snapshot.observed_at = observed_at;
         snapshot.resolution_method = Some(method.to_string());

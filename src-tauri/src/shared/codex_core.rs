@@ -22,6 +22,7 @@ use crate::types::WorkspaceEntry;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) mod external_thread_admission;
 
+pub(crate) mod approval_decision_provenance;
 pub(crate) mod approval_observation;
 pub(crate) mod thread_lifecycle_observation;
 pub(crate) mod writer_admission_observation;
@@ -29,6 +30,10 @@ pub(crate) mod writer_admission_observation;
 #[cfg(test)]
 #[path = "codex_core/approval_observation_tests.rs"]
 mod approval_observation_tests;
+
+#[cfg(test)]
+#[path = "codex_core/approval_decision_provenance_tests.rs"]
+mod approval_decision_provenance_tests;
 
 pub(crate) mod creation_acknowledgement;
 pub(crate) mod creation_coordination;
@@ -1182,6 +1187,24 @@ pub(crate) async fn respond_to_server_request_core(
 ) -> Result<(), String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     session.send_response(request_id, result).await
+}
+
+pub(crate) async fn respond_to_server_request_core_with_remote_context(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    request_id: Value,
+    result: Value,
+    remote_context: &RemoteRequestDispatchContext,
+) -> Result<(), String> {
+    let session = get_session_clone(sessions, &workspace_id).await?;
+    session
+        .send_response_for_workspace_with_remote_context(
+            &workspace_id,
+            request_id,
+            result,
+            remote_context,
+        )
+        .await
 }
 
 pub(crate) async fn remember_approval_rule_core(

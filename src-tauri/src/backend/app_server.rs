@@ -14,6 +14,10 @@ use tokio::time::timeout;
 
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
+use crate::shared::codex_core::approval_decision_provenance::{
+    looks_like_approval_decision_response, ApprovalDecisionAttemptId, ApprovalDecisionFailureKind,
+    ApprovalDecisionRemoteProvenance,
+};
 use crate::shared::codex_core::approval_observation::{
     reconcile_approval_observation_message, ApprovalObservationRuntime,
     ApprovalSessionEndEvidenceKind,
@@ -925,6 +929,41 @@ struct UnsubscribeDispatchGuard<'a> {
     completed: bool,
 }
 
+struct ApprovalDecisionDispatchGuard {
+    runtime: ApprovalObservationRuntime,
+    attempt_id: ApprovalDecisionAttemptId,
+    boundary: DispatchBoundary,
+    completed: bool,
+}
+
+impl ApprovalDecisionDispatchGuard {
+    fn complete(&mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for ApprovalDecisionDispatchGuard {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        let observed_at = unix_timestamp_ms() as i64;
+        if self.boundary.crossed() {
+            let _ = self.runtime.record_decision_outcome_unknown(
+                &self.attempt_id,
+                ApprovalDecisionFailureKind::CancellationAfterDispatch,
+                observed_at,
+            );
+        } else {
+            let _ = self.runtime.record_decision_not_dispatched(
+                &self.attempt_id,
+                ApprovalDecisionFailureKind::CancellationBeforeDispatch,
+                observed_at,
+            );
+        }
+    }
+}
+
 impl UnsubscribeDispatchGuard<'_> {
     fn complete(&mut self) {
         self.completed = true;
@@ -1474,6 +1513,115 @@ impl WorkspaceSession {
     pub(crate) async fn send_response(&self, id: Value, result: Value) -> Result<(), String> {
         self.write_message(json!({ "id": id, "result": result }))
             .await
+    }
+
+    pub(crate) async fn send_response_for_workspace_with_remote_context(
+        &self,
+        workspace_id: &str,
+        id: Value,
+        result: Value,
+        remote_context: &RemoteRequestDispatchContext,
+    ) -> Result<(), String> {
+        let is_approval_decision = self.approval_observations.has_observed_request_id(&id)
+            || looks_like_approval_decision_response(&result);
+        if !is_approval_decision {
+            return self.send_response(id, result).await;
+        }
+
+        remote_context.ensure_transport_active()?;
+        let attempt = self.approval_observations.begin_remote_decision(
+            &id,
+            &result,
+            ApprovalDecisionRemoteProvenance::new(
+                remote_context.transport_generation().as_str(),
+                remote_context.transport_request_id(),
+            )?,
+            unix_timestamp_ms() as i64,
+        )?;
+        let identity = attempt
+            .identity
+            .as_ref()
+            .expect("admitted decision has exact approval identity");
+        let codex_home_identity = self
+            .workspace_reconciler
+            .lock()
+            .await
+            .codex_home_identity()
+            .to_string();
+        let boundary = DispatchBoundary::default();
+        let mut guard = ApprovalDecisionDispatchGuard {
+            runtime: self.approval_observations.clone(),
+            attempt_id: attempt.attempt_id.clone(),
+            boundary: boundary.clone(),
+            completed: false,
+        };
+        let loss_runtime = self.approval_observations.clone();
+        let loss_attempt_id = attempt.attempt_id.clone();
+        let loss_boundary = boundary.clone();
+        if let Err(error) = remote_context.bind_session_attempt_with_transport_loss_hook(
+            SessionAttemptProvenance::approval_decision(
+                workspace_id,
+                &attempt.workspace_session_generation,
+                &attempt.app_server_connection_generation,
+                CodexThreadKey::new(codex_home_identity, &identity.thread_id),
+                attempt.attempt_id.as_str(),
+            )?,
+            Arc::new(move |observed_at| {
+                if loss_boundary.crossed() {
+                    let _ = loss_runtime.record_decision_outcome_unknown(
+                        &loss_attempt_id,
+                        ApprovalDecisionFailureKind::RemoteResponseUnobserved,
+                        observed_at,
+                    );
+                } else {
+                    let _ = loss_runtime.record_decision_not_dispatched(
+                        &loss_attempt_id,
+                        ApprovalDecisionFailureKind::TransportLostBeforeDispatch,
+                        observed_at,
+                    );
+                }
+            }),
+        ) {
+            let _ = self.approval_observations.record_decision_not_dispatched(
+                &attempt.attempt_id,
+                ApprovalDecisionFailureKind::TransportLostBeforeDispatch,
+                unix_timestamp_ms() as i64,
+            );
+            guard.complete();
+            return Err(error);
+        }
+        if let Err(error) = remote_context.ensure_transport_active() {
+            let _ = self.approval_observations.record_decision_not_dispatched(
+                &attempt.attempt_id,
+                ApprovalDecisionFailureKind::TransportLostBeforeDispatch,
+                unix_timestamp_ms() as i64,
+            );
+            guard.complete();
+            return Err(error);
+        }
+
+        let write_result = write_message_to(
+            &self.stdin,
+            json!({ "id": id, "result": result }),
+            Some(&boundary),
+        )
+        .await;
+        match write_result {
+            Ok(()) => self
+                .approval_observations
+                .record_decision_dispatched(&attempt.attempt_id, unix_timestamp_ms() as i64)?,
+            Err(error) => {
+                self.approval_observations.record_decision_outcome_unknown(
+                    &attempt.attempt_id,
+                    ApprovalDecisionFailureKind::DispatchWriteFailed,
+                    unix_timestamp_ms() as i64,
+                )?;
+                guard.complete();
+                return Err(error);
+            }
+        }
+        guard.complete();
+        Ok(())
     }
 }
 

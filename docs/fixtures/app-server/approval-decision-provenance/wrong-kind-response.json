@@ -1,0 +1,7 @@
+{
+  "requestKind": "permissions",
+  "response": { "decision": "accept" },
+  "expected": "invalid_response_schema",
+  "dispatchCount": 0,
+  "retryCount": 0
+}

@@ -272,6 +272,42 @@ describe("threadReducer", () => {
     expect(removed.userInputRequests).toHaveLength(0);
   });
 
+  it("resolves only the exact approval request and thread identity", () => {
+    const approvals = [
+      {
+        workspace_id: "ws-1",
+        request_id: 7,
+        method: "item/commandExecution/requestApproval",
+        params: { threadId: "thread-1" },
+      },
+      {
+        workspace_id: "ws-1",
+        request_id: 7,
+        method: "item/commandExecution/requestApproval",
+        params: { threadId: "thread-2" },
+      },
+      {
+        workspace_id: "ws-2",
+        request_id: 7,
+        method: "item/commandExecution/requestApproval",
+        params: { threadId: "thread-1" },
+      },
+      {
+        workspace_id: "ws-1",
+        request_id: 8,
+        method: "item/commandExecution/requestApproval",
+        params: { threadId: "thread-1" },
+      },
+    ];
+    const next = threadReducer({ ...initialState, approvals }, {
+      type: "resolveApproval",
+      workspaceId: "ws-1",
+      requestId: 7,
+      threadId: "thread-1",
+    });
+    expect(next.approvals).toEqual(approvals.slice(1));
+  });
+
   it("drops local review-start items when server review starts", () => {
     const localReview: ConversationItem = {
       id: "review-start-1",

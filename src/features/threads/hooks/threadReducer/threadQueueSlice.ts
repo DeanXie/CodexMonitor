@@ -22,6 +22,23 @@ export function reduceThreadQueue(state: ThreadState, action: ThreadAction): Thr
             item.workspace_id !== action.workspaceId,
         ),
       };
+    case "resolveApproval":
+      return {
+        ...state,
+        approvals: state.approvals.filter((item) => {
+          const approvalThreadId =
+            typeof item.params.threadId === "string"
+              ? item.params.threadId
+              : typeof item.params.thread_id === "string"
+                ? item.params.thread_id
+                : null;
+          return (
+            item.request_id !== action.requestId ||
+            item.workspace_id !== action.workspaceId ||
+            approvalThreadId !== action.threadId
+          );
+        }),
+      };
     case "addUserInputRequest": {
       const exists = state.userInputRequests.some(
         (item) =>

@@ -14,6 +14,10 @@ use tokio::time::timeout;
 
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
+use crate::shared::codex_core::approval_observation::{
+    reconcile_approval_observation_message, ApprovalObservationRuntime,
+    ApprovalSessionEndEvidenceKind,
+};
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
 use crate::shared::codex_core::thread_lifecycle_observation::{
     AppServerConnectionEndEvidenceKind, ThreadLifecycleObservationRuntime,
@@ -893,6 +897,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) projection_observations: ProjectionObservationEngine,
     pub(crate) writer_admission_observations: WriterAdmissionObservationRuntime,
     pub(crate) thread_lifecycle_observations: ThreadLifecycleObservationRuntime,
+    pub(crate) approval_observations: ApprovalObservationRuntime,
     // Shared process owner survives session reconnect; this is only an observer.
     pub(crate) creation_coordinator: Mutex<Option<CreationCoordinator>>,
     pub(crate) runtime_observation_keys: Mutex<HashSet<String>>,
@@ -986,8 +991,22 @@ impl WorkspaceSession {
             diagnostic.clone(),
             observed_at,
         );
-        self.writer_admission_observations
-            .record_session_ended(kind, diagnostic, observed_at)
+        let ended_writer_observations = self.writer_admission_observations.record_session_ended(
+            kind,
+            diagnostic.clone(),
+            observed_at,
+        );
+        let approval_end_kind = match kind {
+            WriterAdmissionSessionEndEvidenceKind::AppServerProcessExited => {
+                ApprovalSessionEndEvidenceKind::AppServerProcessExited
+            }
+            WriterAdmissionSessionEndEvidenceKind::AppServerProcessTerminated => {
+                ApprovalSessionEndEvidenceKind::AppServerProcessTerminated
+            }
+        };
+        self.approval_observations
+            .record_session_ended(approval_end_kind, diagnostic, observed_at);
+        ended_writer_observations
     }
 
     pub(crate) fn record_app_server_transport_disconnected(&self, diagnostic: impl Into<String>) {
@@ -1714,6 +1733,14 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
         )
         .expect("UUID app-server connection generation"),
     );
+    let approval_observations = ApprovalObservationRuntime::new(
+        thread_lifecycle_observations
+            .workspace_session_generation()
+            .clone(),
+        thread_lifecycle_observations
+            .app_server_connection_generation()
+            .clone(),
+    );
     let session = Arc::new(WorkspaceSession {
         codex_args,
         child: Mutex::new(child),
@@ -1726,6 +1753,7 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
         projection_observations: Default::default(),
         writer_admission_observations,
         thread_lifecycle_observations,
+        approval_observations,
         creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),
@@ -1805,6 +1833,11 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
 
             let settings_observation_key = runtime_message_observation_key(&value);
             let settings_observed_at = unix_timestamp_ms();
+            reconcile_approval_observation_message(
+                &session_clone.approval_observations,
+                &value,
+                settings_observed_at as i64,
+            );
             let codex_home_identity = session_clone
                 .workspace_reconciler
                 .lock()

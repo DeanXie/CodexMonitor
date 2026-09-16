@@ -178,6 +178,7 @@ subscriptions.
 - `item/reasoning/summaryTextDelta`
 - `item/reasoning/textDelta`
 - `item/started`
+- `serverRequest/resolved`
 - `thread/archived`
 - `thread/closed`
 - `thread/deleted`
@@ -206,6 +207,29 @@ These arrive on the same frontend event stream but are not Codex v2
 - `codex/connected` (CodexMonitor synthetic bridge event)
 - `codex/event/skills_update_available` (handled via
   `isSkillsUpdateAvailableEvent(...)` in `useSkills.ts`)
+
+## Approval request observation
+
+Phase 3.5.3a observes command-execution, file-change, and permissions approval
+requests in the shared `WorkspaceSession` boundary before App/daemon event
+projection. The exact identity contains the WorkspaceSession generation,
+app-server connection generation, JSON-RPC request ID, Thread ID, Turn ID, and
+item ID. An upstream `approvalId` is subordinate evidence only.
+
+The states are `not_observed`, `pending`, `resolved_or_cleared`, and
+`session_ended_unresolved`. `serverRequest/resolved` clears only an exact
+current-generation request ID and Thread ID match. `item/completed` clears only
+when request ID, Thread ID, Turn ID, and item ID all match. Auto-review
+started/completed messages are lifecycle annotations, not human decisions.
+
+Only confirmed app-server process/WorkspaceSession generation end changes a
+pending request to `session_ended_unresolved`. Remote TCP disconnect, page
+close, and transport reconnect are non-transitions. Multiple Remote transports
+share this session registry without acquiring client ownership.
+
+This authority sends no approval decision, performs no retry or Thread delete,
+and exposes no approver identity, owner, or lease. Sanitized fixtures live in
+`docs/fixtures/app-server/approval-request-observation/`.
 
 ## Conversation Compaction Signals (Codex v2)
 
@@ -237,7 +261,6 @@ events are currently not routed:
 - `mcpServer/startupStatus/updated`
 - `model/rerouted`
 - `rawResponseItem/completed`
-- `serverRequest/resolved`
 - `skills/changed`
 - `thread/compacted` (deprecated; intentionally not routed)
 - `thread/realtime/closed`

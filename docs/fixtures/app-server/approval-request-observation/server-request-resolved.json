@@ -1,0 +1,7 @@
+{
+  "method": "serverRequest/resolved",
+  "params": {
+    "requestId": 101,
+    "threadId": "thread-fixture"
+  }
+}

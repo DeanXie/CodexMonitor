@@ -78,6 +78,7 @@ describe("useAppServerEvents", () => {
       onReasoningSummaryBoundary: vi.fn(),
       onPlanDelta: vi.fn(),
       onApprovalRequest: vi.fn(),
+      onApprovalRequestResolved: vi.fn(),
       onRequestUserInput: vi.fn(),
       onItemCompleted: vi.fn(),
       onAgentMessageCompleted: vi.fn(),
@@ -295,6 +296,21 @@ describe("useAppServerEvents", () => {
       method: "item/permissions/requestApproval",
       params: { mode: "full", threadId: "thread-2" },
     });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "serverRequest/resolved",
+          params: { requestId: 7, threadId: "thread-2" },
+        },
+      });
+    });
+    expect(handlers.onApprovalRequestResolved).toHaveBeenCalledWith(
+      "ws-1",
+      7,
+      "thread-2",
+    );
 
     act(() => {
       listener?.({

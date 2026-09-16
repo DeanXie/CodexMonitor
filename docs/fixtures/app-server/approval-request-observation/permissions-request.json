@@ -1,0 +1,11 @@
+{
+  "id": 303,
+  "method": "item/permissions/requestApproval",
+  "params": {
+    "threadId": "thread-fixture",
+    "turnId": "turn-fixture",
+    "itemId": "permissions-item",
+    "approvalId": "approval-permissions",
+    "availableDecisions": ["accept", "decline"]
+  }
+}

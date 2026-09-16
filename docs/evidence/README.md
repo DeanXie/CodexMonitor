@@ -54,3 +54,10 @@ daemon-restart session reset, multi-client shared-session semantics, and the
 zero retry/replay contract without executing a writer or unsubscribe mutation.
 The d.5 RED/GREEN and regression index is
 `phase-3-5-2d/protocol-compatibility-freeze.md`.
+
+Phase 3.5.3a approval-request observation fixtures are stored in
+`../fixtures/app-server/approval-request-observation/`. They freeze the three
+supported request families, exact resolution/completion correlation, upstream
+auto-review annotation, generation isolation, and the no-decision/no-delete
+boundary. The implementation evidence index is
+`phase-3-5-3a/approval-observation-freeze.md`.

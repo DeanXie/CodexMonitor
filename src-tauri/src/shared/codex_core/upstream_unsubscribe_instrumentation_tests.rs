@@ -113,6 +113,7 @@ async fn make_session() -> (Arc<WorkspaceSession>, CodexThreadKey) {
         projection_observations: Default::default(),
         writer_admission_observations,
         thread_lifecycle_observations,
+        approval_observations: Default::default(),
         creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),

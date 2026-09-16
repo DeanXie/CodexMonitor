@@ -57,6 +57,11 @@ type AppServerEventHandlers = {
     action: string,
   ) => void;
   onApprovalRequest?: (request: ApprovalRequest) => void;
+  onApprovalRequestResolved?: (
+    workspaceId: string,
+    requestId: string | number,
+    threadId: string,
+  ) => void;
   onRequestUserInput?: (request: RequestUserInputRequest) => void;
   onAgentMessageDelta?: (event: AgentDelta) => void;
   onAgentMessageCompleted?: (event: AgentCompleted) => void;
@@ -128,6 +133,7 @@ export const METHODS_ROUTED_IN_USE_APP_SERVER_EVENTS = [
   "item/reasoning/textDelta",
   "item/started",
   "item/tool/requestUserInput",
+  "serverRequest/resolved",
   "thread/archived",
   "thread/closed",
   "thread/deleted",
@@ -203,6 +209,23 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
           method,
           params,
         });
+        return;
+      }
+
+      if (method === "serverRequest/resolved") {
+        const resolvedRequestId = params.requestId;
+        const resolvedThreadId = params.threadId;
+        if (
+          (typeof resolvedRequestId === "number" || typeof resolvedRequestId === "string") &&
+          typeof resolvedThreadId === "string" &&
+          resolvedThreadId.trim().length > 0
+        ) {
+          currentHandlers.onApprovalRequestResolved?.(
+            workspace_id,
+            resolvedRequestId,
+            resolvedThreadId,
+          );
+        }
         return;
       }
 

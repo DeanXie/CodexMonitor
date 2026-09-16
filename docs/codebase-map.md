@@ -122,6 +122,10 @@ When adding a new method, keep method names and payload shape aligned with `src/
 All cross-runtime domain behavior belongs in `src-tauri/src/shared/*`:
 
 - Codex threads/approvals/account/skills/config: `src-tauri/src/shared/codex_core.rs`
+- Approval request observation authority: `src-tauri/src/shared/codex_core/approval_observation.rs`
+- Approval actionable projection and exact resolved reconciliation:
+  `src/features/app/hooks/useAppServerEvents.ts` and
+  `src/features/threads/hooks/threadReducer/threadQueueSlice.ts`
 - Codex helper commands: `src-tauri/src/shared/codex_aux_core.rs`
 - Codex update/version helpers: `src-tauri/src/shared/codex_update_core.rs`
 - Workspaces/worktrees: `src-tauri/src/shared/workspaces_core.rs`, `src-tauri/src/shared/workspaces_core/*`, `src-tauri/src/shared/worktree_core.rs`

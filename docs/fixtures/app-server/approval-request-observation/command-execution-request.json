@@ -1,0 +1,11 @@
+{
+  "id": 101,
+  "method": "item/commandExecution/requestApproval",
+  "params": {
+    "threadId": "thread-fixture",
+    "turnId": "turn-fixture",
+    "itemId": "command-item",
+    "approvalId": "approval-command",
+    "availableDecisions": ["accept", "decline"]
+  }
+}

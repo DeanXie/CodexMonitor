@@ -1832,6 +1832,7 @@ mod tests {
             projection_observations: Default::default(),
             writer_admission_observations,
             thread_lifecycle_observations: Default::default(),
+            approval_observations: Default::default(),
             codex_args: None,
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),

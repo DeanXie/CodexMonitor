@@ -1,0 +1,11 @@
+{
+  "id": "request-file",
+  "method": "item/fileChange/requestApproval",
+  "params": {
+    "threadId": "thread-fixture",
+    "turnId": "turn-fixture",
+    "itemId": "file-item",
+    "approvalId": "approval-file",
+    "availableDecisions": ["accept", "decline"]
+  }
+}

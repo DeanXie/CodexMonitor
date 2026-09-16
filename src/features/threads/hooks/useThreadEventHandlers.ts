@@ -89,6 +89,17 @@ export function useThreadEventHandlers({
     dispatch,
     approvalAllowlistRef,
   });
+  const onApprovalRequestResolved = useCallback(
+    (workspaceId: string, requestId: string | number, threadId: string) => {
+      dispatch({
+        type: "resolveApproval",
+        workspaceId,
+        requestId,
+        threadId,
+      });
+    },
+    [dispatch],
+  );
   const onRequestUserInput = useThreadUserInputEvents({ dispatch });
   const {
     onHookStarted: handleHookStarted,
@@ -225,6 +236,7 @@ export function useThreadEventHandlers({
     () => ({
       onWorkspaceConnected,
       onApprovalRequest,
+      onApprovalRequestResolved,
       onRequestUserInput,
       onHookStarted,
       onHookCompleted,
@@ -259,6 +271,7 @@ export function useThreadEventHandlers({
     [
       onWorkspaceConnected,
       onApprovalRequest,
+      onApprovalRequestResolved,
       onRequestUserInput,
       onHookStarted,
       onHookCompleted,

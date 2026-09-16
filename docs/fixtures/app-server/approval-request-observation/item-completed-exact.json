@@ -1,0 +1,12 @@
+{
+  "method": "item/completed",
+  "params": {
+    "requestId": "request-file",
+    "threadId": "thread-fixture",
+    "turnId": "turn-fixture",
+    "item": {
+      "id": "file-item",
+      "status": "completed"
+    }
+  }
+}

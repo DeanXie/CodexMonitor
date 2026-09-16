@@ -64,3 +64,11 @@ generation, `CodexThreadKey`, timestamps, attempt/request evidence when
 applicable, and separate runtime evidence. The fixtures contain no credentials,
 Remote-client subscription owner, writer owner, lease, or global writer
 freedom/release state.
+
+## Approval request observation
+
+`approval-request-observation/` freezes sanitized bundled message shapes for
+command-execution, file-change, and permissions approval requests, exact
+`serverRequest/resolved`, exact request-correlated `item/completed`, and
+auto-review lifecycle annotation. It contains no command text, path, token,
+decision result, Remote-client identity, owner, or lease evidence.

@@ -1,0 +1,12 @@
+{
+  "method": "item/autoApprovalReview/started",
+  "params": {
+    "threadId": "thread-fixture",
+    "turnId": "turn-fixture",
+    "targetItemId": "command-item",
+    "reviewId": "review-fixture",
+    "review": {
+      "status": "inProgress"
+    }
+  }
+}

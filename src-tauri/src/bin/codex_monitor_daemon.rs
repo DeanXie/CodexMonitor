@@ -83,6 +83,7 @@ use shared::remote_host_identity::{
     load_or_initialize_remote_host_identity, RemoteDaemonCapabilities, RemoteDaemonInfo,
     RemoteHostIdentity, REMOTE_DAEMON_PROTOCOL_VERSION,
 };
+use shared::remote_request_provenance::{RemoteRequestKey, RemoteRequestProvenanceRuntime};
 use shared::workspace_interop_core::{remote_execution_environment_key, ExecutionEnvironmentKey};
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
@@ -2552,6 +2553,130 @@ mod tests {
                     .and_then(Value::as_str),
                 Some("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
             );
+            drop(writer);
+            server.await.unwrap();
+            let _ = std::fs::remove_dir_all(tmp);
+        });
+    }
+
+    #[test]
+    fn daemon_transport_request_ids_are_scoped_per_authenticated_connection() {
+        run_async_test(async {
+            let tmp = make_temp_dir("transport-generation-request-scope");
+            let state = Arc::new(test_state(&tmp));
+            let (events, _) = broadcast::channel(16);
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let config = Arc::new(DaemonConfig {
+                listen: address,
+                token: Some("secret-token".to_string()),
+                data_dir: tmp.clone(),
+            });
+            let server = tokio::spawn(async move {
+                let mut clients = Vec::new();
+                for _ in 0..2 {
+                    let (socket, _) = listener.accept().await.unwrap();
+                    clients.push(tokio::spawn(transport::handle_client(
+                        socket,
+                        Arc::clone(&config),
+                        Arc::clone(&state),
+                        events.clone(),
+                    )));
+                }
+                for client in clients {
+                    client.await.unwrap();
+                }
+            });
+
+            for _ in 0..2 {
+                let stream = TcpStream::connect(address).await.unwrap();
+                let (reader, mut writer) = stream.into_split();
+                let mut lines = BufReader::new(reader).lines();
+                writer
+                    .write_all(
+                        b"{\"id\":99,\"method\":\"auth\",\"params\":{\"token\":\"secret-token\"}}\n",
+                    )
+                    .await
+                    .unwrap();
+                let auth: Value =
+                    serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+                assert_eq!(auth.pointer("/result/ok"), Some(&json!(true)));
+
+                writer
+                    .write_all(b"{\"id\":1,\"method\":\"daemon_info\",\"params\":{}}\n")
+                    .await
+                    .unwrap();
+                let response: Value =
+                    serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+                assert_eq!(response["id"], 1);
+                assert_eq!(response.pointer("/result/name"), Some(&json!(DAEMON_NAME)));
+                drop(writer);
+            }
+
+            server.await.unwrap();
+            let _ = std::fs::remove_dir_all(tmp);
+        });
+    }
+
+    #[test]
+    fn daemon_rejects_duplicate_request_id_without_replay() {
+        run_async_test(async {
+            let tmp = make_temp_dir("transport-generation-duplicate-request");
+            let state = Arc::new(test_state(&tmp));
+            let (events, _) = broadcast::channel(16);
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let config = Arc::new(DaemonConfig {
+                listen: address,
+                token: Some("secret-token".to_string()),
+                data_dir: tmp.clone(),
+            });
+            let server = tokio::spawn(async move {
+                let (socket, _) = listener.accept().await.unwrap();
+                transport::handle_client(socket, config, state, events).await;
+            });
+
+            let stream = TcpStream::connect(address).await.unwrap();
+            let (reader, mut writer) = stream.into_split();
+            let mut lines = BufReader::new(reader).lines();
+            writer
+                .write_all(
+                    b"{\"id\":99,\"method\":\"auth\",\"params\":{\"token\":\"secret-token\"}}\n",
+                )
+                .await
+                .unwrap();
+            let _: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            writer
+                .write_all(
+                    b"{\"id\":1,\"method\":\"daemon_info\",\"params\":{}}\n{\"id\":1,\"method\":\"daemon_info\",\"params\":{}}\n",
+                )
+                .await
+                .unwrap();
+
+            let first: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            let second: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            let responses = [first, second];
+            assert_eq!(
+                responses
+                    .iter()
+                    .filter(|response| response.pointer("/result/name") == Some(&json!(DAEMON_NAME)))
+                    .count(),
+                1
+            );
+            assert_eq!(
+                responses
+                    .iter()
+                    .filter(|response| {
+                        response.pointer("/error/message")
+                            == Some(&json!("duplicate request id for current transport"))
+                    })
+                    .count(),
+                1
+            );
+
             drop(writer);
             server.await.unwrap();
             let _ = std::fs::remove_dir_all(tmp);

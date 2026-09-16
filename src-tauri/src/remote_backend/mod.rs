@@ -5,7 +5,7 @@ mod transport;
 use serde_json::{json, Value};
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
@@ -16,6 +16,7 @@ use crate::shared::remote_host_availability::{AvailabilityEvent, RemoteHostAvail
 use crate::shared::remote_host_identity::{
     validate_daemon_info, RemoteDaemonInfo, RemoteHostIdentity,
 };
+use crate::shared::remote_request_provenance::RemoteRequestProvenanceRuntime;
 use crate::state::AppState;
 use crate::storage::write_settings_atomic;
 use crate::types::{BackendMode, RemoteBackendProvider, RemoteBackendTarget};
@@ -258,6 +259,7 @@ struct RemoteBackendInner {
     connected: Arc<std::sync::atomic::AtomicBool>,
     ready: AtomicBool,
     availability: TransportAvailabilityObserver,
+    request_provenance: StdMutex<Option<Arc<RemoteRequestProvenanceRuntime>>>,
 }
 
 impl RemoteBackend {
@@ -327,6 +329,22 @@ impl RemoteBackend {
         }
 
         let id = self.inner.next_id.fetch_add(1, Ordering::SeqCst);
+        let request_provenance = self
+            .inner
+            .request_provenance
+            .lock()
+            .expect("remote request provenance lock")
+            .clone();
+        let request_key = request_provenance
+            .as_ref()
+            .map(|runtime| {
+                runtime
+                    .record_received(id, method, chrono::Utc::now().timestamp_millis())
+                    .map_err(|error| RemoteCallError::Protocol {
+                        message: format!("remote request provenance rejected request: {error:?}"),
+                    })
+            })
+            .transpose()?;
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.inner.pending.lock().await.insert(id, tx);
 
@@ -335,6 +353,9 @@ impl RemoteBackend {
             Ok(Ok(())) => {}
             Ok(Err(_)) => {
                 self.inner.pending.lock().await.remove(&id);
+                if let Some(runtime) = request_provenance.as_ref() {
+                    runtime.record_transport_lost(chrono::Utc::now().timestamp_millis());
+                }
                 return Err(RemoteCallError::Disconnected);
             }
             Err(_) => {
@@ -344,10 +365,40 @@ impl RemoteBackend {
                 });
             }
         }
+        if let (Some(runtime), Some(request_key)) =
+            (request_provenance.as_ref(), request_key.as_ref())
+        {
+            runtime
+                .record_dispatch_started(request_key, chrono::Utc::now().timestamp_millis())
+                .map_err(|error| RemoteCallError::Protocol {
+                    message: format!("remote request provenance dispatch failed: {error:?}"),
+                })?;
+        }
 
         match timeout(REMOTE_REQUEST_TIMEOUT, rx).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err(RemoteCallError::Disconnected),
+            Ok(Ok(result)) => {
+                if let (Some(runtime), Some(request_key)) =
+                    (request_provenance.as_ref(), request_key.as_ref())
+                {
+                    runtime
+                        .record_response_observed(
+                            request_key,
+                            chrono::Utc::now().timestamp_millis(),
+                        )
+                        .map_err(|error| RemoteCallError::Protocol {
+                            message: format!(
+                                "remote request provenance response failed: {error:?}"
+                            ),
+                        })?;
+                }
+                result
+            }
+            Ok(Err(_)) => {
+                if let Some(runtime) = request_provenance.as_ref() {
+                    runtime.record_transport_lost(chrono::Utc::now().timestamp_millis());
+                }
+                Err(RemoteCallError::Disconnected)
+            }
             Err(_) => {
                 self.inner.pending.lock().await.remove(&id);
                 Err(RemoteCallError::ResponseTimeout {
@@ -359,6 +410,31 @@ impl RemoteBackend {
 
     fn mark_ready(&self) {
         self.inner.ready.store(true, Ordering::SeqCst);
+    }
+
+    fn mark_authenticated(&self) {
+        let mut request_provenance = self
+            .inner
+            .request_provenance
+            .lock()
+            .expect("remote request provenance lock");
+        if request_provenance.is_none() {
+            *request_provenance = Some(Arc::new(
+                RemoteRequestProvenanceRuntime::new_authenticated_transport(),
+            ));
+        }
+    }
+
+    #[cfg(test)]
+    fn transport_generation(
+        &self,
+    ) -> Option<crate::shared::remote_request_provenance::RemoteTransportGeneration> {
+        self.inner
+            .request_provenance
+            .lock()
+            .expect("remote request provenance lock")
+            .as_ref()
+            .map(|runtime| runtime.transport_generation().clone())
     }
 
     fn observe(&self, event: AvailabilityEvent) {
@@ -585,6 +661,7 @@ async fn initialize_remote_backend(
             connected: connection.connected,
             ready: AtomicBool::new(false),
             availability,
+            request_provenance: StdMutex::new(None),
         }),
     };
 
@@ -594,7 +671,10 @@ async fn initialize_remote_backend(
             .call_during_handshake("auth", json!({ "token": auth_token }))
             .await
         {
-            Ok(_) => client.observe(AvailabilityEvent::AuthSucceeded),
+            Ok(_) => {
+                client.observe(AvailabilityEvent::AuthSucceeded);
+                client.mark_authenticated();
+            }
             Err(RemoteCallError::RpcRejected { message }) => {
                 client.observe(AvailabilityEvent::AuthRejected {
                     diagnostic: message.clone(),
@@ -797,6 +877,7 @@ mod tests {
     use super::{
         can_retry_after_disconnect, reconcile_remote_host_pin, resolve_transport_config,
         RemoteBackend, RemoteBackendCache, RemoteBackendInitializationError, RemoteBackendInner,
+        RemoteRequestProvenanceRuntime, StdMutex,
     };
     use crate::remote_backend::transport::{RemoteTransportConfig, TransportAvailabilityObserver};
     use crate::shared::remote_host_availability::RemoteHostAvailabilityRuntime;
@@ -826,6 +907,9 @@ mod tests {
                         runtime: availability,
                         attempt,
                     },
+                    request_provenance: StdMutex::new(Some(Arc::new(
+                        RemoteRequestProvenanceRuntime::new_authenticated_transport(),
+                    ))),
                 }),
             },
             out_rx,
@@ -1416,6 +1500,119 @@ mod tests {
         assert_eq!(first_id, 1);
         assert_eq!(second_id, 2);
         assert!(backend.inner.connected.load(Ordering::SeqCst));
+        let generation_before = backend.transport_generation().unwrap();
+        let generation_after = backend.clone().transport_generation().unwrap();
+        assert_eq!(generation_before, generation_after);
+        let provenance = backend
+            .inner
+            .request_provenance
+            .lock()
+            .expect("provenance lock")
+            .clone()
+            .expect("authenticated provenance");
+        let snapshots = provenance.snapshots();
+        assert_eq!(snapshots.len(), 2);
+        assert!(snapshots.iter().all(|snapshot| {
+            snapshot.dispatch_state
+                == crate::shared::remote_request_provenance::RemoteRequestDispatchState::ResponseObserved
+        }));
+    }
+
+    #[test]
+    fn authenticated_remote_backends_have_distinct_transport_generations() {
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let first = test_backend(Arc::clone(&availability), "remote-a", 10);
+        let second = test_backend(availability, "remote-a", 20);
+        assert_ne!(
+            first.transport_generation().unwrap(),
+            second.transport_generation().unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn old_transport_response_cannot_complete_reconnected_request() {
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let (old, mut old_outbound) =
+            test_backend_with_outbound(Arc::clone(&availability), "remote-a", 10);
+        let (current, mut current_outbound) =
+            test_backend_with_outbound(availability, "remote-a", 20);
+        assert_ne!(
+            old.transport_generation().unwrap(),
+            current.transport_generation().unwrap()
+        );
+
+        let old_caller = old.clone();
+        let old_call = tokio::spawn(async move {
+            old_caller
+                .call("list_workspaces", serde_json::json!({}))
+                .await
+        });
+        let current_caller = current.clone();
+        let current_call = tokio::spawn(async move {
+            current_caller
+                .call("list_workspaces", serde_json::json!({}))
+                .await
+        });
+
+        let old_request: serde_json::Value =
+            serde_json::from_str(&old_outbound.recv().await.expect("old outbound request"))
+                .unwrap();
+        let current_request: serde_json::Value = serde_json::from_str(
+            &current_outbound
+                .recv()
+                .await
+                .expect("current outbound request"),
+        )
+        .unwrap();
+        assert_eq!(old_request["id"], 1);
+        assert_eq!(current_request["id"], 1);
+
+        old.inner
+            .pending
+            .lock()
+            .await
+            .remove(&1)
+            .unwrap()
+            .send(Ok(serde_json::json!(["old"])))
+            .unwrap();
+        assert_eq!(old_call.await.unwrap().unwrap(), serde_json::json!(["old"]));
+        assert!(!current_call.is_finished());
+
+        current
+            .inner
+            .pending
+            .lock()
+            .await
+            .remove(&1)
+            .unwrap()
+            .send(Ok(serde_json::json!(["current"])))
+            .unwrap();
+        assert_eq!(
+            current_call.await.unwrap().unwrap(),
+            serde_json::json!(["current"])
+        );
+    }
+
+    #[test]
+    fn unauthenticated_remote_backend_has_no_transport_generation_authority() {
+        let (out_tx, _out_rx) = tokio::sync::mpsc::channel(1);
+        let availability = Arc::new(RemoteHostAvailabilityRuntime::default());
+        let attempt = availability.begin_attempt("test", None, 1);
+        let client = RemoteBackend {
+            inner: Arc::new(RemoteBackendInner {
+                out_tx,
+                pending: Arc::new(Mutex::new(Default::default())),
+                next_id: AtomicU64::new(1),
+                connected: Arc::new(AtomicBool::new(true)),
+                ready: AtomicBool::new(false),
+                availability: TransportAvailabilityObserver {
+                    runtime: availability,
+                    attempt,
+                },
+                request_provenance: StdMutex::new(None),
+            }),
+        };
+        assert!(client.transport_generation().is_none());
     }
 
     #[test]
@@ -1560,6 +1757,7 @@ mod tests {
                     runtime: availability,
                     attempt,
                 },
+                request_provenance: StdMutex::new(None),
             }),
         };
         let error = client

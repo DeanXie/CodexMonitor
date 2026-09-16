@@ -39,6 +39,7 @@ If a behavior must work in both app and daemon, implement it in `src-tauri/src/s
 | Add/change daemon JSON-RPC surface | `src-tauri/src/bin/codex_monitor_daemon/rpc.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc/*`, `src-tauri/src/bin/codex_monitor_daemon.rs`, matching shared core |
 | Change writer-admission observation/query compatibility | `src-tauri/src/shared/codex_core/writer_admission_observation.rs`, `src-tauri/src/shared/codex_core/writer_admission_*_tests.rs`, `src-tauri/src/shared/codex_core/writer_admission_protocol_fixture_tests.rs`, `docs/fixtures/app-server/writer-admission-observation/*`, `docs/phase-3-5-2b-host-session-writer-admission-observation.md` |
 | Change Thread subscription/runtime observations or synthetic live detach | `src-tauri/src/shared/codex_core/thread_lifecycle_observation.rs`, `src-tauri/src/shared/codex_core/thread_lifecycle_observation_tests.rs`, `src-tauri/src/shared/codex_core/thread_lifecycle_protocol_fixture_tests.rs`, `src-tauri/src/shared/codex_core/synthetic_live_detach_tests.rs`, `src-tauri/src/codex/mod.rs`, `src-tauri/src/bin/codex_monitor_daemon.rs`, `src-tauri/src/remote_backend/mod.rs`, `docs/fixtures/app-server/thread-lifecycle-observation/*`, `docs/phase-3-5-2c-subscription-release-lifecycle.md` |
+| Change Remote transport generation or request provenance | `src-tauri/src/shared/remote_request_provenance.rs`, `src-tauri/src/shared/remote_request_provenance_tests.rs`, `src-tauri/src/remote_backend/mod.rs`, `src-tauri/src/bin/codex_monitor_daemon/transport.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs`, `docs/phase-3-5-2d-remote-transport-coordination.md` |
 
 ## Frontend Navigation
 
@@ -131,6 +132,7 @@ All cross-runtime domain behavior belongs in `src-tauri/src/shared/*`:
 - Usage snapshot and aggregation: `src-tauri/src/shared/local_usage_core.rs`
 - External Codex source envelopes, rollout discovery/tailing, checkpoints, and source authority: `src-tauri/src/shared/global_sources_core.rs`, `src-tauri/src/shared/global_sources_core/*`
 - Process helpers: `src-tauri/src/shared/process_core.rs`
+- Remote TCP request correlation and reconnect isolation: `src-tauri/src/shared/remote_request_provenance.rs`
 
 ## Events Map (Backend -> Frontend)
 

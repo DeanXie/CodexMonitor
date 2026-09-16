@@ -181,12 +181,22 @@ pub(super) fn spawn_rpc_response_task(
     params: Value,
     client_version: String,
     request_limiter: Arc<Semaphore>,
+    request_provenance: Arc<RemoteRequestProvenanceRuntime>,
+    request_key: Option<RemoteRequestKey>,
 ) {
     tokio::spawn(async move {
         let Ok(_permit) = request_limiter.acquire_owned().await else {
             return;
         };
+        if let Some(request_key) = request_key.as_ref() {
+            let _ = request_provenance
+                .record_dispatch_started(request_key, chrono::Utc::now().timestamp_millis());
+        }
         let result = handle_rpc_request(&state, &method, params, client_version).await;
+        if let Some(request_key) = request_key.as_ref() {
+            let _ = request_provenance
+                .record_response_observed(request_key, chrono::Utc::now().timestamp_millis());
+        }
         let response = match result {
             Ok(result) => build_result_response(id, result),
             Err(message) => build_error_response(id, &message),

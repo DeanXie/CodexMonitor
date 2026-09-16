@@ -29,6 +29,8 @@ pub(super) async fn handle_client(
     let mut events_task: Option<tokio::task::JoinHandle<()>> = None;
     let request_limiter = Arc::new(Semaphore::new(MAX_IN_FLIGHT_RPC_PER_CONNECTION));
     let client_version = format!("daemon-{}", env!("CARGO_PKG_VERSION"));
+    let mut request_provenance = authenticated
+        .then(|| Arc::new(RemoteRequestProvenanceRuntime::new_authenticated_transport()));
 
     if authenticated {
         let rx = events.subscribe();
@@ -73,6 +75,9 @@ pub(super) async fn handle_client(
             }
 
             authenticated = true;
+            request_provenance = Some(Arc::new(
+                RemoteRequestProvenanceRuntime::new_authenticated_transport(),
+            ));
             if let Some(response) = build_result_response(id, json!({ "ok": true })) {
                 let _ = out_tx.send(response);
             }
@@ -84,6 +89,30 @@ pub(super) async fn handle_client(
             continue;
         }
 
+        let request_provenance = request_provenance
+            .as_ref()
+            .expect("authenticated transport provenance")
+            .clone();
+        let request_key = if let Some(id) = id {
+            match request_provenance.record_received(
+                id,
+                method.clone(),
+                chrono::Utc::now().timestamp_millis(),
+            ) {
+                Ok(key) => Some(key),
+                Err(_) => {
+                    if let Some(response) =
+                        build_error_response(Some(id), "duplicate request id for current transport")
+                    {
+                        let _ = out_tx.send(response);
+                    }
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+
         spawn_rpc_response_task(
             Arc::clone(&state),
             out_tx.clone(),
@@ -92,7 +121,13 @@ pub(super) async fn handle_client(
             params,
             client_version.clone(),
             Arc::clone(&request_limiter),
+            Arc::clone(&request_provenance),
+            request_key,
         );
+    }
+
+    if let Some(request_provenance) = request_provenance {
+        request_provenance.record_transport_lost(chrono::Utc::now().timestamp_millis());
     }
 
     drop(out_tx);

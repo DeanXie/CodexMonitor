@@ -21,6 +21,7 @@ pub(crate) mod process_core;
 pub(crate) mod prompts_core;
 pub(crate) mod remote_host_availability;
 pub(crate) mod remote_host_identity;
+pub(crate) mod remote_request_provenance;
 pub(crate) mod settings_core;
 pub(crate) mod surface_projection_core;
 pub(crate) mod surface_projection_engine;
@@ -52,6 +53,10 @@ mod surface_projection_core_tests;
 #[cfg(test)]
 #[path = "surface_projection_engine_tests.rs"]
 mod surface_projection_engine_tests;
+
+#[cfg(test)]
+#[path = "remote_request_provenance_tests.rs"]
+mod remote_request_provenance_tests;
 
 #[cfg(all(test, desktop))]
 #[path = "desktop_projection_handling_tests.rs"]

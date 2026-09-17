@@ -99,3 +99,19 @@ loss, direct-evidence precedence, session-end ambiguity, new explicit intent
 after unknown, and confirmed-tombstone projection isolation. The fixtures use
 only synthetic UUIDs and deterministic fake authority. They prove local
 single-dispatch behavior, not upstream concurrent-delete ordering.
+
+## Phase 3.5.3 compatibility closeout
+
+`phase-3-5-3-compatibility/` freezes the Phase 3.5.3a-d schema and authority
+surface without duplicating protocol payloads. `authority-contract.json`
+records the stable approval/delete states, serialized fields, generation
+hierarchy, confirmed-only tombstone authority, and zero retry/replay policy.
+`fixture-family-manifest.json` points to the sanitized approval, delete,
+isolation, and transport-generation fixture families exercised by the shared
+Rust compatibility tests.
+
+These closeout fixtures contain no real approval request, decision, Thread,
+rollout, account, path, token, Remote-client identity, owner, lease, force
+takeover, or inferred availability/release state. They do not prove exact
+upstream duplicate/late approval-response behavior or exact upstream ordering
+for concurrent duplicate delete requests.

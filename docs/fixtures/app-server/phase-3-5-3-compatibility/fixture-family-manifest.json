@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "families": [
+    {"name": "approval request command", "path": "app-server/approval-request-observation/command-execution-request.json"},
+    {"name": "approval request file", "path": "app-server/approval-request-observation/file-change-request.json"},
+    {"name": "approval request permissions", "path": "app-server/approval-request-observation/permissions-request.json"},
+    {"name": "approval resolved", "path": "app-server/approval-request-observation/server-request-resolved.json"},
+    {"name": "approval item completed", "path": "app-server/approval-request-observation/item-completed-exact.json"},
+    {"name": "approval auto review", "path": "app-server/approval-request-observation/auto-review.json"},
+    {"name": "approval decision dispatch", "path": "app-server/approval-decision-provenance/dispatch-boundaries.json"},
+    {"name": "approval stale decision", "path": "app-server/approval-decision-provenance/generation-and-duplicate-boundaries.json"},
+    {"name": "approval multi client", "path": "app-server/approval-decision-provenance/generation-and-duplicate-boundaries.json"},
+    {"name": "delete exact request", "path": "app-server/delete-mutation-observation/request-exact.json"},
+    {"name": "delete success", "path": "app-server/delete-mutation-observation/response-success.json"},
+    {"name": "delete upstream rejection", "path": "app-server/delete-mutation-observation/response-active-writer.json"},
+    {"name": "delete thread deleted", "path": "app-server/delete-mutation-observation/notification-thread-deleted.json"},
+    {"name": "delete response loss", "path": "app-server/delete-mutation-observation/response-loss.json"},
+    {"name": "delete session ended", "path": "app-server/delete-mutation-observation/session-ended-unresolved.json"},
+    {"name": "delete same thread multi client", "path": "app-server/delete-mutation-isolation/simultaneous-delete-same-thread.json"},
+    {"name": "delete different thread concurrency", "path": "app-server/delete-mutation-isolation/simultaneous-delete-different-thread.json"},
+    {"name": "delete stale generation", "path": "app-server/delete-mutation-isolation/stale-transport-delete.json"},
+    {"name": "delete pre dispatch loss", "path": "app-server/delete-mutation-isolation/pre-dispatch-transport-loss.json"},
+    {"name": "delete post dispatch loss", "path": "app-server/delete-mutation-isolation/post-dispatch-response-loss.json"},
+    {"name": "delete direct evidence after transport loss", "path": "app-server/delete-mutation-isolation/direct-success-after-transport-loss.json"},
+    {"name": "delete new intent after unknown", "path": "app-server/delete-mutation-isolation/new-explicit-intent-after-unknown.json"},
+    {"name": "delete stale projection", "path": "app-server/delete-mutation-isolation/stale-projection-after-confirmed-delete.json"},
+    {"name": "remote generation hierarchy", "path": "remote-transport-coordination/generation-hierarchy.json"},
+    {"name": "remote request provenance", "path": "remote-transport-coordination/request-provenance.json"},
+    {"name": "stale delivery isolation", "path": "remote-transport-coordination/stale-delivery.json"}
+  ]
+}

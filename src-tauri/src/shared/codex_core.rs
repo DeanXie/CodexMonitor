@@ -52,6 +52,10 @@ mod approval_observation_tests;
 #[path = "codex_core/approval_decision_provenance_tests.rs"]
 mod approval_decision_provenance_tests;
 
+#[cfg(test)]
+#[path = "codex_core/phase_3_5_3_compatibility_tests.rs"]
+mod phase_3_5_3_compatibility_tests;
+
 pub(crate) mod creation_acknowledgement;
 pub(crate) mod creation_coordination;
 

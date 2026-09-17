@@ -84,3 +84,10 @@ single dispatch, different-key concurrency, generation/session isolation,
 pre/post-write transport loss, direct-evidence precedence, and zero replay using
 fake authority only. The implementation evidence index is
 `phase-3-5-3d/delete-isolation-freeze.md`.
+
+Phase 3.5.3e compatibility fixtures are stored in
+`../fixtures/app-server/phase-3-5-3-compatibility/`. They freeze the aggregate
+approval/delete schema, generation hierarchy, multi-client scoping,
+unknown/stale/direct-evidence precedence, zero retry/replay, and confirmed-only
+tombstone contract without executing a real mutation. The closeout evidence
+index is `phase-3-5-3e/compatibility-closeout.md`.

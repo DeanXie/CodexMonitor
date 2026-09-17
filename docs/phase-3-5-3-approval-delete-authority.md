@@ -1,10 +1,11 @@
 # Phase 3.5.3 — Approval and Delete Authority
 
-Status: Phase 3.5.3 forensics and contract freeze are complete. Phase 3.5.3a
-Approval Request Observation, Phase 3.5.3b Remote Approval Decision
-Correlation, Phase 3.5.3c Delete Authority and Exact-ID Model, and Phase
-3.5.3d Unknown / Stale / Multi-client Isolation are **PASS / COMPLETE /
-FROZEN**. Phase 3.5.3e is not started.
+Status: Phase 3.5.3a Approval Request Observation, Phase 3.5.3b Remote
+Approval Decision Correlation, Phase 3.5.3c Delete Authority and Exact-ID
+Model, Phase 3.5.3d Unknown / Stale / Multi-client Isolation, and Phase
+3.5.3e Compatibility / Fixtures / Docs Closeout are **PASS / COMPLETE /
+FROZEN**. Phase 3.5.3 is **PASS / COMPLETE / FROZEN**. Phase 3.5.4 is not
+started.
 
 ## Authority boundary
 
@@ -196,3 +197,41 @@ Sidebar, catalog, `thread/read`, cache, runtime, and rollout projection evidence
 cannot confirm deletion or resurrect a confirmed canonical tombstone. The
 deterministic fixtures prove CodexMonitor's local single-dispatch contract only;
 they do not claim an upstream winner or bundled concurrent-delete ordering.
+
+## Compatibility closeout
+
+Phase 3.5.3e adds no approval or delete behavior. It freezes the a-d shared
+authority in `docs/fixtures/app-server/phase-3-5-3-compatibility/` and exercises
+the real shared Rust types used by both App and daemon adapters.
+
+The generation hierarchy remains distinct:
+
+```text
+RemoteHostIdentity
+→ DaemonProcessGeneration
+→ RemoteTransportGeneration
+→ WorkspaceSessionGeneration
+→ AppServerConnectionGeneration
+```
+
+The arrows express nesting/continuity boundaries, not interchangeable
+identities. Approval and delete attempts bind current WorkspaceSession and
+app-server generations; Remote request provenance remains transport-scoped.
+Multiple Remote transports may share one WorkspaceSession and app-server
+connection without creating a Remote-client identity, approval/delete owner,
+or lease.
+
+Unknown or stale transport evidence never overwrites direct current-generation
+app-server evidence. Approval and delete automatic retry/replay counts are
+zero. Delete tombstones remain authorized only by `delete_confirmed`; Thread,
+rollout, runtime, sidebar, catalog, and cache projection absence cannot confirm
+deletion.
+
+The following upstream details remain **NOT PROVEN** and are not encoded as
+CodexMonitor authority:
+
+- exact upstream behavior for duplicate or late approval responses;
+- exact upstream ordering or winner semantics for concurrent duplicate delete
+  requests.
+
+There is no current Phase 3.5.3 blocker. Phase 3.5.4 remains not started.

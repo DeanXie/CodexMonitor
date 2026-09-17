@@ -246,6 +246,14 @@ prove which attempt won. App-local responses retain their existing path and do
 not acquire Remote transport provenance. Deterministic fixtures live in
 `docs/fixtures/app-server/approval-decision-provenance/`.
 
+Phase 3.5.3e freezes this approval contract together with exact-ID delete
+authority in `docs/fixtures/app-server/phase-3-5-3-compatibility/`. The
+compatibility tests serialize the real shared App/daemon authority types and
+verify generation isolation, single-dispatch gates, direct-evidence precedence,
+confirmed-only tombstones, and zero retry/replay. They add no request method or
+payload field. Exact upstream duplicate/late approval-response behavior remains
+not proven.
+
 ## Conversation Compaction Signals (Codex v2)
 
 Codex currently exposes two compaction signals:
@@ -321,6 +329,9 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   rejection supersedes transport uncertainty; stale transport, session,
   app-server, and projection evidence cannot change current confirmed truth.
   Reconnect and daemon/session replacement never replay `thread/delete`.
+  Phase 3.5.3e compatibility fixtures freeze these rules without claiming an
+  upstream winner or ordering for concurrent duplicate deletes; that upstream
+  behavior remains not proven.
 
 - `thread/start`
 - `thread/read`

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "approval": {
+    "observationStates": ["not_observed", "pending", "resolved_or_cleared", "session_ended_unresolved"],
+    "observationFields": ["identity", "kind", "state", "method", "approvalId", "decisionOptions", "observedAt", "resolutionMethod", "completedItemStatus", "sessionEndKind", "autoReview"],
+    "decisionStates": ["not_observed", "decision_pending", "decision_dispatched", "decision_not_dispatched", "decision_outcome_unknown", "decision_stale_rejected"],
+    "decisionAttemptFields": ["attemptId", "workspaceSessionGeneration", "appServerConnectionGeneration", "requestedRequestId", "identity", "remoteTransportGeneration", "transportRequestId", "state", "responseKind", "observedAt", "dispatchedAt", "completedAt", "failureKind", "resolutionMethod", "resolutionObservedAt", "dispatchCount", "retryCount"]
+  },
+  "delete": {
+    "states": ["not_observed", "delete_pending", "delete_confirmed", "delete_rejected", "delete_outcome_unknown", "session_ended_outcome_unknown"],
+    "observationFields": ["attemptId", "remoteHostIdentity", "threadKey", "workspaceSessionGeneration", "appServerConnectionGeneration", "requestedFullThreadId", "state", "observedAt", "dispatchedAt", "completedAt", "dispatchCount", "retryCount", "directEvidence", "upstreamErrorCode", "failureKind", "rejectionSource", "rejectionReason"],
+    "tombstoneAuthority": "delete_confirmed"
+  },
+  "generationHierarchy": ["RemoteHostIdentity", "DaemonProcessGeneration", "RemoteTransportGeneration", "WorkspaceSessionGeneration", "AppServerConnectionGeneration"],
+  "mutationPolicy": {
+    "approvalRetryCount": 0,
+    "approvalReplayCount": 0,
+    "deleteRetryCount": 0,
+    "deleteReplayCount": 0
+  },
+  "remainingNotProven": [
+    "exact upstream duplicate or late approval response behavior",
+    "exact upstream concurrent duplicate delete ordering"
+  ]
+}

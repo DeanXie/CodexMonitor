@@ -97,3 +97,10 @@ Phase 3.5.4a projection-freshness compatibility fixtures are stored in
 source, partial-hydration, invalidation, and forbidden-semantics contracts
 without performing recovery or mutation. The implementation evidence index is
 `phase-3-5-4a/projection-freshness-authority.md`.
+
+Phase 3.5.4b generation-tagged event fixtures are stored in
+`../fixtures/generation-tagged-events/`. They freeze local/Remote envelopes,
+current and stale generation delivery, missing-generation failure, hydration
+boundaries, same-payload provenance, and multi-client transport binding without
+adding mutation replay. The implementation evidence index is
+`phase-3-5-4b/generation-tagged-event-delivery.md`.

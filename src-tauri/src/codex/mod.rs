@@ -10,7 +10,6 @@ pub(crate) mod home;
 
 use crate::backend::app_server::spawn_workspace_session as spawn_workspace_session_inner;
 pub(crate) use crate::backend::app_server::WorkspaceSession;
-use crate::backend::events::AppServerEvent;
 use crate::event_sink::TauriEventSink;
 use crate::remote_backend;
 use crate::shared::agents_config_core;
@@ -19,17 +18,31 @@ use crate::shared::codex_core::{self, insert_optional_nullable_string};
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
 
-fn emit_thread_live_event(app: &AppHandle, workspace_id: &str, method: &str, params: Value) {
+async fn emit_thread_live_event(
+    app: &AppHandle,
+    state: &AppState,
+    workspace_id: &str,
+    method: &str,
+    params: Value,
+) -> Result<(), String> {
+    let session = state
+        .sessions
+        .lock()
+        .await
+        .get(workspace_id)
+        .cloned()
+        .ok_or_else(|| "workspace session not connected".to_string())?;
     let _ = app.emit(
         "app-server-event",
-        AppServerEvent {
-            workspace_id: workspace_id.to_string(),
-            message: json!({
+        session.app_server_event(
+            workspace_id,
+            json!({
                 "method": method,
                 "params": params,
             }),
-        },
+        ),
     );
+    Ok(())
 }
 
 pub(crate) async fn spawn_workspace_session(
@@ -336,6 +349,7 @@ pub(crate) async fn thread_live_subscribe(
     let subscription_id = format!("{}:{}", workspace_id, thread_id);
     emit_thread_live_event(
         &app,
+        &state,
         &workspace_id,
         "thread/live_attached",
         json!({
@@ -343,7 +357,8 @@ pub(crate) async fn thread_live_subscribe(
             "threadId": thread_id,
             "subscriptionId": subscription_id,
         }),
-    );
+    )
+    .await?;
     Ok(json!({
         "subscriptionId": subscription_id,
         "state": "live",
@@ -376,10 +391,12 @@ pub(crate) async fn thread_live_unsubscribe(
     .await?;
     emit_thread_live_event(
         &app,
+        &state,
         outcome.workspace_id(),
         outcome.event_method(),
         outcome.event_params(),
-    );
+    )
+    .await?;
     Ok(outcome.response())
 }
 
@@ -1197,6 +1214,13 @@ pub(crate) async fn generate_commit_message(
         let settings = state.app_settings.lock().await;
         settings.commit_message_prompt.clone()
     };
+    let session = state
+        .sessions
+        .lock()
+        .await
+        .get(&workspace_id)
+        .cloned()
+        .ok_or_else(|| "workspace session not connected".to_string())?;
     crate::shared::codex_aux_core::generate_commit_message_core(
         &state.sessions,
         &state.workspaces,
@@ -1207,16 +1231,16 @@ pub(crate) async fn generate_commit_message(
         |workspace_id, thread_id| {
             let _ = app.emit(
                 "app-server-event",
-                AppServerEvent {
-                    workspace_id: workspace_id.to_string(),
-                    message: json!({
+                session.app_server_event(
+                    workspace_id,
+                    json!({
                         "method": "codex/backgroundThread",
                         "params": {
                             "threadId": thread_id,
                             "action": "hide"
                         }
                     }),
-                },
+                ),
             );
         },
     )
@@ -1240,6 +1264,13 @@ pub(crate) async fn generate_run_metadata(
         .await;
     }
 
+    let session = state
+        .sessions
+        .lock()
+        .await
+        .get(&workspace_id)
+        .cloned()
+        .ok_or_else(|| "workspace session not connected".to_string())?;
     crate::shared::codex_aux_core::generate_run_metadata_core(
         &state.sessions,
         &state.workspaces,
@@ -1248,16 +1279,16 @@ pub(crate) async fn generate_run_metadata(
         |workspace_id, thread_id| {
             let _ = app.emit(
                 "app-server-event",
-                AppServerEvent {
-                    workspace_id: workspace_id.to_string(),
-                    message: json!({
+                session.app_server_event(
+                    workspace_id,
+                    json!({
                         "method": "codex/backgroundThread",
                         "params": {
                             "threadId": thread_id,
                             "action": "hide"
                         }
                     }),
-                },
+                ),
             );
         },
     )
@@ -1282,6 +1313,13 @@ pub(crate) async fn generate_agent_description(
         return serde_json::from_value(value).map_err(|err| err.to_string());
     }
 
+    let session = state
+        .sessions
+        .lock()
+        .await
+        .get(&workspace_id)
+        .cloned()
+        .ok_or_else(|| "workspace session not connected".to_string())?;
     crate::shared::codex_aux_core::generate_agent_description_core(
         &state.sessions,
         &state.workspaces,
@@ -1290,16 +1328,16 @@ pub(crate) async fn generate_agent_description(
         |workspace_id, thread_id| {
             let _ = app.emit(
                 "app-server-event",
-                AppServerEvent {
-                    workspace_id: workspace_id.to_string(),
-                    message: json!({
+                session.app_server_event(
+                    workspace_id,
+                    json!({
                         "method": "codex/backgroundThread",
                         "params": {
                             "threadId": thread_id,
                             "action": "hide"
                         }
                     }),
-                },
+                ),
             );
         },
     )

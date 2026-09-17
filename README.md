@@ -16,6 +16,7 @@ CodexMonitor is a Tauri app for orchestrating multiple Codex agents across local
 - Thread management: pin/rename/archive/copy, per-thread drafts, and stop/interrupt in-flight turns.
 - Optional remote backend (daemon) mode for running Codex on another machine.
 - Shared App/daemon projection-freshness snapshots distinguish not-yet-hydrated, current, stale, unavailable, and unknown coverage without inferring Thread absence or recovery success.
+- Generation-tagged app-server events are admitted only against matching current daemon/transport/session/connection evidence; stale or context-free events fail closed before frontend state mutation.
 - Remote setup helpers for self-hosted connectivity (Tailscale detection/host bootstrap for TCP mode).
 
 ### Composer & Agent Controls

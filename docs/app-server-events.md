@@ -68,6 +68,27 @@ unauthenticated generations are dropped immediately before the Tauri event
 hub. This transport gate changes no app-server method or payload schema and
 does not infer WorkspaceSession, subscription, runtime, or writer state.
 
+Phase 3.5.4b adds a generation-tagged envelope to every `app-server-event`.
+The shared App/daemon event contains the exact WorkspaceSession and app-server
+connection generations that produced the raw message. A local App event has no
+daemon-process or Remote transport generation. At each Remote delivery edge,
+the daemon adds its current process generation and the actual authenticated
+transport generation; that transport value is not written back into shared
+session truth.
+
+The frontend event hub drops the envelope before subscriber/reducer fanout when
+required generation fields are missing or any generation differs from its
+authoritative current freshness context. A reload has no such context and does
+not accept, buffer, or replay events until a read-only freshness query supplies
+it. The admission authority is specifically current `thread_catalog` coverage;
+another current coverage cannot bypass a not-hydrated or stale catalog.
+Accepted events can incrementally update already-current coverage, but
+cannot promote not-hydrated or stale coverage to current or establish catalog
+completeness. This gate does not mutate writer, subscription, runtime,
+approval, or delete observations and adds no retry, replay, client identity,
+owner, lease, sequence, or gap inference. Sanitized fixtures live under
+`docs/fixtures/generation-tagged-events/`.
+
 Phase 3.5.2d freezes five distinct continuity authorities around this delivery
 path: `RemoteHostIdentity` identifies the host;
 `DaemonProcessGeneration`, `RemoteTransportGeneration`,

@@ -61,6 +61,10 @@ export type WorkspaceInfo = {
 export type AppServerEvent = {
   workspace_id: string;
   message: Record<string, unknown>;
+  daemonProcessGeneration?: string | null;
+  remoteTransportGeneration?: string | null;
+  workspaceSessionGeneration?: string | null;
+  appServerConnectionGeneration?: string | null;
 };
 
 export type TrayRecentThreadEntry = {

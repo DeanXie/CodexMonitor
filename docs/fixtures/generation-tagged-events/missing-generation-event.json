@@ -1,0 +1,1 @@
+{"scenario":"missing-generation-event","deliver":false,"missing":"appServerConnectionGeneration","workspace_id":"workspace-a","message":{"method":"thread/updated"},"daemonProcessGeneration":"daemon-generation-a","remoteTransportGeneration":"transport-generation-a","workspaceSessionGeneration":"workspace-generation-a"}

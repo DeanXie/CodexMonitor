@@ -1,0 +1,1 @@
+{"scenario":"event-on-current-coverage","deliver":true,"coverageBefore":"current","coverageAfter":"current","workspace_id":"workspace-a","message":{"method":"thread/updated"},"daemonProcessGeneration":null,"remoteTransportGeneration":null,"workspaceSessionGeneration":"workspace-generation-a","appServerConnectionGeneration":"connection-generation-a"}

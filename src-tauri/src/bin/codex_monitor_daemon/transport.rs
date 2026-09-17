@@ -35,7 +35,17 @@ pub(super) async fn handle_client(
     if authenticated {
         let rx = events.subscribe();
         let out_tx_events = out_tx.clone();
-        events_task = Some(tokio::spawn(forward_events(rx, out_tx_events)));
+        let transport_generation = request_provenance
+            .as_ref()
+            .expect("authenticated transport provenance")
+            .transport_generation()
+            .clone();
+        events_task = Some(tokio::spawn(forward_events(
+            rx,
+            out_tx_events,
+            state.daemon_process_generation.clone(),
+            transport_generation,
+        )));
     }
 
     while let Ok(Some(line)) = lines.next_line().await {
@@ -84,7 +94,17 @@ pub(super) async fn handle_client(
 
             let rx = events.subscribe();
             let out_tx_events = out_tx.clone();
-            events_task = Some(tokio::spawn(forward_events(rx, out_tx_events)));
+            let transport_generation = request_provenance
+                .as_ref()
+                .expect("authenticated transport provenance")
+                .transport_generation()
+                .clone();
+            events_task = Some(tokio::spawn(forward_events(
+                rx,
+                out_tx_events,
+                state.daemon_process_generation.clone(),
+                transport_generation,
+            )));
 
             continue;
         }

@@ -60,6 +60,72 @@ fn projection_freshness_initially_not_hydrated() {
 }
 
 #[test]
+fn event_does_not_promote_not_hydrated_catalog_to_current() {
+    let runtime = ProjectionFreshnessRuntime::default();
+    let key = ProjectionFreshnessKey::thread_catalog(WORKSPACE_ID);
+    let current = session_generations("session-a", "connection-a");
+
+    assert!(!runtime
+        .record_event_if_current(key.clone(), current.clone(), 20)
+        .unwrap());
+    assert_eq!(
+        runtime.snapshot(&key, &current).status,
+        ProjectionFreshnessStatus::NotHydrated
+    );
+}
+
+#[test]
+fn event_does_not_promote_stale_coverage_to_current() {
+    let runtime = ProjectionFreshnessRuntime::default();
+    let key = ProjectionFreshnessKey::thread_catalog(WORKSPACE_ID);
+    let old = session_generations("session-old", "connection-old");
+    let current = session_generations("session-current", "connection-current");
+    runtime
+        .record_current(
+            key.clone(),
+            old,
+            ProjectionFreshnessSource::ThreadList,
+            10,
+            10,
+        )
+        .unwrap();
+
+    assert!(!runtime
+        .record_event_if_current(key.clone(), current.clone(), 20)
+        .unwrap());
+    assert_eq!(
+        runtime.snapshot(&key, &current).status,
+        ProjectionFreshnessStatus::Stale
+    );
+}
+
+#[test]
+fn event_can_incrementally_update_current_coverage() {
+    let runtime = ProjectionFreshnessRuntime::default();
+    let key = ProjectionFreshnessKey::thread_catalog(WORKSPACE_ID);
+    let current = session_generations("session-a", "connection-a");
+    runtime
+        .record_current(
+            key.clone(),
+            current.clone(),
+            ProjectionFreshnessSource::ThreadList,
+            10,
+            10,
+        )
+        .unwrap();
+    let evidence_before = runtime.evidence_count();
+
+    assert!(runtime
+        .record_event_if_current(key.clone(), current.clone(), 20)
+        .unwrap());
+    assert_eq!(runtime.evidence_count(), evidence_before + 1);
+    assert_eq!(
+        runtime.snapshot(&key, &current).status,
+        ProjectionFreshnessStatus::Current
+    );
+}
+
+#[test]
 fn hydrating_is_not_current() {
     let runtime = ProjectionFreshnessRuntime::default();
     let key = ProjectionFreshnessKey::thread_catalog(WORKSPACE_ID);

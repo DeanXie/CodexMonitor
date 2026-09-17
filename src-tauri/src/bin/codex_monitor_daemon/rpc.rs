@@ -35,11 +35,18 @@ pub(super) fn build_result_response(id: Option<u64>, result: Value) -> Option<St
     )
 }
 
-fn build_event_notification(event: DaemonEvent) -> Option<String> {
+fn build_event_notification(
+    event: DaemonEvent,
+    daemon_process_generation: &DaemonProcessGeneration,
+    remote_transport_generation: &RemoteTransportGeneration,
+) -> Option<String> {
     let payload = match event {
         DaemonEvent::AppServer(payload) => json!({
             "method": "app-server-event",
-            "params": payload,
+            "params": payload.for_remote_delivery(
+                daemon_process_generation.clone(),
+                remote_transport_generation.clone(),
+            ),
         }),
         DaemonEvent::TerminalOutput(payload) => json!({
             "method": "terminal-output",
@@ -165,6 +172,8 @@ pub(super) async fn handle_rpc_request_with_context(
 pub(super) async fn forward_events(
     mut rx: broadcast::Receiver<DaemonEvent>,
     out_tx_events: mpsc::UnboundedSender<String>,
+    daemon_process_generation: DaemonProcessGeneration,
+    remote_transport_generation: RemoteTransportGeneration,
 ) {
     loop {
         let event = match rx.recv().await {
@@ -173,7 +182,11 @@ pub(super) async fn forward_events(
             Err(broadcast::error::RecvError::Closed) => break,
         };
 
-        let Some(payload) = build_event_notification(event) else {
+        let Some(payload) = build_event_notification(
+            event,
+            &daemon_process_generation,
+            &remote_transport_generation,
+        ) else {
             continue;
         };
 
@@ -232,4 +245,44 @@ pub(super) fn spawn_rpc_response_task(
             let _ = out_tx.send(response);
         }
     });
+}
+
+#[cfg(test)]
+mod generation_event_delivery_tests {
+    use super::*;
+    use crate::shared::codex_core::thread_lifecycle_observation::AppServerConnectionGeneration;
+    use crate::shared::codex_core::writer_admission_observation::WorkspaceSessionGeneration;
+
+    #[test]
+    fn daemon_delivery_binds_process_and_transport_generations() {
+        let event = AppServerEvent::for_session(
+            "workspace-a",
+            json!({ "method": "thread/updated" }),
+            WorkspaceSessionGeneration::new("workspace-generation-a").unwrap(),
+            AppServerConnectionGeneration::new("connection-generation-a").unwrap(),
+        );
+        let daemon = DaemonProcessGeneration::new("daemon-generation-a").unwrap();
+        let transport = RemoteTransportGeneration::new("transport-generation-a").unwrap();
+
+        let wire = build_event_notification(DaemonEvent::AppServer(event), &daemon, &transport)
+            .expect("event notification");
+        let value: Value = serde_json::from_str(&wire).expect("valid json-rpc notification");
+
+        assert_eq!(
+            value.pointer("/params/daemonProcessGeneration"),
+            Some(&json!("daemon-generation-a"))
+        );
+        assert_eq!(
+            value.pointer("/params/remoteTransportGeneration"),
+            Some(&json!("transport-generation-a"))
+        );
+        assert_eq!(
+            value.pointer("/params/workspaceSessionGeneration"),
+            Some(&json!("workspace-generation-a"))
+        );
+        assert_eq!(
+            value.pointer("/params/appServerConnectionGeneration"),
+            Some(&json!("connection-generation-a"))
+        );
+    }
 }

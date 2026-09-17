@@ -86,6 +86,7 @@ use shared::remote_host_identity::{
 };
 use shared::remote_request_provenance::{
     RemoteRequestDispatchContext, RemoteRequestKey, RemoteRequestProvenanceRuntime,
+    RemoteTransportGeneration,
 };
 use shared::workspace_interop_core::{remote_execution_environment_key, ExecutionEnvironmentKey};
 use shared::{
@@ -129,6 +130,19 @@ fn spawn_with_client(
 #[derive(Clone)]
 struct DaemonEventSink {
     tx: broadcast::Sender<DaemonEvent>,
+    projection_freshness: Arc<shared::projection_freshness::ProjectionFreshnessRuntime>,
+}
+
+impl DaemonEventSink {
+    fn new(
+        tx: broadcast::Sender<DaemonEvent>,
+        projection_freshness: Arc<shared::projection_freshness::ProjectionFreshnessRuntime>,
+    ) -> Self {
+        Self {
+            tx,
+            projection_freshness,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -142,6 +156,17 @@ enum DaemonEvent {
 
 impl EventSink for DaemonEventSink {
     fn emit_app_server_event(&self, event: AppServerEvent) {
+        let generations = self.projection_freshness.generations_for_session(
+            event.workspace_session_generation.clone(),
+            event.app_server_connection_generation.clone(),
+        );
+        let _ = self.projection_freshness.record_event_if_current(
+            shared::projection_freshness::ProjectionFreshnessKey::thread_catalog(
+                &event.workspace_id,
+            ),
+            generations,
+            chrono::Utc::now().timestamp_millis(),
+        );
         let _ = self.tx.send(DaemonEvent::AppServer(event));
     }
 
@@ -164,7 +189,7 @@ struct DaemonState {
     creation_coordinator: shared::codex_core::creation_coordination::CreationCoordinator,
     execution_settings_evidence:
         shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
-    projection_freshness: shared::projection_freshness::ProjectionFreshnessRuntime,
+    projection_freshness: Arc<shared::projection_freshness::ProjectionFreshnessRuntime>,
     data_dir: PathBuf,
     remote_host_identity: RemoteHostIdentity,
     daemon_process_generation: DaemonProcessGeneration,
@@ -186,7 +211,7 @@ struct WorkspaceFileResponse {
 }
 
 impl DaemonState {
-    fn load(config: &DaemonConfig, event_sink: DaemonEventSink) -> Result<Self, String> {
+    fn load(config: &DaemonConfig, events: broadcast::Sender<DaemonEvent>) -> Result<Self, String> {
         let storage_path = config.data_dir.join("workspaces.json");
         let settings_path = config.data_dir.join("settings.json");
         let workspaces = read_workspaces(&storage_path).unwrap_or_default();
@@ -196,12 +221,15 @@ impl DaemonState {
             .and_then(|path| path.to_str().map(str::to_string));
         let remote_host_identity = load_or_initialize_remote_host_identity(&config.data_dir)?;
         let daemon_process_generation = DaemonProcessGeneration::generate();
-        let projection_freshness = shared::projection_freshness::ProjectionFreshnessRuntime::new(
-            shared::projection_freshness::ProjectionFreshnessGenerationVector {
-                daemon_process_generation: Some(daemon_process_generation.clone()),
-                ..Default::default()
-            },
+        let projection_freshness = Arc::new(
+            shared::projection_freshness::ProjectionFreshnessRuntime::new(
+                shared::projection_freshness::ProjectionFreshnessGenerationVector {
+                    daemon_process_generation: Some(daemon_process_generation.clone()),
+                    ..Default::default()
+                },
+            ),
         );
+        let event_sink = DaemonEventSink::new(events, Arc::clone(&projection_freshness));
         let execution_environment_key = remote_execution_environment_key(&remote_host_identity);
         Ok(Self {
             data_dir: config.data_dir.clone(),
@@ -834,17 +862,25 @@ impl DaemonState {
         )
         .await?;
         let subscription_id = format!("{}:{}", workspace_id, thread_id);
-        self.event_sink.emit_app_server_event(AppServerEvent {
-            workspace_id: workspace_id.clone(),
-            message: json!({
-                "method": "thread/live_attached",
-                "params": {
-                    "workspaceId": workspace_id,
-                    "threadId": thread_id,
-                    "subscriptionId": subscription_id,
-                }
-            }),
-        });
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .get(&workspace_id)
+            .cloned()
+            .ok_or_else(|| "workspace session not connected".to_string())?;
+        self.event_sink
+            .emit_app_server_event(session.app_server_event(
+                workspace_id.clone(),
+                json!({
+                    "method": "thread/live_attached",
+                    "params": {
+                        "workspaceId": workspace_id,
+                        "threadId": thread_id,
+                        "subscriptionId": subscription_id,
+                    }
+                }),
+            ));
         Ok(json!({
             "subscriptionId": subscription_id,
             "state": "live",
@@ -863,13 +899,21 @@ impl DaemonState {
             thread_id,
         )
         .await?;
-        self.event_sink.emit_app_server_event(AppServerEvent {
-            workspace_id: outcome.workspace_id().to_string(),
-            message: json!({
-                "method": outcome.event_method(),
-                "params": outcome.event_params(),
-            }),
-        });
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .get(outcome.workspace_id())
+            .cloned()
+            .ok_or_else(|| "workspace session not connected".to_string())?;
+        self.event_sink
+            .emit_app_server_event(session.app_server_event(
+                outcome.workspace_id(),
+                json!({
+                    "method": outcome.event_method(),
+                    "params": outcome.event_params(),
+                }),
+            ));
         Ok(outcome.response())
     }
 
@@ -1483,6 +1527,13 @@ impl DaemonState {
             let settings = self.app_settings.lock().await;
             settings.commit_message_prompt.clone()
         };
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .get(&workspace_id)
+            .cloned()
+            .ok_or_else(|| "workspace session not connected".to_string())?;
         codex_aux_core::generate_commit_message_core(
             &self.sessions,
             &self.workspaces,
@@ -1491,7 +1542,7 @@ impl DaemonState {
             &commit_message_prompt,
             commit_message_model_id.as_deref(),
             |workspace_id, thread_id| {
-                emit_background_thread_hide(&self.event_sink, workspace_id, thread_id);
+                emit_background_thread_hide(&self.event_sink, &session, workspace_id, thread_id);
             },
         )
         .await
@@ -1502,13 +1553,20 @@ impl DaemonState {
         workspace_id: String,
         prompt: String,
     ) -> Result<Value, String> {
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .get(&workspace_id)
+            .cloned()
+            .ok_or_else(|| "workspace session not connected".to_string())?;
         codex_aux_core::generate_run_metadata_core(
             &self.sessions,
             &self.workspaces,
             workspace_id,
             &prompt,
             |workspace_id, thread_id| {
-                emit_background_thread_hide(&self.event_sink, workspace_id, thread_id);
+                emit_background_thread_hide(&self.event_sink, &session, workspace_id, thread_id);
             },
         )
         .await
@@ -1519,13 +1577,20 @@ impl DaemonState {
         workspace_id: String,
         description: String,
     ) -> Result<codex_aux_core::GeneratedAgentConfiguration, String> {
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .get(&workspace_id)
+            .cloned()
+            .ok_or_else(|| "workspace session not connected".to_string())?;
         codex_aux_core::generate_agent_description_core(
             &self.sessions,
             &self.workspaces,
             workspace_id,
             &description,
             |workspace_id, thread_id| {
-                emit_background_thread_hide(&self.event_sink, workspace_id, thread_id);
+                emit_background_thread_hide(&self.event_sink, &session, workspace_id, thread_id);
             },
         )
         .await
@@ -1571,17 +1636,22 @@ fn normalize_git_path(path: &str) -> String {
     path.replace('\\', "/")
 }
 
-fn emit_background_thread_hide(event_sink: &DaemonEventSink, workspace_id: &str, thread_id: &str) {
-    event_sink.emit_app_server_event(AppServerEvent {
-        workspace_id: workspace_id.to_string(),
-        message: json!({
+fn emit_background_thread_hide(
+    event_sink: &DaemonEventSink,
+    session: &WorkspaceSession,
+    workspace_id: &str,
+    thread_id: &str,
+) {
+    event_sink.emit_app_server_event(session.app_server_event(
+        workspace_id,
+        json!({
             "method": "codex/backgroundThread",
             "params": {
                 "threadId": thread_id,
                 "action": "hide"
             }
         }),
-    });
+    ));
 }
 
 fn send_notification_fallback_inner(title: String, body: String) -> Result<(), String> {
@@ -1823,16 +1893,19 @@ mod tests {
     fn test_state(data_dir: &std::path::Path) -> DaemonState {
         let (tx, _rx) = broadcast::channel::<DaemonEvent>(32);
         let daemon_process_generation = DaemonProcessGeneration::generate();
-        DaemonState {
-            data_dir: data_dir.to_path_buf(),
-            remote_host_identity: RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
-                .expect("test remote host identity"),
-            projection_freshness: shared::projection_freshness::ProjectionFreshnessRuntime::new(
+        let projection_freshness = Arc::new(
+            shared::projection_freshness::ProjectionFreshnessRuntime::new(
                 shared::projection_freshness::ProjectionFreshnessGenerationVector {
                     daemon_process_generation: Some(daemon_process_generation.clone()),
                     ..Default::default()
                 },
             ),
+        );
+        DaemonState {
+            data_dir: data_dir.to_path_buf(),
+            remote_host_identity: RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+                .expect("test remote host identity"),
+            projection_freshness: Arc::clone(&projection_freshness),
             daemon_process_generation,
             execution_environment_key: ExecutionEnvironmentKey::new(
                 "remote:6ba7b810-9dad-41d1-80b4-00c04fd430c8",
@@ -1845,10 +1918,54 @@ mod tests {
             storage_path: data_dir.join("workspaces.json"),
             settings_path: data_dir.join("settings.json"),
             app_settings: Mutex::new(AppSettings::default()),
-            event_sink: DaemonEventSink { tx },
+            event_sink: DaemonEventSink::new(tx, projection_freshness),
             codex_login_cancels: Mutex::new(HashMap::new()),
             daemon_binary_path: Some("/tmp/codex-monitor-daemon".to_string()),
         }
+    }
+
+    #[test]
+    fn daemon_event_sink_records_event_evidence_for_current_coverage() {
+        use crate::shared::codex_core::thread_lifecycle_observation::AppServerConnectionGeneration;
+        use crate::shared::codex_core::writer_admission_observation::WorkspaceSessionGeneration;
+        use crate::shared::projection_freshness::{
+            ProjectionFreshnessKey, ProjectionFreshnessRuntime, ProjectionFreshnessSource,
+        };
+
+        let daemon_generation = DaemonProcessGeneration::generate();
+        let runtime = Arc::new(ProjectionFreshnessRuntime::new(
+            shared::projection_freshness::ProjectionFreshnessGenerationVector {
+                daemon_process_generation: Some(daemon_generation),
+                ..Default::default()
+            },
+        ));
+        let session_generation = WorkspaceSessionGeneration::new("workspace-generation-a").unwrap();
+        let connection_generation =
+            AppServerConnectionGeneration::new("connection-generation-a").unwrap();
+        let generations = runtime
+            .generations_for_session(session_generation.clone(), connection_generation.clone());
+        let key = ProjectionFreshnessKey::thread_catalog("workspace-a");
+        runtime
+            .record_current(
+                key,
+                generations,
+                ProjectionFreshnessSource::ThreadList,
+                10,
+                10,
+            )
+            .unwrap();
+        let before = runtime.evidence_count();
+        let (tx, _rx) = broadcast::channel(4);
+        let sink = DaemonEventSink::new(tx, Arc::clone(&runtime));
+
+        sink.emit_app_server_event(AppServerEvent::for_session(
+            "workspace-a",
+            json!({ "method": "thread/updated" }),
+            session_generation,
+            connection_generation,
+        ));
+
+        assert_eq!(runtime.evidence_count(), before + 1);
     }
 
     async fn insert_workspace(state: &DaemonState, workspace_id: &str, workspace_path: &str) {
@@ -2130,7 +2247,7 @@ mod tests {
             let thread_id = "01a08c05-7880-75a2-976c-2a5895b58723";
             let (tx, mut events) = broadcast::channel::<DaemonEvent>(32);
             let mut state = test_state(&tmp);
-            state.event_sink = DaemonEventSink { tx };
+            state.event_sink = DaemonEventSink::new(tx, Arc::clone(&state.projection_freshness));
             insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
             let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
             let next_id_before = session.next_id.load(std::sync::atomic::Ordering::SeqCst);
@@ -2642,15 +2759,15 @@ mod tests {
             data_dir: tmp.clone(),
         };
         let (events, _) = broadcast::channel(16);
-        let first = DaemonState::load(&config, DaemonEventSink { tx: events.clone() }).unwrap();
-        let second = DaemonState::load(&config, DaemonEventSink { tx: events.clone() }).unwrap();
+        let first = DaemonState::load(&config, events.clone()).unwrap();
+        let second = DaemonState::load(&config, events.clone()).unwrap();
         assert_eq!(first.remote_host_identity, second.remote_host_identity);
         assert_ne!(
             first.daemon_process_generation,
             second.daemon_process_generation
         );
         std::fs::write(tmp.join("remote-host-identity.json"), "malformed").unwrap();
-        assert!(DaemonState::load(&config, DaemonEventSink { tx: events }).is_err());
+        assert!(DaemonState::load(&config, events).is_err());
         let _ = std::fs::remove_dir_all(tmp);
     }
 
@@ -3089,10 +3206,7 @@ fn main() {
 
     runtime.block_on(async move {
         let (events_tx, _events_rx) = broadcast::channel::<DaemonEvent>(2048);
-        let event_sink = DaemonEventSink {
-            tx: events_tx.clone(),
-        };
-        let state = match DaemonState::load(&config, event_sink) {
+        let state = match DaemonState::load(&config, events_tx.clone()) {
             Ok(state) => Arc::new(state),
             Err(error) => {
                 eprintln!("failed to initialize daemon identity: {error}");

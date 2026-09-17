@@ -152,8 +152,17 @@ All cross-runtime domain behavior belongs in `src-tauri/src/shared/*`:
 - Terminal event names: `terminal-output`, `terminal-exit`
 - Frontend fanout hubs: `src/services/events.ts`
 - Frontend routing into thread state: `src/features/app/hooks/useAppServerEvents.ts` -> thread hooks/reducer under `src/features/threads/hooks/*`
+- Shared generation-tagged envelope: `src-tauri/src/backend/events.rs`
+- Workspace/app-server generation binding: `src-tauri/src/backend/app_server.rs`
+- Daemon process/transport delivery binding: `src-tauri/src/bin/codex_monitor_daemon/rpc.rs` + `transport.rs`
+- Frontend current-generation admission gate: `src/services/events.ts`
+- Read-only freshness-context capture: `src/services/tauri.ts`
+- Generation delivery fixtures: `docs/fixtures/generation-tagged-events/`
 
-If event payload format changes, update parser/guards first in `src/utils/appServerEvents.ts`.
+If the raw app-server message format changes, update parser/guards first in
+`src/utils/appServerEvents.ts`. If the CodexMonitor delivery envelope changes,
+keep Rust/daemon/TypeScript generation fields and `src/services/events.ts`
+admission tests in parity.
 
 ## Type Contract Files
 

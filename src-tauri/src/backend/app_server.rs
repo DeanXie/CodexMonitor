@@ -1057,6 +1057,23 @@ impl Drop for ResumeAdmissionDispatchGuard<'_> {
 }
 
 impl WorkspaceSession {
+    pub(crate) fn app_server_event(
+        &self,
+        workspace_id: impl Into<String>,
+        message: Value,
+    ) -> AppServerEvent {
+        AppServerEvent::for_session(
+            workspace_id,
+            message,
+            self.thread_lifecycle_observations
+                .workspace_session_generation()
+                .clone(),
+            self.thread_lifecycle_observations
+                .app_server_connection_generation()
+                .clone(),
+        )
+    }
+
     pub(crate) fn record_app_server_generation_ended(
         &self,
         kind: WriterAdmissionSessionEndEvidenceKind,
@@ -2138,13 +2155,13 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
             let value: Value = match serde_json::from_str(&line) {
                 Ok(value) => value,
                 Err(err) => {
-                    let payload = AppServerEvent {
-                        workspace_id: fallback_workspace_id.clone(),
-                        message: json!({
+                    let payload = session_clone.app_server_event(
+                        fallback_workspace_id.clone(),
+                        json!({
                             "method": "codex/parseError",
                             "params": { "error": err.to_string(), "raw": line },
                         }),
-                    };
+                    );
                     event_sink_clone.emit_app_server_event(payload);
                     continue;
                 }
@@ -2337,16 +2354,16 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
                         .lock()
                         .await
                         .insert(tid.clone());
-                    let payload = AppServerEvent {
-                        workspace_id: routed_workspace_id.clone(),
-                        message: json!({
+                    let payload = session_clone.app_server_event(
+                        routed_workspace_id.clone(),
+                        json!({
                             "method": "codex/backgroundThread",
                             "params": {
                                 "threadId": tid,
                                 "action": "hide"
                             }
                         }),
-                    };
+                    );
                     event_sink_clone.emit_app_server_event(payload);
                     continue;
                 }
@@ -2398,25 +2415,19 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
                         {
                             let workspace_ids = session_clone.workspace_ids_snapshot().await;
                             if workspace_ids.is_empty() {
-                                let payload = AppServerEvent {
-                                    workspace_id: routed_workspace_id.clone(),
-                                    message: value,
-                                };
+                                let payload = session_clone
+                                    .app_server_event(routed_workspace_id.clone(), value);
                                 event_sink_clone.emit_app_server_event(payload);
                             } else {
                                 for workspace_id in workspace_ids {
-                                    let payload = AppServerEvent {
-                                        workspace_id,
-                                        message: value.clone(),
-                                    };
+                                    let payload =
+                                        session_clone.app_server_event(workspace_id, value.clone());
                                     event_sink_clone.emit_app_server_event(payload);
                                 }
                             }
                         } else {
-                            let payload = AppServerEvent {
-                                workspace_id: routed_workspace_id.clone(),
-                                message: value,
-                            };
+                            let payload =
+                                session_clone.app_server_event(routed_workspace_id.clone(), value);
                             event_sink_clone.emit_app_server_event(payload);
                         }
                     }
@@ -2444,25 +2455,18 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
                     {
                         let workspace_ids = session_clone.workspace_ids_snapshot().await;
                         if workspace_ids.is_empty() {
-                            let payload = AppServerEvent {
-                                workspace_id: routed_workspace_id,
-                                message: value,
-                            };
+                            let payload =
+                                session_clone.app_server_event(routed_workspace_id, value);
                             event_sink_clone.emit_app_server_event(payload);
                         } else {
                             for workspace_id in workspace_ids {
-                                let payload = AppServerEvent {
-                                    workspace_id,
-                                    message: value.clone(),
-                                };
+                                let payload =
+                                    session_clone.app_server_event(workspace_id, value.clone());
                                 event_sink_clone.emit_app_server_event(payload);
                             }
                         }
                     } else {
-                        let payload = AppServerEvent {
-                            workspace_id: routed_workspace_id,
-                            message: value,
-                        };
+                        let payload = session_clone.app_server_event(routed_workspace_id, value);
                         event_sink_clone.emit_app_server_event(payload);
                     }
                 }
@@ -2484,19 +2488,20 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
 
     let workspace_id = entry.id.clone();
     let event_sink_clone = event_sink.clone();
+    let stderr_session = Arc::clone(&session);
     tokio::spawn(async move {
         let mut lines = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = lines.next_line().await {
             if line.trim().is_empty() {
                 continue;
             }
-            let payload = AppServerEvent {
-                workspace_id: workspace_id.clone(),
-                message: json!({
+            let payload = stderr_session.app_server_event(
+                workspace_id.clone(),
+                json!({
                     "method": "codex/stderr",
                     "params": { "message": line },
                 }),
-            };
+            );
             event_sink_clone.emit_app_server_event(payload);
         }
     });
@@ -2521,13 +2526,13 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
     init_response?;
     session.send_notification("initialized", None).await?;
 
-    let payload = AppServerEvent {
-        workspace_id: entry.id.clone(),
-        message: json!({
+    let payload = session.app_server_event(
+        entry.id.clone(),
+        json!({
             "method": "codex/connected",
             "params": { "workspaceId": entry.id.clone() }
         }),
-    };
+    );
     event_sink.emit_app_server_event(payload);
 
     Ok(session)

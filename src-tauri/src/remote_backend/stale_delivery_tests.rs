@@ -28,13 +28,99 @@ fn authenticated_gate(
 
 fn dispatch(gate: &RemoteNotificationDeliveryGate, marker: &str) -> Vec<(String, String)> {
     let mut events = Vec::new();
+    let generation = gate
+        .authenticated_generation()
+        .map(|generation| generation.as_str().to_string())
+        .unwrap_or_else(|| "transport-generation-unbound".to_string());
     dispatch_notification_if_current(
         gate,
         "app-server-event",
-        serde_json::json!({ "marker": marker }),
+        serde_json::json!({
+            "marker": marker,
+            "daemonProcessGeneration": "daemon-generation-current",
+            "remoteTransportGeneration": generation,
+            "workspaceSessionGeneration": "workspace-generation-current",
+            "appServerConnectionGeneration": "connection-generation-current"
+        }),
         |event, payload| events.push((event.to_string(), payload.to_string())),
     );
     events
+}
+
+#[test]
+fn remote_event_binds_current_transport_generation() {
+    let authority = RemoteNotificationDeliveryAuthority::default();
+    let current = authenticated_gate(&authority, "transport-generation-current");
+    authority.publish_current(generation("transport-generation-current"));
+
+    let events = dispatch(&current, "current-generation");
+
+    assert_eq!(events.len(), 1);
+    assert!(events[0]
+        .1
+        .contains("\"remoteTransportGeneration\":\"transport-generation-current\""));
+}
+
+#[test]
+fn transport_envelope_generation_must_match_delivery_gate() {
+    let authority = RemoteNotificationDeliveryAuthority::default();
+    let current = authenticated_gate(&authority, "transport-generation-current");
+    authority.publish_current(generation("transport-generation-current"));
+    let mut events = Vec::new();
+
+    dispatch_notification_if_current(
+        &current,
+        "app-server-event",
+        serde_json::json!({
+            "daemonProcessGeneration": "daemon-generation-current",
+            "remoteTransportGeneration": "transport-generation-stale",
+            "workspaceSessionGeneration": "workspace-generation-current",
+            "appServerConnectionGeneration": "connection-generation-current"
+        }),
+        |event, payload| events.push((event.to_string(), payload)),
+    );
+
+    assert!(events.is_empty());
+}
+
+#[test]
+fn reconnect_old_transport_event_cannot_mutate_new_transport_projection() {
+    let authority = RemoteNotificationDeliveryAuthority::default();
+    let old = authenticated_gate(&authority, "transport-generation-old");
+    let current = authenticated_gate(&authority, "transport-generation-current");
+    authority.publish_current(generation("transport-generation-current"));
+
+    assert!(dispatch(&old, "old").is_empty());
+    assert_eq!(dispatch(&current, "current").len(), 1);
+}
+
+#[test]
+fn remote_clients_bind_same_shared_event_to_independent_transport_generations() {
+    let first_authority = RemoteNotificationDeliveryAuthority::default();
+    let second_authority = RemoteNotificationDeliveryAuthority::default();
+    let first = authenticated_gate(&first_authority, "transport-generation-first");
+    let second = authenticated_gate(&second_authority, "transport-generation-second");
+    first_authority.publish_current(generation("transport-generation-first"));
+    second_authority.publish_current(generation("transport-generation-second"));
+
+    let first_events = dispatch(&first, "same-shared-event");
+    let second_events = dispatch(&second, "same-shared-event");
+
+    assert_eq!(first_events.len(), 1);
+    assert_eq!(second_events.len(), 1);
+    assert!(first_events[0].1.contains("transport-generation-first"));
+    assert!(second_events[0].1.contains("transport-generation-second"));
+}
+
+#[test]
+fn generation_event_delivery_does_not_trigger_mutation_replay() {
+    let authority = RemoteNotificationDeliveryAuthority::default();
+    let current = authenticated_gate(&authority, "transport-generation-current");
+    authority.publish_current(generation("transport-generation-current"));
+
+    let delivered = dispatch(&current, "one-delivery");
+
+    assert_eq!(delivered.len(), 1);
 }
 
 #[test]

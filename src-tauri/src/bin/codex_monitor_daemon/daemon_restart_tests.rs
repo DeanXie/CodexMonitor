@@ -22,7 +22,7 @@ fn daemon_config(data_dir: &std::path::Path) -> DaemonConfig {
 
 fn load_state(data_dir: &std::path::Path) -> DaemonState {
     let (events, _) = broadcast::channel(16);
-    DaemonState::load(&daemon_config(data_dir), DaemonEventSink { tx: events })
+    DaemonState::load(&daemon_config(data_dir), events)
         .expect("load daemon state")
 }
 

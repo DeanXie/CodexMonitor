@@ -3,6 +3,8 @@ import type {
   AppServerEvent,
   DictationEvent,
   DictationModelStatus,
+  ProjectionFreshnessGenerationVector,
+  ProjectionFreshnessQuerySnapshot,
   TrayOpenThreadPayload,
 } from "../types";
 import type { GlobalSourceSnapshot } from "@/features/agent-monitor/global-source/types";
@@ -26,7 +28,10 @@ type SubscriptionOptions = {
 
 type Listener<T> = (payload: T) => void;
 
-function createEventHub<T>(eventName: string) {
+function createEventHub<T>(
+  eventName: string,
+  shouldDeliver: (payload: T) => boolean = () => true,
+) {
   const listeners = new Set<Listener<T>>();
   let unlisten: Unsubscribe | null = null;
   let listenPromise: Promise<Unsubscribe> | null = null;
@@ -36,6 +41,9 @@ function createEventHub<T>(eventName: string) {
       return;
     }
     listenPromise = listen<T>(eventName, (event) => {
+      if (!shouldDeliver(event.payload)) {
+        return;
+      }
       for (const listener of listeners) {
         try {
           listener(event.payload);
@@ -87,7 +95,91 @@ function createEventHub<T>(eventName: string) {
   return { subscribe };
 }
 
-const appServerHub = createEventHub<AppServerEvent>("app-server-event");
+type AppServerEventGenerationContext = {
+  generations: ProjectionFreshnessGenerationVector;
+  hasCurrentCoverage: boolean;
+};
+
+const appServerEventGenerationContexts = new Map<
+  string,
+  AppServerEventGenerationContext
+>();
+
+function hasRequiredSessionGenerations(
+  generations: ProjectionFreshnessGenerationVector,
+): boolean {
+  return Boolean(
+    generations.workspaceSessionGeneration &&
+      generations.appServerConnectionGeneration,
+  );
+}
+
+function generationMatches(
+  actual: string | null | undefined,
+  expected: string | null,
+): boolean {
+  return (actual ?? null) === expected;
+}
+
+function shouldDeliverAppServerEvent(event: AppServerEvent): boolean {
+  if (
+    !event.workspaceSessionGeneration ||
+    !event.appServerConnectionGeneration
+  ) {
+    return false;
+  }
+  const context = appServerEventGenerationContexts.get(event.workspace_id);
+  if (!context?.hasCurrentCoverage) {
+    return false;
+  }
+  const expected = context.generations;
+  return (
+    event.workspaceSessionGeneration === expected.workspaceSessionGeneration &&
+    event.appServerConnectionGeneration === expected.appServerConnectionGeneration &&
+    generationMatches(
+      event.daemonProcessGeneration,
+      expected.daemonProcessGeneration,
+    ) &&
+    generationMatches(
+      event.remoteTransportGeneration,
+      expected.remoteTransportGeneration,
+    )
+  );
+}
+
+export function recordProjectionFreshnessForEventDelivery(
+  snapshot: ProjectionFreshnessQuerySnapshot,
+): void {
+  const threadCatalog = snapshot.coverages.find(
+    (coverage) => coverage.coverage === "thread_catalog",
+  );
+  if (
+    !threadCatalog ||
+    !hasRequiredSessionGenerations(threadCatalog.generations)
+  ) {
+    appServerEventGenerationContexts.delete(snapshot.workspaceId);
+    return;
+  }
+  appServerEventGenerationContexts.set(snapshot.workspaceId, {
+    generations: threadCatalog.generations,
+    hasCurrentCoverage: threadCatalog.status === "current",
+  });
+}
+
+export function invalidateAppServerEventGenerationContext(
+  workspaceId: string,
+): void {
+  appServerEventGenerationContexts.delete(workspaceId);
+}
+
+export function clearAppServerEventGenerationContext(): void {
+  appServerEventGenerationContexts.clear();
+}
+
+const appServerHub = createEventHub<AppServerEvent>(
+  "app-server-event",
+  shouldDeliverAppServerEvent,
+);
 const globalSourceSnapshotHub = createEventHub<GlobalSourceSnapshot>(
   "global-source-snapshot-updated",
 );

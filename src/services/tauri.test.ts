@@ -335,25 +335,49 @@ describe("tauri invoke wrappers", () => {
 
   it("maps workspaceId/cursor/limit/sortKey for list_threads", async () => {
     const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValueOnce({});
+    invokeMock
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-10",
+        threadKey: null,
+        coverages: [],
+      });
 
     await listThreads("ws-10", "cursor-1", 25, "updated_at");
 
-    expect(invokeMock).toHaveBeenCalledWith("list_threads", {
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      1,
+      "list_threads",
+      {
+        workspaceId: "ws-10",
+        cursor: "cursor-1",
+        limit: 25,
+        sortKey: "updated_at",
+      },
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "get_projection_freshness", {
       workspaceId: "ws-10",
-      cursor: "cursor-1",
-      limit: 25,
-      sortKey: "updated_at",
+      threadId: undefined,
     });
   });
 
   it("maps workspaceId/threadId for read_thread", async () => {
     const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValueOnce({});
+    invokeMock
+      .mockResolvedValueOnce({ thread: { id: "thread-1" } })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-10",
+        threadKey: null,
+        coverages: [],
+      });
 
     await readThread("ws-10", "thread-1");
 
-    expect(invokeMock).toHaveBeenCalledWith("read_thread", {
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "read_thread", {
+      workspaceId: "ws-10",
+      threadId: "thread-1",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "get_projection_freshness", {
       workspaceId: "ws-10",
       threadId: "thread-1",
     });

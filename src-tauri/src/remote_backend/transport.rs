@@ -113,7 +113,28 @@ pub(crate) fn dispatch_notification_if_current<F>(
     }
 
     match method {
-        "app-server-event" | "terminal-output" | "terminal-exit" => emit(method, params),
+        "app-server-event" => {
+            let transport_matches = params
+                .get("remoteTransportGeneration")
+                .and_then(Value::as_str)
+                == Some(generation.as_str());
+            let has_required_session_generations = params
+                .get("workspaceSessionGeneration")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty())
+                && params
+                    .get("appServerConnectionGeneration")
+                    .and_then(Value::as_str)
+                    .is_some_and(|value| !value.is_empty());
+            let has_daemon_generation = params
+                .get("daemonProcessGeneration")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty());
+            if transport_matches && has_required_session_generations && has_daemon_generation {
+                emit(method, params);
+            }
+        }
+        "terminal-output" | "terminal-exit" => emit(method, params),
         _ => {}
     }
 }

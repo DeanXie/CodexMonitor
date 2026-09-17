@@ -1,0 +1,1 @@
+{"scenario":"stale-app-server-event","deliver":false,"mismatch":"appServerConnectionGeneration","workspace_id":"workspace-a","message":{"method":"thread/updated"},"daemonProcessGeneration":"daemon-generation-a","remoteTransportGeneration":"transport-generation-a","workspaceSessionGeneration":"workspace-generation-a","appServerConnectionGeneration":"connection-generation-old"}

@@ -10,6 +10,19 @@ fn parse_input<T: DeserializeOwned>(params: &Value) -> Result<T, String> {
     serde_json::from_value(input_value).map_err(|err| err.to_string())
 }
 
+fn bind_projection_freshness_transport(
+    snapshot: &mut shared::projection_freshness::ProjectionFreshnessQuerySnapshot,
+    remote_context: Option<&RemoteRequestDispatchContext>,
+) {
+    let Some(remote_context) = remote_context else {
+        return;
+    };
+    for coverage in &mut snapshot.coverages {
+        coverage.generations.remote_transport_generation =
+            Some(remote_context.transport_generation().clone());
+    }
+}
+
 pub(super) async fn try_handle(
     state: &DaemonState,
     method: &str,
@@ -104,7 +117,8 @@ pub(super) async fn try_handle(
                 state
                     .get_projection_freshness(workspace_id, thread_id)
                     .await
-                    .and_then(|snapshot| {
+                    .and_then(|mut snapshot| {
+                        bind_projection_freshness_transport(&mut snapshot, remote_context);
                         serde_json::to_value(snapshot).map_err(|error| error.to_string())
                     }),
             )
@@ -633,5 +647,48 @@ pub(super) async fn try_handle(
             )
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod generation_context_tests {
+    use super::*;
+    use crate::shared::projection_freshness::{
+        ProjectionFreshnessCoverage, ProjectionFreshnessGenerationVector,
+        ProjectionFreshnessQuerySnapshot, ProjectionFreshnessSnapshot, ProjectionFreshnessStatus,
+    };
+
+    #[test]
+    fn remote_freshness_context_binds_request_transport_generation() {
+        let provenance = Arc::new(RemoteRequestProvenanceRuntime::new(
+            RemoteTransportGeneration::new("transport-generation-a").unwrap(),
+        ));
+        let key = provenance
+            .record_received(1, "get_projection_freshness", 10)
+            .unwrap();
+        let context = RemoteRequestDispatchContext::new(provenance, key);
+        let mut snapshot = ProjectionFreshnessQuerySnapshot {
+            workspace_id: "workspace-a".to_string(),
+            thread_key: None,
+            coverages: vec![ProjectionFreshnessSnapshot {
+                coverage: ProjectionFreshnessCoverage::ThreadCatalog,
+                status: ProjectionFreshnessStatus::Current,
+                generations: ProjectionFreshnessGenerationVector::default(),
+                source: None,
+                observed_at: Some(10),
+                hydrated_at: Some(10),
+            }],
+        };
+
+        bind_projection_freshness_transport(&mut snapshot, Some(&context));
+
+        assert_eq!(
+            snapshot.coverages[0]
+                .generations
+                .remote_transport_generation
+                .as_ref()
+                .map(RemoteTransportGeneration::as_str),
+            Some("transport-generation-a")
+        );
     }
 }

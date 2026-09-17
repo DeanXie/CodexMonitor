@@ -24,6 +24,10 @@ import type {
   WriterAdmissionObservationSnapshot,
   ProjectionFreshnessQuerySnapshot,
 } from "../types";
+import {
+  invalidateAppServerEventGenerationContext,
+  recordProjectionFreshnessForEventDelivery,
+} from "./events";
 import type {
   GitFileDiff,
   GitFileStatus,
@@ -1111,7 +1115,18 @@ export async function listThreads(
   limit?: number | null,
   sortKey?: "created_at" | "updated_at" | null,
 ) {
-  return invoke<any>("list_threads", { workspaceId, cursor, limit, sortKey });
+  const result = await invoke<any>("list_threads", {
+    workspaceId,
+    cursor,
+    limit,
+    sortKey,
+  });
+  try {
+    await getProjectionFreshness(workspaceId);
+  } catch {
+    invalidateAppServerEventGenerationContext(workspaceId);
+  }
+  return result;
 }
 
 export async function listMcpServerStatus(
@@ -1140,14 +1155,22 @@ export async function getProjectionFreshness(
   workspaceId: string,
   threadId?: string,
 ) {
-  return invoke<ProjectionFreshnessQuerySnapshot>("get_projection_freshness", {
+  const snapshot = await invoke<ProjectionFreshnessQuerySnapshot>("get_projection_freshness", {
     workspaceId,
     threadId,
   });
+  recordProjectionFreshnessForEventDelivery(snapshot);
+  return snapshot;
 }
 
 export async function readThread(workspaceId: string, threadId: string) {
-  return invoke<any>("read_thread", { workspaceId, threadId });
+  const result = await invoke<any>("read_thread", { workspaceId, threadId });
+  try {
+    await getProjectionFreshness(workspaceId, threadId);
+  } catch {
+    invalidateAppServerEventGenerationContext(workspaceId);
+  }
+  return result;
 }
 
 export async function threadLiveSubscribe(workspaceId: string, threadId: string) {

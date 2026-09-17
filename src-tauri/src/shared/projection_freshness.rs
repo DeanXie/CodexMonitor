@@ -266,6 +266,29 @@ impl ProjectionFreshnessRuntime {
         )
     }
 
+    pub(crate) fn record_event_if_current(
+        &self,
+        key: ProjectionFreshnessKey,
+        generations: ProjectionFreshnessGenerationVector,
+        observed_at: i64,
+    ) -> Result<bool, String> {
+        let snapshot = self.snapshot(&key, &generations);
+        if snapshot.status != ProjectionFreshnessStatus::Current {
+            return Ok(false);
+        }
+        self.record(
+            key,
+            ProjectionFreshnessEvidence {
+                status: ProjectionFreshnessStatus::Current,
+                generations,
+                source: ProjectionFreshnessSource::Event,
+                observed_at,
+                hydrated_at: snapshot.hydrated_at,
+            },
+        )?;
+        Ok(true)
+    }
+
     pub(crate) fn snapshot(
         &self,
         key: &ProjectionFreshnessKey,

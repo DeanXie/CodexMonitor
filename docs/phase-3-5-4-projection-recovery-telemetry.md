@@ -1,6 +1,6 @@
 # Phase 3.5.4 — Projection / Recovery / Telemetry
 
-Status: Phase 3.5.4a Projection Freshness Authority is **PASS / COMPLETE / FROZEN**. Phase 3.5.4 remains **IN PROGRESS**. Phase 3.5.4b is not started.
+Status: Phase 3.5.4a Projection Freshness Authority and Phase 3.5.4b Generation-tagged Event Delivery are **PASS / COMPLETE / FROZEN**. Phase 3.5.4 remains **IN PROGRESS**. Phase 3.5.4c is not started.
 
 ## Projection freshness authority
 
@@ -61,8 +61,47 @@ Missing Workspace and unavailable WorkspaceSession are distinct. An unavailable 
 
 The runtime is process-local and not persisted. A daemon restart creates a new `DaemonProcessGeneration`, an empty freshness runtime, and no inherited current evidence.
 
+## Generation-tagged event delivery
+
+Every `app-server-event` carries the exact `WorkspaceSessionGeneration` and
+`AppServerConnectionGeneration` that produced the message. A Remote delivery
+also carries the current `DaemonProcessGeneration` and the actual
+`RemoteTransportGeneration` that delivered it. The shared event never stores a
+transport generation: the daemon binds that transport-scoped provenance at the
+Remote delivery edge. A local App delivery leaves both Remote-only generation
+fields absent.
+
+The frontend event hub admits an event only when all required generation fields
+are present and exactly match the already-hydrated current `thread_catalog`
+generation context. Another current coverage cannot bypass a not-hydrated or
+stale catalog.
+Remote events must also match the current daemon-process and transport
+generations. Missing or stale generation evidence is dropped before any
+subscriber/reducer fanout. A frontend reload starts without this authoritative
+context and therefore rejects events until a read-only freshness snapshot
+establishes it; events are not buffered or replayed.
+
+An admitted event may incrementally update a projection whose coverage is
+already `current`. It cannot promote `not_hydrated` or `stale` coverage to
+`current`, complete a broad catalog hydration, or outrank direct read evidence.
+Rejected events do not mutate canonical Thread state or shared writer,
+subscription, runtime, approval, or delete authority. Transport reconnect may
+invalidate old transport delivery while leaving surviving WorkspaceSession
+truth unchanged.
+
+The envelope adds no event/projection/recovery/client generation. It provides
+no sequence, gap detection, deduplication, replay buffer, client identity,
+owner, lease, or completeness proof. The same payload under another generation
+has distinct provenance. Multiple Remote clients can receive the same shared
+session event while each delivery is bound to its own transport generation.
+
 ## Frozen boundaries
 
-Phase 3.5.4a adds no UI, event envelope, recovery orchestration, persistence, polling loop, automatic retry/replay, client identity, owner, lease, `FREE`, `AVAILABLE`, or `RELEASED` semantics. Phase 3.5.4b owns later work.
+Phase 3.5.4a-b add no UI, recovery orchestration, persistence, polling loop,
+automatic retry/replay, client identity, owner, lease, `FREE`, `AVAILABLE`, or
+`RELEASED` semantics. Phase 3.5.4c owns later work.
 
-Compatibility fixtures are stored under `docs/fixtures/projection-freshness/`; implementation evidence is indexed under `docs/evidence/phase-3-5-4a/`.
+Compatibility fixtures are stored under `docs/fixtures/projection-freshness/`
+and `docs/fixtures/generation-tagged-events/`; implementation evidence is
+indexed under `docs/evidence/phase-3-5-4a/` and
+`docs/evidence/phase-3-5-4b/`.

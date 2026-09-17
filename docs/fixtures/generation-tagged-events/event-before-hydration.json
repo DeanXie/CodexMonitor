@@ -1,0 +1,1 @@
+{"scenario":"event-before-hydration","deliver":false,"coverageBefore":"not_hydrated","coverageAfter":"not_hydrated","workspace_id":"workspace-a","message":{"method":"thread/updated"},"daemonProcessGeneration":null,"remoteTransportGeneration":null,"workspaceSessionGeneration":"workspace-generation-a","appServerConnectionGeneration":"connection-generation-a"}

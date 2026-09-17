@@ -198,11 +198,41 @@ pub(crate) async fn get_writer_admission_observation(
         return serde_json::from_value(response).map_err(|error| error.to_string());
     }
 
-    codex_core::get_writer_admission_observation_core(
+    codex_core::get_writer_admission_observation_with_freshness_core(
         &state.workspaces,
         &state.sessions,
+        &state.projection_freshness,
         &workspace_id,
         &thread_id,
+    )
+    .await
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn get_projection_freshness(
+    workspace_id: String,
+    thread_id: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<crate::shared::projection_freshness::ProjectionFreshnessQuerySnapshot, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "get_projection_freshness",
+            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|error| error.to_string());
+    }
+
+    codex_core::get_projection_freshness_core(
+        &state.workspaces,
+        &state.sessions,
+        &state.projection_freshness,
+        &workspace_id,
+        thread_id.as_deref(),
     )
     .await
     .map_err(|error| error.to_string())
@@ -235,7 +265,13 @@ pub(crate) async fn read_thread(
         )
         .await
     } else {
-        codex_core::read_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone()).await
+        codex_core::read_thread_with_freshness_core(
+            &state.sessions,
+            &state.projection_freshness,
+            workspace_id.clone(),
+            thread_id.clone(),
+        )
+        .await
     };
 
     #[cfg(desktop)]
@@ -411,7 +447,15 @@ pub(crate) async fn list_threads(
         .await;
     }
 
-    codex_core::list_threads_core(&state.sessions, workspace_id, cursor, limit, sort_key).await
+    codex_core::list_threads_with_freshness_core(
+        &state.sessions,
+        &state.projection_freshness,
+        workspace_id,
+        cursor,
+        limit,
+        sort_key,
+    )
+    .await
 }
 
 #[tauri::command]

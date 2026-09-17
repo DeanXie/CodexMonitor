@@ -35,6 +35,8 @@ pub(crate) struct AppState {
         crate::shared::codex_core::creation_coordination::CreationCoordinator,
     pub(crate) execution_settings_evidence:
         crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
+    pub(crate) projection_freshness:
+        crate::shared::projection_freshness::ProjectionFreshnessRuntime,
     pub(crate) workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
     pub(crate) sessions: Mutex<HashMap<String, Arc<crate::codex::WorkspaceSession>>>,
     pub(crate) terminal_sessions: Mutex<HashMap<String, Arc<crate::terminal::TerminalSession>>>,
@@ -70,6 +72,7 @@ impl AppState {
         Self {
             creation_coordinator: Default::default(),
             execution_settings_evidence: Default::default(),
+            projection_freshness: Default::default(),
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
             terminal_sessions: Mutex::new(HashMap::new()),

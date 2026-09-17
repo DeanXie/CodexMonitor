@@ -94,6 +94,21 @@ pub(super) async fn try_handle(
                     }),
             )
         }
+        "get_projection_freshness" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let thread_id = parse_optional_string(params, "threadId");
+            Some(
+                state
+                    .get_projection_freshness(workspace_id, thread_id)
+                    .await
+                    .and_then(|snapshot| {
+                        serde_json::to_value(snapshot).map_err(|error| error.to_string())
+                    }),
+            )
+        }
         "read_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,

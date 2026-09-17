@@ -351,6 +351,38 @@ async fn get_session_clone(
         .ok_or_else(|| "workspace not connected".to_string())
 }
 
+fn projection_freshness_now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
+
+async fn projection_freshness_session_context(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime: &crate::shared::projection_freshness::ProjectionFreshnessRuntime,
+    workspace_id: &str,
+) -> Result<
+    (
+        Arc<WorkspaceSession>,
+        crate::shared::projection_freshness::ProjectionFreshnessGenerationVector,
+    ),
+    String,
+> {
+    let session = get_session_clone(sessions, workspace_id).await?;
+    let generations = runtime.generations_for_session(
+        session
+            .thread_lifecycle_observations
+            .workspace_session_generation()
+            .clone(),
+        session
+            .thread_lifecycle_observations
+            .app_server_connection_generation()
+            .clone(),
+    );
+    Ok((session, generations))
+}
+
 pub(crate) async fn get_writer_admission_observation_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -388,6 +420,118 @@ pub(crate) async fn get_writer_admission_observation_core(
     Ok(session
         .writer_admission_observations
         .current_snapshot(&thread_key))
+}
+
+pub(crate) async fn get_writer_admission_observation_with_freshness_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime: &crate::shared::projection_freshness::ProjectionFreshnessRuntime,
+    workspace_id: &str,
+    full_thread_id: &str,
+) -> Result<
+    writer_admission_observation::WriterAdmissionObservationSnapshot,
+    writer_admission_observation::WriterAdmissionObservationQueryError,
+> {
+    use crate::shared::projection_freshness::{ProjectionFreshnessKey, ProjectionFreshnessSource};
+
+    let context = projection_freshness_session_context(sessions, runtime, workspace_id).await;
+    let key_and_generations = match context {
+        Ok((session, generations)) => {
+            let codex_home_identity = session
+                .workspace_reconciler
+                .lock()
+                .await
+                .codex_home_identity()
+                .to_string();
+            Some((
+                ProjectionFreshnessKey::observation_snapshot(
+                    workspace_id,
+                    crate::shared::codex_identity::CodexThreadKey::new(
+                        codex_home_identity,
+                        full_thread_id,
+                    ),
+                ),
+                generations,
+            ))
+        }
+        Err(_) => None,
+    };
+    if let Some((key, generations)) = &key_and_generations {
+        let _ = runtime.record_hydrating(
+            key.clone(),
+            generations.clone(),
+            ProjectionFreshnessSource::ObservationQuery,
+            projection_freshness_now_ms(),
+        );
+    }
+
+    let result =
+        get_writer_admission_observation_core(workspaces, sessions, workspace_id, full_thread_id)
+            .await;
+    if let Some((key, generations)) = key_and_generations {
+        let normalized = result
+            .as_ref()
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+        crate::shared::projection_freshness::record_authoritative_read_outcome(
+            runtime,
+            key,
+            generations,
+            ProjectionFreshnessSource::ObservationQuery,
+            &normalized,
+            projection_freshness_now_ms(),
+        );
+    }
+    result
+}
+
+pub(crate) async fn get_projection_freshness_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime: &crate::shared::projection_freshness::ProjectionFreshnessRuntime,
+    workspace_id: &str,
+    full_thread_id: Option<&str>,
+) -> Result<
+    crate::shared::projection_freshness::ProjectionFreshnessQuerySnapshot,
+    crate::shared::projection_freshness::ProjectionFreshnessQueryError,
+> {
+    use crate::shared::projection_freshness::ProjectionFreshnessQueryError;
+
+    if workspace_id.trim().is_empty() {
+        return Err(ProjectionFreshnessQueryError::WorkspaceIdRequired);
+    }
+    if !workspaces.lock().await.contains_key(workspace_id) {
+        return Err(ProjectionFreshnessQueryError::WorkspaceNotFound);
+    }
+    let session = sessions.lock().await.get(workspace_id).cloned();
+    let Some(session) = session else {
+        return Ok(runtime.unavailable_query(workspace_id, full_thread_id.is_some()));
+    };
+    let generations = runtime.generations_for_session(
+        session
+            .thread_lifecycle_observations
+            .workspace_session_generation()
+            .clone(),
+        session
+            .thread_lifecycle_observations
+            .app_server_connection_generation()
+            .clone(),
+    );
+    let thread_key = if let Some(full_thread_id) = full_thread_id {
+        let codex_home_identity = session
+            .workspace_reconciler
+            .lock()
+            .await
+            .codex_home_identity()
+            .to_string();
+        Some(crate::shared::codex_identity::CodexThreadKey::new(
+            codex_home_identity,
+            full_thread_id,
+        ))
+    } else {
+        None
+    };
+    Ok(runtime.query(workspace_id, thread_key, &generations))
 }
 
 async fn resolve_workspace_and_parent(
@@ -510,6 +654,59 @@ pub(crate) async fn read_thread_core(
         .send_request_for_workspace(&workspace_id, request.method, request.params)
         .await?;
     validate_exact_thread_response(&thread_id, response)
+}
+
+pub(crate) async fn read_thread_with_freshness_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime: &crate::shared::projection_freshness::ProjectionFreshnessRuntime,
+    workspace_id: String,
+    thread_id: String,
+) -> Result<Value, String> {
+    use crate::shared::projection_freshness::{ProjectionFreshnessKey, ProjectionFreshnessSource};
+
+    let context = projection_freshness_session_context(sessions, runtime, &workspace_id).await;
+    let key_and_generations = match context {
+        Ok((session, generations)) => {
+            let codex_home_identity = session
+                .workspace_reconciler
+                .lock()
+                .await
+                .codex_home_identity()
+                .to_string();
+            Some((
+                ProjectionFreshnessKey::thread_detail(
+                    &workspace_id,
+                    crate::shared::codex_identity::CodexThreadKey::new(
+                        codex_home_identity,
+                        &thread_id,
+                    ),
+                ),
+                generations,
+            ))
+        }
+        Err(_) => None,
+    };
+    if let Some((key, generations)) = &key_and_generations {
+        let _ = runtime.record_hydrating(
+            key.clone(),
+            generations.clone(),
+            ProjectionFreshnessSource::ThreadRead,
+            projection_freshness_now_ms(),
+        );
+    }
+    let result = read_thread_core(sessions, workspace_id, thread_id).await;
+    if let Some((key, generations)) = key_and_generations {
+        let normalized = result.as_ref().map(|_| ()).map_err(Clone::clone);
+        crate::shared::projection_freshness::record_authoritative_read_outcome(
+            runtime,
+            key,
+            generations,
+            ProjectionFreshnessSource::ThreadRead,
+            &normalized,
+            projection_freshness_now_ms(),
+        );
+    }
+    result
 }
 
 pub(crate) async fn thread_live_subscribe_core(
@@ -652,6 +849,41 @@ pub(crate) async fn list_threads_core(
     session
         .send_request_for_workspace(&workspace_id, "thread/list", params)
         .await
+}
+
+pub(crate) async fn list_threads_with_freshness_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime: &crate::shared::projection_freshness::ProjectionFreshnessRuntime,
+    workspace_id: String,
+    cursor: Option<String>,
+    limit: Option<u32>,
+    sort_key: Option<String>,
+) -> Result<Value, String> {
+    use crate::shared::projection_freshness::{ProjectionFreshnessKey, ProjectionFreshnessSource};
+
+    let context = projection_freshness_session_context(sessions, runtime, &workspace_id).await;
+    let key = ProjectionFreshnessKey::thread_catalog(&workspace_id);
+    if let Ok((_, generations)) = &context {
+        let _ = runtime.record_hydrating(
+            key.clone(),
+            generations.clone(),
+            ProjectionFreshnessSource::ThreadList,
+            projection_freshness_now_ms(),
+        );
+    }
+    let result = list_threads_core(sessions, workspace_id, cursor, limit, sort_key).await;
+    if let Ok((_, generations)) = context {
+        let normalized = result.as_ref().map(|_| ()).map_err(Clone::clone);
+        crate::shared::projection_freshness::record_authoritative_read_outcome(
+            runtime,
+            key,
+            generations,
+            ProjectionFreshnessSource::ThreadList,
+            &normalized,
+            projection_freshness_now_ms(),
+        );
+    }
+    result
 }
 
 pub(crate) async fn list_mcp_server_status_core(
@@ -1555,6 +1787,10 @@ mod writer_admission_instrumentation_tests;
 #[cfg(test)]
 #[path = "codex_core/writer_admission_observation_query_tests.rs"]
 mod writer_admission_observation_query_tests;
+
+#[cfg(test)]
+#[path = "codex_core/projection_freshness_query_tests.rs"]
+mod projection_freshness_query_tests;
 
 #[cfg(test)]
 #[path = "codex_core/writer_admission_protocol_fixture_tests.rs"]

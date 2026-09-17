@@ -91,3 +91,9 @@ approval/delete schema, generation hierarchy, multi-client scoping,
 unknown/stale/direct-evidence precedence, zero retry/replay, and confirmed-only
 tombstone contract without executing a real mutation. The closeout evidence
 index is `phase-3-5-3e/compatibility-closeout.md`.
+
+Phase 3.5.4a projection-freshness compatibility fixtures are stored in
+`../fixtures/projection-freshness/`. They freeze status, coverage, generation,
+source, partial-hydration, invalidation, and forbidden-semantics contracts
+without performing recovery or mutation. The implementation evidence index is
+`phase-3-5-4a/projection-freshness-authority.md`.

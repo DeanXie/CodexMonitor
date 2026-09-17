@@ -86,7 +86,17 @@ pub(crate) async fn list_workspaces(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    Ok(workspaces_core::list_workspaces_core(&state.workspaces, &state.sessions).await)
+    let workspaces =
+        workspaces_core::list_workspaces_core(&state.workspaces, &state.sessions).await;
+    let observed_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    crate::shared::projection_freshness::record_workspace_catalog_current(
+        &state.projection_freshness,
+        observed_at,
+    );
+    Ok(workspaces)
 }
 
 #[tauri::command]

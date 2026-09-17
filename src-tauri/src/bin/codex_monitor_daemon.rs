@@ -69,6 +69,7 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use ignore::WalkBuilder;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -163,6 +164,7 @@ struct DaemonState {
     creation_coordinator: shared::codex_core::creation_coordination::CreationCoordinator,
     execution_settings_evidence:
         shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime,
+    projection_freshness: shared::projection_freshness::ProjectionFreshnessRuntime,
     data_dir: PathBuf,
     remote_host_identity: RemoteHostIdentity,
     daemon_process_generation: DaemonProcessGeneration,
@@ -194,6 +196,12 @@ impl DaemonState {
             .and_then(|path| path.to_str().map(str::to_string));
         let remote_host_identity = load_or_initialize_remote_host_identity(&config.data_dir)?;
         let daemon_process_generation = DaemonProcessGeneration::generate();
+        let projection_freshness = shared::projection_freshness::ProjectionFreshnessRuntime::new(
+            shared::projection_freshness::ProjectionFreshnessGenerationVector {
+                daemon_process_generation: Some(daemon_process_generation.clone()),
+                ..Default::default()
+            },
+        );
         let execution_environment_key = remote_execution_environment_key(&remote_host_identity);
         Ok(Self {
             data_dir: config.data_dir.clone(),
@@ -202,6 +210,7 @@ impl DaemonState {
             execution_environment_key,
             creation_coordinator: Default::default(),
             execution_settings_evidence: Default::default(),
+            projection_freshness,
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
             storage_path,
@@ -266,7 +275,17 @@ impl DaemonState {
 
     async fn list_workspaces(&self) -> Vec<WorkspaceInfo> {
         self.sync_workspaces_from_storage().await;
-        workspaces_core::list_workspaces_core(&self.workspaces, &self.sessions).await
+        let workspaces =
+            workspaces_core::list_workspaces_core(&self.workspaces, &self.sessions).await;
+        let observed_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        shared::projection_freshness::record_workspace_catalog_current(
+            &self.projection_freshness,
+            observed_at,
+        );
+        workspaces
     }
 
     async fn is_workspace_path_dir(&self, path: String) -> bool {
@@ -766,9 +785,10 @@ impl DaemonState {
         shared::codex_core::writer_admission_observation::WriterAdmissionObservationSnapshot,
         String,
     > {
-        codex_core::get_writer_admission_observation_core(
+        codex_core::get_writer_admission_observation_with_freshness_core(
             &self.workspaces,
             &self.sessions,
+            &self.projection_freshness,
             &workspace_id,
             &thread_id,
         )
@@ -776,8 +796,30 @@ impl DaemonState {
         .map_err(|error| error.to_string())
     }
 
+    async fn get_projection_freshness(
+        &self,
+        workspace_id: String,
+        thread_id: Option<String>,
+    ) -> Result<shared::projection_freshness::ProjectionFreshnessQuerySnapshot, String> {
+        codex_core::get_projection_freshness_core(
+            &self.workspaces,
+            &self.sessions,
+            &self.projection_freshness,
+            &workspace_id,
+            thread_id.as_deref(),
+        )
+        .await
+        .map_err(|error| error.to_string())
+    }
+
     async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
-        codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
+        codex_core::read_thread_with_freshness_core(
+            &self.sessions,
+            &self.projection_freshness,
+            workspace_id,
+            thread_id,
+        )
+        .await
     }
 
     async fn thread_live_subscribe(
@@ -865,7 +907,15 @@ impl DaemonState {
         limit: Option<u32>,
         sort_key: Option<String>,
     ) -> Result<Value, String> {
-        codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit, sort_key).await
+        codex_core::list_threads_with_freshness_core(
+            &self.sessions,
+            &self.projection_freshness,
+            workspace_id,
+            cursor,
+            limit,
+            sort_key,
+        )
+        .await
     }
 
     async fn list_mcp_server_status(
@@ -1772,11 +1822,18 @@ mod tests {
 
     fn test_state(data_dir: &std::path::Path) -> DaemonState {
         let (tx, _rx) = broadcast::channel::<DaemonEvent>(32);
+        let daemon_process_generation = DaemonProcessGeneration::generate();
         DaemonState {
             data_dir: data_dir.to_path_buf(),
             remote_host_identity: RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
                 .expect("test remote host identity"),
-            daemon_process_generation: DaemonProcessGeneration::generate(),
+            projection_freshness: shared::projection_freshness::ProjectionFreshnessRuntime::new(
+                shared::projection_freshness::ProjectionFreshnessGenerationVector {
+                    daemon_process_generation: Some(daemon_process_generation.clone()),
+                    ..Default::default()
+                },
+            ),
+            daemon_process_generation,
             execution_environment_key: ExecutionEnvironmentKey::new(
                 "remote:6ba7b810-9dad-41d1-80b4-00c04fd430c8",
             )
@@ -2957,6 +3014,59 @@ mod tests {
                 .is_none());
 
             let mut child = shared_session.child.lock().await;
+            kill_child_process_tree(&mut child).await;
+            let _ = std::fs::remove_dir_all(&tmp);
+        });
+    }
+
+    #[test]
+    fn projection_freshness_rpc_uses_shared_read_only_schema() {
+        run_async_test(async {
+            let tmp = make_temp_dir("projection-freshness-rpc");
+            let workspace_id = "projection-freshness-workspace";
+            let thread_id = "thread-fixture";
+            let state = test_state(&tmp);
+            let entry = make_workspace_entry(workspace_id, &tmp.to_string_lossy());
+            state
+                .workspaces
+                .lock()
+                .await
+                .insert(workspace_id.to_string(), entry.clone());
+            let session = make_session_with_generation(entry, "freshness-session");
+            state
+                .sessions
+                .lock()
+                .await
+                .insert(workspace_id.to_string(), Arc::clone(&session));
+            let next_id_before = session.next_id.load(std::sync::atomic::Ordering::SeqCst);
+
+            let value = rpc::handle_rpc_request(
+                &state,
+                "get_projection_freshness",
+                json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+                "fixture-client".to_string(),
+            )
+            .await
+            .expect("projection freshness query succeeds");
+
+            assert_eq!(value["workspaceId"], workspace_id);
+            assert_eq!(value["threadKey"]["threadId"], thread_id);
+            assert_eq!(value["coverages"].as_array().unwrap().len(), 4);
+            assert_eq!(
+                session.next_id.load(std::sync::atomic::Ordering::SeqCst),
+                next_id_before
+            );
+            let rendered = serde_json::to_string(&value).unwrap();
+            for forbidden in [
+                "recoveryGeneration",
+                "remoteClientIdentity",
+                "owner",
+                "lease",
+            ] {
+                assert!(!rendered.contains(forbidden));
+            }
+
+            let mut child = session.child.lock().await;
             kill_child_process_tree(&mut child).await;
             let _ = std::fs::remove_dir_all(&tmp);
         });

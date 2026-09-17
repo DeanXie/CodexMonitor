@@ -1,0 +1,1 @@
+{"scenario":"unavailable","snapshot":{"workspaceId":"workspace-sanitized","threadKey":null,"coverages":[{"coverage":"thread_catalog","status":"unavailable","generations":{"daemonProcessGeneration":"daemon-a","remoteTransportGeneration":"transport-a","workspaceSessionGeneration":null,"appServerConnectionGeneration":null},"source":null,"observedAt":null,"hydratedAt":null}]}}

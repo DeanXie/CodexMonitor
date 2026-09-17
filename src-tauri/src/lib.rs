@@ -231,6 +231,7 @@ pub fn run() {
             codex::generate_agent_description,
             codex::resume_thread,
             codex::get_writer_admission_observation,
+            codex::get_projection_freshness,
             codex::read_thread,
             codex::thread_live_subscribe,
             codex::thread_live_unsubscribe,

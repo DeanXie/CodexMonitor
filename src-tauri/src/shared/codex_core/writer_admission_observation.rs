@@ -14,7 +14,8 @@ use std::sync::Mutex;
 const RESUME_METHOD: &str = "thread/resume";
 const ACTIVE_WRITER_ERROR_CODE: i64 = -32600;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct WorkspaceSessionGeneration(String);
 
 impl WorkspaceSessionGeneration {

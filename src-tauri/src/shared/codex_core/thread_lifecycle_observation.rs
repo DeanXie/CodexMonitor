@@ -16,7 +16,8 @@ use std::sync::Mutex;
 
 const UNSUBSCRIBE_METHOD: &str = "thread/unsubscribe";
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct AppServerConnectionGeneration(String);
 
 impl AppServerConnectionGeneration {

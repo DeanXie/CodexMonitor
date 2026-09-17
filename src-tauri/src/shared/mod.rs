@@ -18,6 +18,7 @@ pub(crate) mod local_usage_core;
 #[cfg(any(not(desktop), test))]
 pub(crate) mod mobile_thread_routing;
 pub(crate) mod process_core;
+pub(crate) mod projection_freshness;
 pub(crate) mod prompts_core;
 pub(crate) mod remote_host_availability;
 pub(crate) mod remote_host_identity;
@@ -61,6 +62,14 @@ mod remote_request_provenance_tests;
 #[cfg(test)]
 #[path = "remote_transport_compatibility_tests.rs"]
 mod remote_transport_compatibility_tests;
+
+#[cfg(test)]
+#[path = "projection_freshness_tests.rs"]
+mod projection_freshness_tests;
+
+#[cfg(test)]
+#[path = "projection_freshness_fixture_tests.rs"]
+mod projection_freshness_fixture_tests;
 
 #[cfg(all(test, desktop))]
 #[path = "desktop_projection_handling_tests.rs"]

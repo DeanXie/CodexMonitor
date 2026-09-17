@@ -577,6 +577,52 @@ export type WriterAdmissionObservationSnapshot = {
   sessionEndEvidence: WriterAdmissionSessionEndEvidenceSnapshot | null;
 };
 
+export type ProjectionFreshnessStatus =
+  | "not_hydrated"
+  | "hydrating"
+  | "current"
+  | "stale"
+  | "unavailable"
+  | "unknown";
+
+export type ProjectionFreshnessCoverage =
+  | "workspace_catalog"
+  | "thread_catalog"
+  | "thread_detail"
+  | "observation_snapshot";
+
+export type ProjectionFreshnessSource =
+  | "workspace_list"
+  | "thread_list"
+  | "thread_read"
+  | "observation_query"
+  | "event";
+
+export type ProjectionFreshnessGenerationVector = {
+  daemonProcessGeneration: string | null;
+  remoteTransportGeneration: string | null;
+  workspaceSessionGeneration: string | null;
+  appServerConnectionGeneration: string | null;
+};
+
+export type ProjectionFreshnessSnapshot = {
+  coverage: ProjectionFreshnessCoverage;
+  status: ProjectionFreshnessStatus;
+  generations: ProjectionFreshnessGenerationVector;
+  source: ProjectionFreshnessSource | null;
+  observedAt: number | null;
+  hydratedAt: number | null;
+};
+
+export type ProjectionFreshnessQuerySnapshot = {
+  workspaceId: string;
+  threadKey: {
+    codexHomeIdentity: string;
+    threadId: string;
+  } | null;
+  coverages: ProjectionFreshnessSnapshot[];
+};
+
 export type LocalUsageDay = {
   day: string;
   inputTokens: number;

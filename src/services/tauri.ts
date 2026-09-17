@@ -22,6 +22,7 @@ import type {
   AppMention,
   WorkspaceSettings,
   WriterAdmissionObservationSnapshot,
+  ProjectionFreshnessQuerySnapshot,
 } from "../types";
 import type {
   GitFileDiff,
@@ -1133,6 +1134,16 @@ export async function getWriterAdmissionObservation(
     "get_writer_admission_observation",
     { workspaceId, threadId },
   );
+}
+
+export async function getProjectionFreshness(
+  workspaceId: string,
+  threadId?: string,
+) {
+  return invoke<ProjectionFreshnessQuerySnapshot>("get_projection_freshness", {
+    workspaceId,
+    threadId,
+  });
 }
 
 export async function readThread(workspaceId: string, threadId: string) {

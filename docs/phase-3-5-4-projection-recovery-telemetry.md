@@ -1,6 +1,6 @@
 # Phase 3.5.4 — Projection / Recovery / Telemetry
 
-Status: Phase 3.5.4a Projection Freshness Authority, Phase 3.5.4b Generation-tagged Event Delivery, Phase 3.5.4c Authoritative Recovery / Hydration, and Phase 3.5.4d Offline / Stale UI & Multi-client Isolation are **PASS / COMPLETE / FROZEN**. Phase 3.5.4 remains **IN PROGRESS**. Phase 3.5.4e is not started.
+Status: Phase 3.5.4a Projection Freshness Authority, Phase 3.5.4b Generation-tagged Event Delivery, Phase 3.5.4c Authoritative Recovery / Hydration, Phase 3.5.4d Offline / Stale UI & Multi-client Isolation, and Phase 3.5.4e Telemetry / Compatibility / Docs Closeout are **PASS / COMPLETE / FROZEN**. Phase 3.5.4 is **PASS / COMPLETE / FROZEN**.
 
 ## Projection freshness authority
 
@@ -169,10 +169,55 @@ delete authority.
 
 ## Frozen boundaries
 
-Phase 3.5.4a-d add no telemetry persistence, generic polling loop, automatic
+Phase 3.5.4a-e add no telemetry persistence, generic polling loop, automatic
 mutation retry/replay, client identity, owner, lease, `FREE`, `AVAILABLE`, or
 `RELEASED` semantics. Gap evidence never becomes canonical truth and never
 dispatches resume, approval, delete, or unsubscribe mutations.
+
+## Telemetry classification and persistence
+
+The classification is stable:
+
+- authoritative state: `RemoteHostIdentity`, current WorkspaceSession and
+  app-server connection generations, and the independent shared approval and
+  delete observations;
+- diagnostic telemetry: daemon-process/transport generations,
+  `RemoteRequestProvenance`, hydration progress, stale-event drops, event gaps,
+  recovery observations, and layered availability;
+- historical evidence: old-generation events, stale projection snapshots, and
+  completed hydration evidence retained with their original generation;
+- UI projection: `ProjectionFreshness`, per-coverage display status, and
+  availability diagnostics.
+
+Diagnostic telemetry never becomes business authority. There is no telemetry
+database, persisted freshness state, persisted gap ledger, durable event
+queue, or event-sourcing subsystem. Existing ephemeral counters remain
+diagnostic only.
+
+## Authority precedence
+
+The global precedence is:
+
+```text
+current-generation direct upstream evidence
+> current shared-session observation
+> recovered authoritative read
+> generation-tagged historical evidence
+> stale UI cache/projection
+```
+
+Timestamps are diagnostic tie-breakers and cannot reverse this order. A newer
+arrival time cannot make stale-generation evidence canonical. The same
+`RemoteHostIdentity` cannot prove daemon, transport, WorkspaceSession, or
+app-server connection continuity.
+
+## Event-stream completeness boundary
+
+Daemon broadcast/event-stream completeness remains **NOT PROVEN**. There is no
+durable sequence ledger or replay log, so absence of a detected gap is not
+proof that every event was delivered. A known `app-server-event-gap` safely
+marks only affected projection coverage stale and triggers authoritative
+hydration; it does not mark shared authority stale or manufacture absence.
 
 Compatibility fixtures are stored under `docs/fixtures/projection-freshness/`
 and `docs/fixtures/generation-tagged-events/`; implementation evidence is
@@ -183,3 +228,6 @@ implementation evidence under `docs/evidence/phase-3-5-4c/`.
 Phase 3.5.4d sanitized UI/gap/multi-client fixtures live under
 `src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/`, with implementation
 evidence under `docs/evidence/phase-3-5-4d/`.
+Phase 3.5.4e aggregate compatibility fixtures live under
+`docs/fixtures/phase-3-5-4-compatibility/`, with Rust/TypeScript compatibility
+suites and closeout evidence under `docs/evidence/phase-3-5-4e/`.

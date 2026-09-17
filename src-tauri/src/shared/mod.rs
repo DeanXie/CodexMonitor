@@ -71,6 +71,10 @@ mod projection_freshness_tests;
 #[path = "projection_freshness_fixture_tests.rs"]
 mod projection_freshness_fixture_tests;
 
+#[cfg(test)]
+#[path = "phase_3_5_4_compatibility_tests.rs"]
+mod phase_3_5_4_compatibility_tests;
+
 #[cfg(all(test, desktop))]
 #[path = "desktop_projection_handling_tests.rs"]
 mod desktop_projection_handling_tests;

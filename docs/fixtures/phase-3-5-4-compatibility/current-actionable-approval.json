@@ -1,0 +1,9 @@
+{
+  "scenario": "current-actionable-approval",
+  "workspaceSessionGeneration": "workspace-generation-a",
+  "appServerConnectionGeneration": "connection-generation-a",
+  "observationCoverage": "current",
+  "approvalIdentityExactMatch": true,
+  "approvalObservation": "pending",
+  "actionable": true
+}

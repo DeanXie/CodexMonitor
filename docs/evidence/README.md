@@ -119,3 +119,10 @@ coverage-specific display states, layered availability, ephemeral gap evidence,
 duplicate/out-of-order handling, reconnect/restart cache behavior,
 multi-client isolation/convergence, and approval/delete stale safety. The
 implementation evidence index is `phase-3-5-4d/offline-stale-ui.md`.
+
+Phase 3.5.4e aggregate compatibility fixtures are stored in
+`../fixtures/phase-3-5-4-compatibility/`. They freeze the complete
+ProjectionFreshness, generation-event, authoritative recovery, offline/stale
+UI, multi-client, approval/delete safety, telemetry, no-persistence,
+authority-precedence, and zero mutation replay contract. The closeout evidence
+index is `phase-3-5-4e/compatibility-closeout.md`.

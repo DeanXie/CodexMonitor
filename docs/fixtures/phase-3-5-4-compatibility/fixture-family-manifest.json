@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "families": [
+    { "name": "projection-not-hydrated", "path": "docs/fixtures/projection-freshness/not-hydrated.json" },
+    { "name": "projection-hydrating", "path": "docs/fixtures/projection-freshness/hydrating.json" },
+    { "name": "projection-current", "path": "docs/fixtures/projection-freshness/current-thread-catalog.json" },
+    { "name": "projection-stale", "path": "docs/fixtures/projection-freshness/stale-after-session-generation-change.json" },
+    { "name": "projection-unavailable", "path": "docs/fixtures/projection-freshness/unavailable.json" },
+    { "name": "projection-unknown", "path": "docs/fixtures/projection-freshness/unknown.json" },
+    { "name": "mixed-coverage", "path": "docs/fixtures/projection-freshness/partial-coverage.json" },
+    { "name": "local-generation-event", "path": "docs/fixtures/generation-tagged-events/current-local-app-event.json" },
+    { "name": "remote-generation-event", "path": "docs/fixtures/generation-tagged-events/current-remote-event.json" },
+    { "name": "stale-generation-event", "path": "docs/fixtures/generation-tagged-events/stale-transport-event.json" },
+    { "name": "missing-generation-event", "path": "docs/fixtures/generation-tagged-events/missing-generation-event.json" },
+    { "name": "frontend-reload", "path": "src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/frontend-reload.json" },
+    { "name": "same-daemon-reconnect", "path": "src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/same-daemon-reconnect.json" },
+    { "name": "session-replacement", "path": "src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/workspace-session-replacement.json" },
+    { "name": "daemon-restart", "path": "src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/daemon-restart.json" },
+    { "name": "partial-hydration", "path": "src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/partial-hydration.json" },
+    { "name": "stale-hydration-result", "path": "src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/stale-response-after-generation-change.json" },
+    { "name": "known-event-gap", "path": "src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/known-event-gap.json" },
+    { "name": "duplicate-event", "path": "src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/duplicate-event.json" },
+    { "name": "out-of-order-event", "path": "src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/out-of-order-event.json" },
+    { "name": "multi-client-divergence", "path": "src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/client-a-stale-client-b-current.json" },
+    { "name": "multi-client-convergence", "path": "src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/multi-client-convergence.json" },
+    { "name": "stale-approval", "path": "src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/stale-approval.json" },
+    { "name": "current-actionable-approval", "path": "docs/fixtures/phase-3-5-4-compatibility/current-actionable-approval.json" },
+    { "name": "delete-outcome-unknown", "path": "src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/delete-outcome-unknown.json" },
+    { "name": "confirmed-delete-stale-projection", "path": "src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/confirmed-delete-stale-sidebar.json" }
+  ]
+}

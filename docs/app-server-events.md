@@ -112,6 +112,15 @@ affected coverage view and triggers the existing read-only single-flight
 recovery. It has no durable sequence and does not mutate shared session,
 writer, subscription, runtime, approval, delete, or Thread authority.
 
+Phase 3.5.4e freezes this delivery and recovery contract in aggregate sanitized
+fixtures and Rust/TypeScript compatibility suites. `ProjectionFreshness`,
+availability, diagnostic gap evidence, historical generation evidence, and UI
+projection remain distinct layers. The recovery chain is authoritative
+re-reading, never mutation replay. There is no persisted event sequence,
+replay ledger, durable queue, or proof that the daemon broadcast stream is
+complete; the safe bounded response to an observed gap is to mark only the
+affected projection coverage stale and rehydrate it from authority.
+
 Phase 3.5.2d freezes five distinct continuity authorities around this delivery
 path: `RemoteHostIdentity` identifies the host;
 `DaemonProcessGeneration`, `RemoteTransportGeneration`,

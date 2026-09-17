@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "projectionFreshness": {
+    "statuses": [
+      "not_hydrated",
+      "hydrating",
+      "current",
+      "stale",
+      "unavailable",
+      "unknown"
+    ],
+    "coverages": [
+      "workspace_catalog",
+      "thread_catalog",
+      "thread_detail",
+      "observation_snapshot"
+    ],
+    "sources": [
+      "workspace_list",
+      "thread_list",
+      "thread_read",
+      "observation_query",
+      "event"
+    ],
+    "userVisibleStates": ["Current", "Hydrating", "Stale", "Unavailable", "Unknown"],
+    "notHydratedUserVisibleState": "Unknown",
+    "coverageIndependent": true,
+    "canonicalThreadTruth": false,
+    "availabilityAuthority": false,
+    "mutationAuthority": false
+  },
+  "generationEvent": {
+    "fields": [
+      "workspace_id",
+      "message",
+      "daemonProcessGeneration",
+      "remoteTransportGeneration",
+      "workspaceSessionGeneration",
+      "appServerConnectionGeneration"
+    ],
+    "localRemoteFields": [null, null],
+    "remoteBindsTransportAtDelivery": true,
+    "staleOrMissingRequiredGenerationFailsClosed": true,
+    "currentReducerMutationOnRejectedEvent": 0
+  },
+  "authoritativeRecovery": {
+    "chain": [
+      "list_workspaces",
+      "conditional_connect_workspace",
+      "thread/list",
+      "exact_thread/read",
+      "observation_query",
+      "safe_live_attach"
+    ],
+    "classification": "authoritative_read_rehydration",
+    "mutationReplay": false,
+    "coverageIndependent": true
+  },
+  "observationSnapshot": {
+    "readOnly": true,
+    "appDaemonSharedCore": true,
+    "requiresCurrentGeneration": true
+  },
+  "eventGap": {
+    "method": "app-server-event-gap",
+    "fields": [
+      "skipped",
+      "observedAt",
+      "daemonProcessGeneration",
+      "remoteTransportGeneration",
+      "affectedCoverages"
+    ],
+    "persistent": false,
+    "projectionScoped": true,
+    "mutatesSharedAuthority": false,
+    "recovery": "authoritative_hydration"
+  },
+  "generationHierarchy": [
+    "RemoteHostIdentity",
+    "DaemonProcessGeneration",
+    "RemoteTransportGeneration",
+    "WorkspaceSessionGeneration",
+    "AppServerConnectionGeneration"
+  ],
+  "mutationPolicy": {
+    "resumeThreadRetry": 0,
+    "resumeThreadReplay": 0,
+    "approvalDecisionRetry": 0,
+    "approvalDecisionReplay": 0,
+    "threadDeleteRetry": 0,
+    "threadDeleteReplay": 0,
+    "upstreamUnsubscribeRetry": 0,
+    "upstreamUnsubscribeReplay": 0,
+    "forceTakeover": false
+  },
+  "multiClient": {
+    "sharedWorkspaceSessionTruth": true,
+    "independentTransportGeneration": true,
+    "independentFrontendCache": true,
+    "independentFreshnessAndGap": true,
+    "convergence": "authoritative_hydration"
+  },
+  "approvalSafety": {
+    "requiresCurrentGeneration": true,
+    "requiresCurrentObservationCoverage": true,
+    "requiresExactApprovalIdentity": true,
+    "requiresPendingObservation": true,
+    "staleActionable": false,
+    "unavailableActionable": false,
+    "unknownActionable": false
+  },
+  "deleteSafety": {
+    "unknownMeansDeleted": false,
+    "confirmedDeleteOutranksStaleProjection": true
+  },
+  "telemetryClassification": {
+    "authoritativeState": [
+      "RemoteHostIdentity",
+      "WorkspaceSessionGeneration",
+      "AppServerConnectionGeneration",
+      "approvalObservation",
+      "deleteObservation"
+    ],
+    "diagnosticTelemetry": [
+      "DaemonProcessGeneration",
+      "RemoteTransportGeneration",
+      "RemoteRequestProvenance",
+      "hydrationState",
+      "staleEventDrops",
+      "eventGaps",
+      "hydrationRecoveries",
+      "availability"
+    ],
+    "historicalEvidence": [
+      "oldGenerationEvent",
+      "staleProjectionSnapshot",
+      "completedHydrationEvidence"
+    ],
+    "uiProjection": ["ProjectionFreshness", "coverageStatus", "availabilityDiagnostic"]
+  },
+  "telemetryPersistence": {
+    "telemetryDatabase": false,
+    "persistentFreshness": false,
+    "persistentGapLedger": false,
+    "durableEventQueue": false
+  },
+  "authorityPrecedence": [
+    "current_generation_direct_upstream_evidence",
+    "current_shared_session_observation",
+    "recovered_authoritative_read",
+    "generation_tagged_historical_evidence",
+    "stale_ui_cache_projection"
+  ],
+  "inferencePolicy": {
+    "transportDisconnectedMeansThreadAbsent": false,
+    "uiEmptyMeansThreadAbsent": false,
+    "threadListMissingMeansDeleted": false,
+    "eventSilenceMeansIdle": false,
+    "eventSilenceMeansWriterFree": false,
+    "eventSilenceMeansNoApproval": false,
+    "staleCacheIsCanonicalTruth": false,
+    "newerTimestampMeansNewerCanonicalTruth": false,
+    "sameHostIdentityMeansSameSession": false,
+    "gapMutatesSharedAuthority": false
+  },
+  "remainingNotProven": ["daemon_broadcast_event_stream_completeness"]
+}

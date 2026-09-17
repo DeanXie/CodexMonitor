@@ -1,0 +1,1 @@
+{"case":"direct-rejection-after-transport-loss","transportOutcome":"unknown","directResponse":{"error":{"code":-32600,"message":"synthetic active writer"}},"expectedState":"delete_rejected"}

@@ -77,3 +77,10 @@ post-dispatch unknown outcome, session-end ambiguity, zero retry/replay, and
 the confirmed-only tombstone gate using fake app-server authority. The
 implementation evidence index is
 `phase-3-5-3c/delete-authority-freeze.md`.
+
+Phase 3.5.3d delete-isolation fixtures are stored in
+`../fixtures/app-server/delete-mutation-isolation/`. They freeze same-key local
+single dispatch, different-key concurrency, generation/session isolation,
+pre/post-write transport loss, direct-evidence precedence, and zero replay using
+fake authority only. The implementation evidence index is
+`phase-3-5-3d/delete-isolation-freeze.md`.

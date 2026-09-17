@@ -1,0 +1,1 @@
+{"case":"stale-transport-delete","transportGeneration":"transport-generation-stale","expectedDispatchCount":0,"rejectionReason":"stale_transport_generation"}

@@ -17,6 +17,14 @@ fn fixture(name: &str) -> Value {
         .expect("parse delete fixture")
 }
 
+fn isolation_fixture(name: &str) -> Value {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../docs/fixtures/app-server/delete-mutation-isolation")
+        .join(name);
+    serde_json::from_str(&fs::read_to_string(path).expect("read isolation fixture"))
+        .expect("parse isolation fixture")
+}
+
 fn runtime() -> DeleteMutationObservationRuntime {
     DeleteMutationObservationRuntime::new(
         WorkspaceSessionGeneration::new("fixture-workspace-generation").unwrap(),
@@ -166,4 +174,50 @@ fn fixtures_contain_no_real_paths_tokens_or_owner_semantics() {
             assert!(!text.contains(forbidden), "{name} contains {forbidden}");
         }
     }
+}
+
+#[test]
+fn delete_isolation_fixtures_freeze_sanitized_contract() {
+    let names = [
+        "simultaneous-delete-same-thread.json",
+        "simultaneous-delete-different-thread.json",
+        "stale-transport-delete.json",
+        "pre-dispatch-transport-loss.json",
+        "post-dispatch-response-loss.json",
+        "direct-success-after-transport-loss.json",
+        "direct-rejection-after-transport-loss.json",
+        "session-end-after-unknown.json",
+        "new-explicit-intent-after-unknown.json",
+        "stale-projection-after-confirmed-delete.json",
+    ];
+    for name in names {
+        let fixture = isolation_fixture(name);
+        assert!(fixture.get("case").and_then(Value::as_str).is_some());
+        let text = serde_json::to_string(&fixture)
+            .unwrap()
+            .to_ascii_lowercase();
+        for forbidden in [
+            "auth token",
+            "\\users\\",
+            "remoteclientidentity",
+            "deleteowner",
+            "primarydeleter",
+            "leaseid",
+            "forcetakeover",
+        ] {
+            assert!(!text.contains(forbidden), "{name} contains {forbidden}");
+        }
+    }
+    assert_eq!(
+        isolation_fixture("simultaneous-delete-same-thread.json")["expectedDispatchCount"],
+        1
+    );
+    assert_eq!(
+        isolation_fixture("pre-dispatch-transport-loss.json")["expectedState"],
+        "delete_rejected"
+    );
+    assert_eq!(
+        isolation_fixture("post-dispatch-response-loss.json")["expectedState"],
+        "delete_outcome_unknown"
+    );
 }

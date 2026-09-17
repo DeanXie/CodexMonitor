@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicU8, Ordering},
     Arc, Mutex,
 };
 
@@ -28,13 +28,37 @@ pub(crate) struct TurnIntent {
 /// Mark immediately before the first write attempt, after preflight and locks.
 /// Partial writes are possibly sent, never safe failures.
 #[derive(Clone, Default)]
-pub(crate) struct DispatchBoundary(Arc<AtomicBool>);
+pub(crate) struct DispatchBoundary(Arc<AtomicU8>);
 impl DispatchBoundary {
-    pub(crate) fn mark_dispatched(&self) {
-        self.0.store(true, Ordering::SeqCst);
+    const PENDING: u8 = 0;
+    const DISPATCHED: u8 = 1;
+    const CANCELLED_BEFORE_DISPATCH: u8 = 2;
+
+    pub(crate) fn mark_dispatched(&self) -> bool {
+        match self.0.compare_exchange(
+            Self::PENDING,
+            Self::DISPATCHED,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => true,
+            Err(state) => state == Self::DISPATCHED,
+        }
     }
+
+    pub(crate) fn cancel_before_dispatch(&self) -> bool {
+        self.0
+            .compare_exchange(
+                Self::PENDING,
+                Self::CANCELLED_BEFORE_DISPATCH,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            )
+            .is_ok()
+    }
+
     pub(crate) fn crossed(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.0.load(Ordering::SeqCst) == Self::DISPATCHED
     }
 }
 

@@ -37,6 +37,10 @@ mod delete_mutation_observation_tests;
 mod delete_mutation_instrumentation_tests;
 
 #[cfg(test)]
+#[path = "codex_core/delete_mutation_isolation_tests.rs"]
+mod delete_mutation_isolation_tests;
+
+#[cfg(test)]
 #[path = "codex_core/delete_mutation_protocol_fixture_tests.rs"]
 mod delete_mutation_protocol_fixture_tests;
 

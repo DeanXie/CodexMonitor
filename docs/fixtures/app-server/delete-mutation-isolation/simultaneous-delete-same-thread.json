@@ -1,0 +1,1 @@
+{"case":"simultaneous-delete-same-thread","threadId":"0199a8c0-1111-7222-8333-444455556666","intentCount":2,"expectedDispatchCount":1,"secondOutcome":"local_pre_dispatch_rejection"}

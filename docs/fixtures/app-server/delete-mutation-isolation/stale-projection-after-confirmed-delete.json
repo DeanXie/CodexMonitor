@@ -1,0 +1,1 @@
+{"case":"stale-projection-after-confirmed-delete","currentState":"delete_confirmed","projection":"present","expectedState":"delete_confirmed","tombstoneCount":1}

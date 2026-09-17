@@ -25,7 +25,8 @@ use crate::shared::codex_core::approval_observation::{
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
 use crate::shared::codex_core::delete_mutation_observation::{
     classify_delete_dispatch_error, is_exact_delete_success, DeleteAttemptId,
-    DeleteMutationFailureKind, DeleteMutationObservationRuntime,
+    DeleteMutationFailureKind, DeleteMutationObservationRuntime, DeleteMutationRejectionReason,
+    DeleteMutationState,
 };
 use crate::shared::codex_core::thread_lifecycle_observation::{
     AppServerConnectionEndEvidenceKind, ThreadLifecycleObservationRuntime,
@@ -67,7 +68,9 @@ pub(crate) async fn write_message_to<W: tokio::io::AsyncWrite + Unpin>(
     line.push('\n');
     let mut stdin = stdin.lock().await;
     if let Some(boundary) = boundary {
-        boundary.mark_dispatched();
+        if !boundary.mark_dispatched() {
+            return Err("dispatch cancelled before app-server write".to_string());
+        }
     }
     stdin
         .write_all(line.as_bytes())
@@ -1443,17 +1446,16 @@ impl WorkspaceSession {
             .app_server_connection_generation()
             .as_str()
             .to_string();
-        let attempt_id = self
-            .delete_mutation_observations
-            .begin_delete(
-                remote_host_identity,
-                thread_key.clone(),
-                requested_thread_id,
-                &workspace_generation,
-                &app_server_generation,
-                unix_timestamp_ms() as i64,
-            )
-            .map_err(|error| format!("delete mutation observation failed: {error:?}"))?;
+        let admission = self.delete_mutation_observations.begin_delete_attempt(
+            remote_host_identity,
+            thread_key.clone(),
+            requested_thread_id,
+            &workspace_generation,
+            &app_server_generation,
+            unix_timestamp_ms() as i64,
+        );
+        let attempt_id = admission.attempt_id().clone();
+        let boundary = DispatchBoundary::default();
         if let Some(remote_context) = remote_context {
             let provenance = SessionAttemptProvenance::delete_mutation(
                 workspace_id,
@@ -1464,21 +1466,32 @@ impl WorkspaceSession {
             )?;
             let runtime = self.delete_mutation_observations.clone();
             let lost_attempt_id = attempt_id.clone();
+            let lost_boundary = boundary.clone();
             if let Err(error) = remote_context.bind_session_attempt_with_transport_loss_hook(
                 provenance,
                 Arc::new(move |observed_at| {
-                    let _ = runtime.record_dispatched(&lost_attempt_id, observed_at);
-                    let _ = runtime.record_outcome_unknown(
-                        &lost_attempt_id,
-                        DeleteMutationFailureKind::ResponseLost,
-                        observed_at,
-                    );
+                    if lost_boundary.cancel_before_dispatch() {
+                        let _ = runtime.record_local_pre_dispatch_rejection(
+                            &lost_attempt_id,
+                            DeleteMutationFailureKind::DispatchDisconnected,
+                            DeleteMutationRejectionReason::TransportDisconnectedBeforeDispatch,
+                            observed_at,
+                        );
+                    } else if lost_boundary.crossed() {
+                        let _ = runtime.record_dispatched(&lost_attempt_id, observed_at);
+                        let _ = runtime.record_outcome_unknown(
+                            &lost_attempt_id,
+                            DeleteMutationFailureKind::ResponseLost,
+                            observed_at,
+                        );
+                    }
                 }),
             ) {
                 self.delete_mutation_observations
-                    .record_not_dispatched(
+                    .record_local_pre_dispatch_rejection(
                         &attempt_id,
                         DeleteMutationFailureKind::DispatchDisconnected,
+                        DeleteMutationRejectionReason::StaleTransportGeneration,
                         unix_timestamp_ms() as i64,
                     )
                     .map_err(|observation_error| {
@@ -1489,7 +1502,16 @@ impl WorkspaceSession {
                 return Err(error);
             }
         }
-        let boundary = DispatchBoundary::default();
+        if !admission.is_admitted() {
+            return Err("delete mutation rejected before upstream dispatch".to_string());
+        }
+        if self
+            .delete_mutation_observations
+            .snapshot(&attempt_id)
+            .is_some_and(|observation| observation.state != DeleteMutationState::DeletePending)
+        {
+            return Err("delete mutation transport was lost before upstream dispatch".to_string());
+        }
         let mut guard = DeleteDispatchGuard {
             runtime: &self.delete_mutation_observations,
             attempt_id: attempt_id.clone(),

@@ -1,5 +1,6 @@
 use super::delete_mutation_observation::{
-    DeleteMutationFailureKind, DeleteMutationObservationRuntime, DeleteMutationState,
+    DeleteMutationFailureKind, DeleteMutationObservationRuntime, DeleteMutationRejectionReason,
+    DeleteMutationRejectionSource, DeleteMutationState,
 };
 use super::delete_thread_core_with_remote_context;
 use super::thread_lifecycle_observation::{
@@ -24,6 +25,7 @@ use tokio::sync::Mutex;
 
 const WORKSPACE_ID: &str = "delete-fixture-workspace";
 const THREAD_ID: &str = "0199a8c0-1111-7222-8333-444455556666";
+const OTHER_THREAD_ID: &str = "0199a8c0-1111-7222-8333-444455556667";
 
 fn host() -> RemoteHostIdentity {
     RemoteHostIdentity::parse("6ba7b810-9dad-41d1-80b4-00c04fd430c8").unwrap()
@@ -318,7 +320,7 @@ async fn fuzzy_delete_fails_before_fake_app_server_dispatch() {
 }
 
 #[tokio::test]
-async fn invalid_remote_correlation_rejects_delete_before_app_server_dispatch() {
+async fn stale_transport_delete_fails_before_dispatch() {
     let (session, thread_key) = make_session().await;
     let sessions = Arc::new(Mutex::new(HashMap::from([(
         WORKSPACE_ID.to_string(),
@@ -350,4 +352,218 @@ async fn invalid_remote_correlation_rejects_delete_before_app_server_dispatch() 
     );
     assert_eq!(observation.dispatch_count, 0);
     assert_eq!(observation.retry_count, 0);
+    assert_eq!(
+        observation.rejection_source,
+        Some(DeleteMutationRejectionSource::LocalPreDispatchRejection)
+    );
+    assert_eq!(
+        observation.rejection_reason,
+        Some(DeleteMutationRejectionReason::StaleTransportGeneration)
+    );
+}
+
+#[tokio::test]
+async fn simultaneous_remote_delete_same_thread_dispatches_upstream_at_most_once() {
+    let (session, thread_key) = make_session().await;
+    let sessions = Arc::new(Mutex::new(HashMap::from([(
+        WORKSPACE_ID.to_string(),
+        Arc::clone(&session),
+    )])));
+    let first = {
+        let sessions = Arc::clone(&sessions);
+        tokio::spawn(async move {
+            delete_thread_core_with_remote_context(
+                &sessions,
+                WORKSPACE_ID.to_string(),
+                THREAD_ID.to_string(),
+                host(),
+                None,
+            )
+            .await
+        })
+    };
+    let request_id = await_pending_request(&session).await;
+    let second = delete_thread_core_with_remote_context(
+        &sessions,
+        WORKSPACE_ID.to_string(),
+        THREAD_ID.to_string(),
+        host(),
+        None,
+    )
+    .await;
+    assert!(second.is_err());
+    assert_eq!(session.pending.lock().await.len(), 1);
+    assert_eq!(session.next_id.load(std::sync::atomic::Ordering::SeqCst), 2);
+    let duplicate = latest(&session, &thread_key);
+    assert_eq!(duplicate.state, DeleteMutationState::DeleteRejected);
+    assert_eq!(duplicate.dispatch_count, 0);
+    assert_eq!(
+        duplicate.rejection_reason,
+        Some(DeleteMutationRejectionReason::DuplicateActiveAttempt)
+    );
+    deliver_response(
+        &session,
+        request_id,
+        json!({"id": request_id, "result": {}}),
+    )
+    .await;
+    assert!(first.await.unwrap().is_ok());
+    assert_eq!(session.delete_mutation_observations.dispatch_count(), 1);
+    stop_session(&session).await;
+}
+
+#[tokio::test]
+async fn different_threads_dispatch_independently_in_same_workspace_session() {
+    let (session, _) = make_session().await;
+    let sessions = Arc::new(Mutex::new(HashMap::from([(
+        WORKSPACE_ID.to_string(),
+        Arc::clone(&session),
+    )])));
+    let first = {
+        let sessions = Arc::clone(&sessions);
+        tokio::spawn(async move {
+            delete_thread_core_with_remote_context(
+                &sessions,
+                WORKSPACE_ID.to_string(),
+                THREAD_ID.to_string(),
+                host(),
+                None,
+            )
+            .await
+        })
+    };
+    let second = {
+        let sessions = Arc::clone(&sessions);
+        tokio::spawn(async move {
+            delete_thread_core_with_remote_context(
+                &sessions,
+                WORKSPACE_ID.to_string(),
+                OTHER_THREAD_ID.to_string(),
+                host(),
+                None,
+            )
+            .await
+        })
+    };
+    for _ in 0..100 {
+        if session.pending.lock().await.len() == 2 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let request_ids = session
+        .pending
+        .lock()
+        .await
+        .keys()
+        .copied()
+        .collect::<Vec<_>>();
+    assert_eq!(request_ids.len(), 2);
+    for request_id in request_ids {
+        deliver_response(
+            &session,
+            request_id,
+            json!({"id": request_id, "result": {}}),
+        )
+        .await;
+    }
+    assert!(first.await.unwrap().is_ok());
+    assert!(second.await.unwrap().is_ok());
+    assert_eq!(session.delete_mutation_observations.dispatch_count(), 2);
+    stop_session(&session).await;
+}
+
+#[tokio::test]
+async fn transport_loss_before_app_server_write_rejects_without_unknown_outcome() {
+    let (session, thread_key) = make_session().await;
+    let sessions = Arc::new(Mutex::new(HashMap::from([(
+        WORKSPACE_ID.to_string(),
+        Arc::clone(&session),
+    )])));
+    let provenance = Arc::new(RemoteRequestProvenanceRuntime::new_authenticated_transport());
+    let request_key = provenance.record_received(51, "delete_thread", 1).unwrap();
+    provenance.record_dispatch_started(&request_key, 2).unwrap();
+    let remote_context =
+        RemoteRequestDispatchContext::new(Arc::clone(&provenance), request_key.clone());
+    let stdin_guard = session.stdin.lock().await;
+    let task = {
+        let sessions = Arc::clone(&sessions);
+        tokio::spawn(async move {
+            delete_thread_core_with_remote_context(
+                &sessions,
+                WORKSPACE_ID.to_string(),
+                THREAD_ID.to_string(),
+                host(),
+                Some(&remote_context),
+            )
+            .await
+        })
+    };
+    for _ in 0..100 {
+        if provenance
+            .snapshot(&request_key)
+            .and_then(|snapshot| snapshot.session_attempt)
+            .is_some()
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    provenance.record_transport_lost(20);
+    drop(stdin_guard);
+    assert!(task.await.unwrap().is_err());
+    let observation = latest(&session, &thread_key);
+    assert_eq!(observation.state, DeleteMutationState::DeleteRejected);
+    assert_eq!(observation.dispatch_count, 0);
+    assert_eq!(
+        observation.rejection_reason,
+        Some(DeleteMutationRejectionReason::TransportDisconnectedBeforeDispatch)
+    );
+    assert!(session.pending.lock().await.is_empty());
+    stop_session(&session).await;
+}
+
+#[tokio::test]
+async fn direct_success_after_remote_transport_loss_remains_authoritative() {
+    let (session, thread_key) = make_session().await;
+    let sessions = Arc::new(Mutex::new(HashMap::from([(
+        WORKSPACE_ID.to_string(),
+        Arc::clone(&session),
+    )])));
+    let provenance = Arc::new(RemoteRequestProvenanceRuntime::new_authenticated_transport());
+    let request_key = provenance.record_received(52, "delete_thread", 1).unwrap();
+    provenance.record_dispatch_started(&request_key, 2).unwrap();
+    let remote_context =
+        RemoteRequestDispatchContext::new(Arc::clone(&provenance), request_key.clone());
+    let task = {
+        let sessions = Arc::clone(&sessions);
+        tokio::spawn(async move {
+            delete_thread_core_with_remote_context(
+                &sessions,
+                WORKSPACE_ID.to_string(),
+                THREAD_ID.to_string(),
+                host(),
+                Some(&remote_context),
+            )
+            .await
+        })
+    };
+    let request_id = await_pending_request(&session).await;
+    provenance.record_transport_lost(20);
+    assert_eq!(
+        latest(&session, &thread_key).state,
+        DeleteMutationState::DeleteOutcomeUnknown
+    );
+    deliver_response(
+        &session,
+        request_id,
+        json!({"id": request_id, "result": {}}),
+    )
+    .await;
+    assert!(task.await.unwrap().is_ok());
+    assert_eq!(
+        latest(&session, &thread_key).state,
+        DeleteMutationState::DeleteConfirmed
+    );
+    stop_session(&session).await;
 }

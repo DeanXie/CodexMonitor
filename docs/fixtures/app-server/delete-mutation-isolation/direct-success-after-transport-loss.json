@@ -1,0 +1,1 @@
+{"case":"direct-success-after-transport-loss","transportOutcome":"unknown","directResponse":{"result":{}},"expectedState":"delete_confirmed"}

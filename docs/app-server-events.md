@@ -305,9 +305,22 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
   `thread/closed`, runtime `notLoaded`, UI removal, and stale notification
   evidence do not confirm deletion. Retry and replay are zero. Sanitized fake
   app-server evidence lives in
-  `docs/fixtures/app-server/delete-mutation-observation/`; cascade projection
+  `docs/fixtures/app-server/delete-mutation-observation/`; concurrent/stale
+  isolation evidence lives in
+  `docs/fixtures/app-server/delete-mutation-isolation/`; cascade projection
   evidence remains in
   `docs/fixtures/app-server/thread-delete-cascade.protocol.json`.
+
+  The active delete gate is shared by the WorkspaceSession and keyed by current
+  WorkspaceSession generation, current app-server connection generation, and
+  exact `CodexThreadKey`. Same-key simultaneous intents have distinct attempt
+  IDs but at most one local dispatch; different keys remain concurrent. A
+  pre-write transport loss cancels the write and records local rejection with
+  zero dispatch. A post-write transport loss is outcome-unknown until direct
+  response/event evidence arrives. Direct current-generation success or
+  rejection supersedes transport uncertainty; stale transport, session,
+  app-server, and projection evidence cannot change current confirmed truth.
+  Reconnect and daemon/session replacement never replay `thread/delete`.
 
 - `thread/start`
 - `thread/read`

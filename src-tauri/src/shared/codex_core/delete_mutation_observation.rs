@@ -54,6 +54,28 @@ pub(crate) enum DeleteMutationFailureKind {
     SessionEndedAfterDispatch,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DeleteMutationRejectionSource {
+    LocalPreDispatchRejection,
+    UpstreamRejection,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DeleteMutationRejectionReason {
+    DuplicateActiveAttempt,
+    StaleTransportGeneration,
+    StaleWorkspaceSessionGeneration,
+    StaleAppServerGeneration,
+    IdentityMismatch,
+    InvalidExactThreadKey,
+    TransportDisconnectedBeforeDispatch,
+    CancellationBeforeDispatch,
+    UpstreamActiveWriter,
+    UpstreamOther,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DeleteNonTransitionEvent {
     RolloutMissing,
@@ -92,6 +114,28 @@ pub(crate) struct DeleteMutationObservation {
     pub direct_evidence: Option<DeleteDirectEvidenceKind>,
     pub upstream_error_code: Option<i64>,
     pub failure_kind: Option<DeleteMutationFailureKind>,
+    pub rejection_source: Option<DeleteMutationRejectionSource>,
+    pub rejection_reason: Option<DeleteMutationRejectionReason>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DeleteAttemptAdmission {
+    attempt_id: DeleteAttemptId,
+    admitted: bool,
+}
+
+impl DeleteAttemptAdmission {
+    pub(crate) fn attempt_id(&self) -> &DeleteAttemptId {
+        &self.attempt_id
+    }
+
+    pub(crate) fn is_admitted(&self) -> bool {
+        self.admitted
+    }
+
+    pub(crate) fn into_attempt_id(self) -> DeleteAttemptId {
+        self.attempt_id
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,15 +154,24 @@ pub(crate) enum DeleteMutationTransitionError {
     WorkspaceSessionGenerationMismatch,
     AppServerConnectionGenerationMismatch,
     AttemptNotFound,
+    ActiveDeleteAttempt,
     InvalidTransition,
     DirectEvidenceMismatch,
+}
+
+#[derive(Default)]
+struct DeleteMutationRuntimeState {
+    attempts: HashMap<DeleteAttemptId, DeleteMutationObservation>,
+    active_by_thread: HashMap<CodexThreadKey, DeleteAttemptId>,
+    latest_by_thread: HashMap<CodexThreadKey, DeleteAttemptId>,
+    attempt_order: Vec<DeleteAttemptId>,
 }
 
 #[derive(Clone)]
 pub(crate) struct DeleteMutationObservationRuntime {
     workspace_session_generation: WorkspaceSessionGeneration,
     app_server_connection_generation: AppServerConnectionGeneration,
-    attempts: Arc<Mutex<HashMap<DeleteAttemptId, DeleteMutationObservation>>>,
+    state: Arc<Mutex<DeleteMutationRuntimeState>>,
 }
 
 impl Default for DeleteMutationObservationRuntime {
@@ -140,7 +193,7 @@ impl DeleteMutationObservationRuntime {
         Self {
             workspace_session_generation,
             app_server_connection_generation,
-            attempts: Arc::new(Mutex::new(HashMap::new())),
+            state: Arc::new(Mutex::new(DeleteMutationRuntimeState::default())),
         }
     }
 
@@ -161,55 +214,126 @@ impl DeleteMutationObservationRuntime {
         expected_app_server_connection_generation: &str,
         observed_at: i64,
     ) -> Result<DeleteAttemptId, DeleteMutationTransitionError> {
-        validate_exact_thread_key(&thread_key, requested_full_thread_id)?;
-        if expected_workspace_session_generation != self.workspace_session_generation.as_str() {
-            return Err(DeleteMutationTransitionError::WorkspaceSessionGenerationMismatch);
+        let admission = self.begin_delete_attempt(
+            remote_host_identity,
+            thread_key,
+            requested_full_thread_id,
+            expected_workspace_session_generation,
+            expected_app_server_connection_generation,
+            observed_at,
+        );
+        if admission.is_admitted() {
+            return Ok(admission.into_attempt_id());
         }
-        if expected_app_server_connection_generation
+        let observation = self
+            .snapshot(admission.attempt_id())
+            .expect("new delete attempt observation");
+        Err(match observation.rejection_reason {
+            Some(DeleteMutationRejectionReason::StaleWorkspaceSessionGeneration) => {
+                DeleteMutationTransitionError::WorkspaceSessionGenerationMismatch
+            }
+            Some(DeleteMutationRejectionReason::StaleAppServerGeneration) => {
+                DeleteMutationTransitionError::AppServerConnectionGenerationMismatch
+            }
+            Some(DeleteMutationRejectionReason::DuplicateActiveAttempt) => {
+                DeleteMutationTransitionError::ActiveDeleteAttempt
+            }
+            Some(DeleteMutationRejectionReason::IdentityMismatch) => {
+                DeleteMutationTransitionError::ThreadIdentityMismatch
+            }
+            _ => DeleteMutationTransitionError::ExactThreadKeyRequired,
+        })
+    }
+
+    pub(crate) fn begin_delete_attempt(
+        &self,
+        remote_host_identity: RemoteHostIdentity,
+        thread_key: CodexThreadKey,
+        requested_full_thread_id: &str,
+        expected_workspace_session_generation: &str,
+        expected_app_server_connection_generation: &str,
+        observed_at: i64,
+    ) -> DeleteAttemptAdmission {
+        let attempt_id = DeleteAttemptId::generate();
+        let validation_error =
+            validate_exact_thread_key(&thread_key, requested_full_thread_id).err();
+        let generation_rejection = if expected_workspace_session_generation
+            != self.workspace_session_generation.as_str()
+        {
+            Some(DeleteMutationRejectionReason::StaleWorkspaceSessionGeneration)
+        } else if expected_app_server_connection_generation
             != self.app_server_connection_generation.as_str()
         {
-            return Err(DeleteMutationTransitionError::AppServerConnectionGenerationMismatch);
-        }
-        let attempt_id = DeleteAttemptId::generate();
-        self.attempts
+            Some(DeleteMutationRejectionReason::StaleAppServerGeneration)
+        } else {
+            None
+        };
+        let mut state = self
+            .state
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(
-                attempt_id.clone(),
-                DeleteMutationObservation {
-                    attempt_id: attempt_id.clone(),
-                    remote_host_identity,
-                    thread_key,
-                    workspace_session_generation: self
-                        .workspace_session_generation
-                        .as_str()
-                        .to_string(),
-                    app_server_connection_generation: self
-                        .app_server_connection_generation
-                        .as_str()
-                        .to_string(),
-                    requested_full_thread_id: requested_full_thread_id.to_string(),
-                    state: DeleteMutationState::DeletePending,
-                    observed_at,
-                    dispatched_at: None,
-                    completed_at: None,
-                    dispatch_count: 0,
-                    retry_count: 0,
-                    direct_evidence: None,
-                    upstream_error_code: None,
-                    failure_kind: None,
-                },
-            );
-        Ok(attempt_id)
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let active_rejection = state
+            .active_by_thread
+            .contains_key(&thread_key)
+            .then_some(DeleteMutationRejectionReason::DuplicateActiveAttempt);
+        let rejection_reason = validation_error
+            .map(|error| match error {
+                DeleteMutationTransitionError::ThreadIdentityMismatch => {
+                    DeleteMutationRejectionReason::IdentityMismatch
+                }
+                _ => DeleteMutationRejectionReason::InvalidExactThreadKey,
+            })
+            .or(generation_rejection)
+            .or(active_rejection);
+        let admitted = rejection_reason.is_none();
+        let observation = DeleteMutationObservation {
+            attempt_id: attempt_id.clone(),
+            remote_host_identity,
+            thread_key: thread_key.clone(),
+            workspace_session_generation: expected_workspace_session_generation.to_string(),
+            app_server_connection_generation: expected_app_server_connection_generation.to_string(),
+            requested_full_thread_id: requested_full_thread_id.to_string(),
+            state: if admitted {
+                DeleteMutationState::DeletePending
+            } else {
+                DeleteMutationState::DeleteRejected
+            },
+            observed_at,
+            dispatched_at: None,
+            completed_at: (!admitted).then_some(observed_at),
+            dispatch_count: 0,
+            retry_count: 0,
+            direct_evidence: None,
+            upstream_error_code: None,
+            failure_kind: None,
+            rejection_source: (!admitted)
+                .then_some(DeleteMutationRejectionSource::LocalPreDispatchRejection),
+            rejection_reason,
+        };
+        state.attempt_order.push(attempt_id.clone());
+        state
+            .latest_by_thread
+            .insert(thread_key.clone(), attempt_id.clone());
+        if admitted {
+            state
+                .active_by_thread
+                .insert(thread_key, attempt_id.clone());
+        }
+        state.attempts.insert(attempt_id.clone(), observation);
+        DeleteAttemptAdmission {
+            attempt_id,
+            admitted,
+        }
     }
 
     pub(crate) fn snapshot(
         &self,
         attempt_id: &DeleteAttemptId,
     ) -> Option<DeleteMutationObservation> {
-        self.attempts
+        self.state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .attempts
             .get(attempt_id)
             .cloned()
     }
@@ -218,12 +342,14 @@ impl DeleteMutationObservationRuntime {
         &self,
         thread_key: &CodexThreadKey,
     ) -> Option<DeleteMutationObservation> {
-        self.attempts
+        let state = self
+            .state
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .values()
-            .filter(|observation| &observation.thread_key == thread_key)
-            .max_by_key(|observation| observation.observed_at)
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state
+            .latest_by_thread
+            .get(thread_key)
+            .and_then(|attempt_id| state.attempts.get(attempt_id))
             .cloned()
     }
 
@@ -287,6 +413,13 @@ impl DeleteMutationObservationRuntime {
                 } else {
                     DeleteMutationFailureKind::UpstreamRejected
                 });
+                observation.rejection_source =
+                    Some(DeleteMutationRejectionSource::UpstreamRejection);
+                observation.rejection_reason = Some(if active_writer {
+                    DeleteMutationRejectionReason::UpstreamActiveWriter
+                } else {
+                    DeleteMutationRejectionReason::UpstreamOther
+                });
                 observation.observed_at = observed_at;
                 observation.completed_at = Some(observed_at);
                 return Ok(());
@@ -313,28 +446,35 @@ impl DeleteMutationObservationRuntime {
         if app_server_connection_generation != self.app_server_connection_generation.as_str() {
             return Err(DeleteMutationTransitionError::AppServerConnectionGenerationMismatch);
         }
-        let mut attempts = self
-            .attempts
+        let mut state = self
+            .state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some(observation) = attempts
-            .values_mut()
-            .filter(|observation| {
+        let candidate = state.attempt_order.iter().rev().find(|attempt_id| {
+            state.attempts.get(*attempt_id).is_some_and(|observation| {
                 &observation.remote_host_identity == remote_host_identity
                     && observation.requested_full_thread_id == full_thread_id
+                    && observation.dispatch_count == 1
             })
-            .max_by_key(|observation| observation.observed_at)
-        else {
+        });
+        let Some(attempt_id) = candidate.cloned() else {
             return Err(DeleteMutationTransitionError::DirectEvidenceMismatch);
         };
+        let observation = state
+            .attempts
+            .get_mut(&attempt_id)
+            .expect("candidate delete attempt");
         if observation.dispatch_count != 1 {
             return Err(DeleteMutationTransitionError::InvalidTransition);
         }
+        let thread_key = observation.thread_key.clone();
         confirm(
             observation,
             DeleteDirectEvidenceKind::ThreadDeletedNotification,
             observed_at,
         );
+        state.active_by_thread.remove(&thread_key);
+        state.latest_by_thread.insert(thread_key, attempt_id);
         Ok(())
     }
 
@@ -346,7 +486,10 @@ impl DeleteMutationObservationRuntime {
     ) -> Result<(), DeleteMutationTransitionError> {
         self.update(attempt_id, |observation| {
             ensure_dispatched(observation)?;
-            if observation.state == DeleteMutationState::DeleteConfirmed {
+            if observation.state == DeleteMutationState::DeleteConfirmed
+                || (observation.state == DeleteMutationState::DeleteRejected
+                    && observation.direct_evidence == Some(DeleteDirectEvidenceKind::UpstreamError))
+            {
                 return Ok(());
             }
             if observation.state == DeleteMutationState::DeleteOutcomeUnknown {
@@ -366,7 +509,27 @@ impl DeleteMutationObservationRuntime {
         failure_kind: DeleteMutationFailureKind,
         observed_at: i64,
     ) -> Result<(), DeleteMutationTransitionError> {
+        let reason = if failure_kind == DeleteMutationFailureKind::Cancellation {
+            DeleteMutationRejectionReason::CancellationBeforeDispatch
+        } else {
+            DeleteMutationRejectionReason::TransportDisconnectedBeforeDispatch
+        };
+        self.record_local_pre_dispatch_rejection(attempt_id, failure_kind, reason, observed_at)
+    }
+
+    pub(crate) fn record_local_pre_dispatch_rejection(
+        &self,
+        attempt_id: &DeleteAttemptId,
+        failure_kind: DeleteMutationFailureKind,
+        rejection_reason: DeleteMutationRejectionReason,
+        observed_at: i64,
+    ) -> Result<(), DeleteMutationTransitionError> {
         self.update(attempt_id, |observation| {
+            if observation.dispatch_count == 0
+                && observation.state == DeleteMutationState::DeleteRejected
+            {
+                return Ok(());
+            }
             if observation.dispatch_count != 0
                 || observation.state != DeleteMutationState::DeletePending
             {
@@ -374,6 +537,9 @@ impl DeleteMutationObservationRuntime {
             }
             observation.state = DeleteMutationState::DeleteRejected;
             observation.failure_kind = Some(failure_kind);
+            observation.rejection_source =
+                Some(DeleteMutationRejectionSource::LocalPreDispatchRejection);
+            observation.rejection_reason = Some(rejection_reason);
             observation.observed_at = observed_at;
             observation.completed_at = Some(observed_at);
             Ok(())
@@ -385,36 +551,45 @@ impl DeleteMutationObservationRuntime {
         full_thread_id: &str,
         observed_at: i64,
     ) -> Result<(), DeleteMutationTransitionError> {
-        let mut attempts = self
-            .attempts
+        let mut state = self
+            .state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some(observation) = attempts
-            .values_mut()
-            .filter(|observation| observation.requested_full_thread_id == full_thread_id)
-            .max_by_key(|observation| observation.observed_at)
-        else {
+        let candidate = state.attempt_order.iter().rev().find(|attempt_id| {
+            state.attempts.get(*attempt_id).is_some_and(|observation| {
+                observation.requested_full_thread_id == full_thread_id
+                    && observation.dispatch_count == 1
+            })
+        });
+        let Some(attempt_id) = candidate.cloned() else {
             return Err(DeleteMutationTransitionError::DirectEvidenceMismatch);
         };
+        let observation = state
+            .attempts
+            .get_mut(&attempt_id)
+            .expect("candidate delete attempt");
         if observation.dispatch_count != 1 {
             return Err(DeleteMutationTransitionError::InvalidTransition);
         }
+        let thread_key = observation.thread_key.clone();
         confirm(
             observation,
             DeleteDirectEvidenceKind::ThreadDeletedNotification,
             observed_at,
         );
+        state.active_by_thread.remove(&thread_key);
+        state.latest_by_thread.insert(thread_key, attempt_id);
         Ok(())
     }
 
     pub(crate) fn record_session_ended(&self, observed_at: i64) -> usize {
         let mut changed = 0;
-        for observation in self
-            .attempts
+        let mut state = self
+            .state
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .values_mut()
-        {
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut released = Vec::new();
+        for observation in state.attempts.values_mut() {
             if observation.dispatch_count == 1
                 && matches!(
                     observation.state,
@@ -426,7 +601,16 @@ impl DeleteMutationObservationRuntime {
                     Some(DeleteMutationFailureKind::SessionEndedAfterDispatch);
                 observation.observed_at = observed_at;
                 observation.completed_at = Some(observed_at);
+                released.push((
+                    observation.thread_key.clone(),
+                    observation.attempt_id.clone(),
+                ));
                 changed += 1;
+            }
+        }
+        for (thread_key, attempt_id) in released {
+            if state.active_by_thread.get(&thread_key) == Some(&attempt_id) {
+                state.active_by_thread.remove(&thread_key);
             }
         }
         changed
@@ -458,18 +642,28 @@ impl DeleteMutationObservationRuntime {
     }
 
     pub(crate) fn dispatch_count(&self) -> u32 {
-        self.attempts
+        self.state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .attempts
             .values()
             .map(|observation| observation.dispatch_count)
             .sum()
     }
 
-    pub(crate) fn tombstone_count(&self) -> usize {
-        self.attempts
+    pub(crate) fn attempt_count(&self) -> usize {
+        self.state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .attempts
+            .len()
+    }
+
+    pub(crate) fn tombstone_count(&self) -> usize {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .attempts
             .values()
             .filter(|observation| observation.state == DeleteMutationState::DeleteConfirmed)
             .map(|observation| &observation.thread_key)
@@ -482,16 +676,42 @@ impl DeleteMutationObservationRuntime {
         attempt_id: &DeleteAttemptId,
         update: impl FnOnce(&mut DeleteMutationObservation) -> Result<(), DeleteMutationTransitionError>,
     ) -> Result<(), DeleteMutationTransitionError> {
-        let mut attempts = self
-            .attempts
+        let mut state = self
+            .state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        update(
-            attempts
+        let (thread_key, terminal, confirmed) = {
+            let observation = state
+                .attempts
                 .get_mut(attempt_id)
-                .ok_or(DeleteMutationTransitionError::AttemptNotFound)?,
-        )
+                .ok_or(DeleteMutationTransitionError::AttemptNotFound)?;
+            update(observation)?;
+            (
+                observation.thread_key.clone(),
+                is_terminal(observation.state),
+                observation.state == DeleteMutationState::DeleteConfirmed,
+            )
+        };
+        if terminal && state.active_by_thread.get(&thread_key) == Some(attempt_id) {
+            state.active_by_thread.remove(&thread_key);
+        }
+        if confirmed {
+            state
+                .latest_by_thread
+                .insert(thread_key, attempt_id.clone());
+        }
+        Ok(())
     }
+}
+
+fn is_terminal(state: DeleteMutationState) -> bool {
+    matches!(
+        state,
+        DeleteMutationState::DeleteConfirmed
+            | DeleteMutationState::DeleteRejected
+            | DeleteMutationState::DeleteOutcomeUnknown
+            | DeleteMutationState::SessionEndedOutcomeUnknown
+    )
 }
 
 fn validate_exact_thread_key(
@@ -530,6 +750,8 @@ fn confirm(
     observation.state = DeleteMutationState::DeleteConfirmed;
     observation.direct_evidence = Some(evidence);
     observation.failure_kind = None;
+    observation.rejection_source = None;
+    observation.rejection_reason = None;
     observation.observed_at = observed_at;
     observation.completed_at = Some(observed_at);
 }

@@ -77,9 +77,25 @@ fn fuzzy_thread_match_is_rejected() {
 #[test]
 fn delete_attempt_has_unique_attempt_id() {
     let runtime = runtime();
-    let first = begin(&runtime);
-    let second = begin(&runtime);
-    assert_ne!(first, second);
+    let first = runtime.begin_delete_attempt(
+        host(),
+        key(),
+        THREAD_ID,
+        "workspace-generation-1",
+        "app-server-generation-1",
+        10,
+    );
+    let second = runtime.begin_delete_attempt(
+        host(),
+        key(),
+        THREAD_ID,
+        "workspace-generation-1",
+        "app-server-generation-1",
+        11,
+    );
+    assert_ne!(first.attempt_id(), second.attempt_id());
+    assert!(first.is_admitted());
+    assert!(!second.is_admitted());
 }
 
 #[test]

@@ -2,8 +2,9 @@
 
 Status: Phase 3.5.3 forensics and contract freeze are complete. Phase 3.5.3a
 Approval Request Observation, Phase 3.5.3b Remote Approval Decision
-Correlation, and Phase 3.5.3c Delete Authority and Exact-ID Model are
-**PASS / COMPLETE / FROZEN**. Phase 3.5.3d is not started.
+Correlation, Phase 3.5.3c Delete Authority and Exact-ID Model, and Phase
+3.5.3d Unknown / Stale / Multi-client Isolation are **PASS / COMPLETE /
+FROZEN**. Phase 3.5.3e is not started.
 
 ## Authority boundary
 
@@ -155,3 +156,43 @@ active-writer, unknown-outcome, and tombstone gates. Automatic retry and replay
 are both zero. All Phase 3.5.3c tests use a fake app-server, deterministic
 WorkspaceSession/transport fixtures, sanitized IDs, and temporary test state.
 No real Thread, rollout, or frozen A3 target was deleted.
+
+## Delete isolation and evidence precedence
+
+Phase 3.5.3d keeps the state set above unchanged and adds a WorkspaceSession-
+owned active gate keyed by the current `WorkspaceSessionGeneration`, current
+`AppServerConnectionGeneration`, and exact `CodexThreadKey`. Two simultaneous
+intents for the same key receive distinct `DeleteAttemptId` values, but at most
+one is locally admitted to upstream dispatch. The other is a
+`local_pre_dispatch_rejection` with `duplicate_active_attempt`. Different exact
+Thread keys do not share a gate and may dispatch concurrently.
+
+Every rejected attempt retains a source and reason. A request rejected before
+the app-server write boundary is `local_pre_dispatch_rejection`; an explicit
+app-server error is `upstream_rejection`. Reasons cover duplicate active intent,
+stale transport/WorkspaceSession/app-server generation, exact-identity failure,
+pre-dispatch transport loss or cancellation, upstream active writer, and other
+upstream rejection. These fields are evidence annotations, not new canonical
+delete states.
+
+Remote transport loss atomically races the actual write boundary. Loss that
+wins before the boundary cancels the write and records zero dispatch, never
+`delete_outcome_unknown`. Once the boundary is crossed, transport loss cannot
+cancel the shared session task. It records uncertainty only until direct
+app-server evidence arrives; exact success or authoritative rejection then
+supersedes the transport-level unknown. Confirmed deletion cannot be downgraded
+by late transport, timeout, or projection evidence.
+
+Terminal shared outcomes release the active gate. A later user delete after an
+unknown outcome is a new explicit intent with a new attempt ID; the old attempt
+remains historical and is not rewritten. Remote reconnect does not replay an
+attempt. WorkspaceSession/app-server replacement creates a new authority with
+an empty gate, while an unresolved dispatched old attempt becomes
+`session_ended_outcome_unknown`. The same Host identity across a daemon restart
+does not imply session or delete-attempt continuity.
+
+Only confirmed direct evidence enters the existing idempotent tombstone path.
+Sidebar, catalog, `thread/read`, cache, runtime, and rollout projection evidence
+cannot confirm deletion or resurrect a confirmed canonical tombstone. The
+deterministic fixtures prove CodexMonitor's local single-dispatch contract only;
+they do not claim an upstream winner or bundled concurrent-delete ordering.

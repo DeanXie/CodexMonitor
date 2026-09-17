@@ -125,6 +125,63 @@ fn remote_delete_binds_transport_to_exact_session_attempt() {
     });
 }
 
+#[test]
+fn same_request_id_different_transport_generations_do_not_collide_for_delete() {
+    run_async_test(async {
+        let tmp = make_temp_dir("remote-two-delete-transports");
+        let workspace_id = "remote-two-delete-transports-workspace";
+        let thread_id = "0199a8c0-1111-7222-8333-444455556666";
+        let state = test_state(&tmp);
+        insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+        let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+        state
+            .sessions
+            .lock()
+            .await
+            .insert(workspace_id.to_string(), Arc::clone(&session));
+        let (first_runtime, first_key, first_context) =
+            remote_context("transport-delete-generation-a", 1, "delete_thread");
+        let (second_runtime, second_key, second_context) =
+            remote_context("transport-delete-generation-b", 1, "delete_thread");
+
+        let first = rpc::handle_rpc_request_with_context(
+            &state,
+            "delete_thread",
+            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+            "daemon-test".to_string(),
+            Some(&first_context),
+        );
+        let second = rpc::handle_rpc_request_with_context(
+            &state,
+            "delete_thread",
+            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+            "daemon-test".to_string(),
+            Some(&second_context),
+        );
+        let respond = respond_to_delete(&session);
+        let (first, second, ()) = tokio::join!(first, second, respond);
+        assert_eq!((first.is_ok() as usize) + (second.is_ok() as usize), 1);
+        let first_attempt = first_runtime
+            .snapshot(&first_key)
+            .unwrap()
+            .session_attempt
+            .unwrap();
+        let second_attempt = second_runtime
+            .snapshot(&second_key)
+            .unwrap()
+            .session_attempt
+            .unwrap();
+        assert_ne!(first_attempt.attempt_id, second_attempt.attempt_id);
+        assert_eq!(first_key.transport_request_id, second_key.transport_request_id);
+        assert_ne!(first_key.transport_generation, second_key.transport_generation);
+        assert_eq!(session.delete_mutation_observations.dispatch_count(), 1);
+        assert_eq!(session.delete_mutation_observations.attempt_count(), 2);
+
+        stop_session(&session).await;
+        let _ = std::fs::remove_dir_all(tmp);
+    });
+}
+
 async fn stop_session(session: &WorkspaceSession) {
     let mut child = session.child.lock().await;
     let _ = child.kill().await;

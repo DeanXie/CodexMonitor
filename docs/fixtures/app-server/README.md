@@ -90,3 +90,12 @@ and session-ended unresolved contracts. The fixtures contain sanitized UUIDs
 and no real Thread, rollout, A3 target, Remote-client identity, delete owner, or
 lease. They are consumed only by fake app-server and deterministic session
 tests; retry and replay remain zero.
+
+## Delete mutation isolation
+
+`delete-mutation-isolation/` freezes the Phase 3.5.3d same-key active gate,
+different-key concurrency, stale-generation rejection, pre/post-write transport
+loss, direct-evidence precedence, session-end ambiguity, new explicit intent
+after unknown, and confirmed-tombstone projection isolation. The fixtures use
+only synthetic UUIDs and deterministic fake authority. They prove local
+single-dispatch behavior, not upstream concurrent-delete ordering.

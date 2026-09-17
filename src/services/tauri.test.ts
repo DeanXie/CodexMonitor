@@ -18,6 +18,8 @@ import {
   getGlobalSourceSnapshot,
   getOpenAppIcon,
   getWriterAdmissionObservation,
+  getAuthoritativeObservationSnapshot,
+  StaleAuthoritativeReadError,
   listThreads,
   listMcpServerStatus,
   readThread,
@@ -340,7 +342,19 @@ describe("tauri invoke wrappers", () => {
       .mockResolvedValueOnce({
         workspaceId: "ws-10",
         threadKey: null,
-        coverages: [],
+        coverages: [{
+          coverage: "thread_catalog",
+          status: "current",
+          generations: {
+            daemonProcessGeneration: "daemon-a",
+            remoteTransportGeneration: null,
+            workspaceSessionGeneration: "workspace-a",
+            appServerConnectionGeneration: "app-a",
+          },
+          source: "thread_list",
+          observedAt: 1,
+          hydratedAt: 1,
+        }],
       });
 
     await listThreads("ws-10", "cursor-1", 25, "updated_at");
@@ -367,8 +381,20 @@ describe("tauri invoke wrappers", () => {
       .mockResolvedValueOnce({ thread: { id: "thread-1" } })
       .mockResolvedValueOnce({
         workspaceId: "ws-10",
-        threadKey: null,
-        coverages: [],
+        threadKey: { codexHomeIdentity: "home-a", threadId: "thread-1" },
+        coverages: [{
+          coverage: "thread_detail",
+          status: "current",
+          generations: {
+            daemonProcessGeneration: "daemon-a",
+            remoteTransportGeneration: null,
+            workspaceSessionGeneration: "workspace-a",
+            appServerConnectionGeneration: "app-a",
+          },
+          source: "thread_read",
+          observedAt: 1,
+          hydratedAt: 1,
+        }],
       });
 
     await readThread("ws-10", "thread-1");
@@ -395,6 +421,112 @@ describe("tauri invoke wrappers", () => {
         workspaceId: "ws-10",
         threadId: "thread-1",
       },
+    );
+  });
+
+  it("hydrates the aggregate observation snapshot only for its exact current generation", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock
+      .mockResolvedValueOnce({
+        workspaceId: "ws-10",
+        threadKey: { codexHomeIdentity: "home-a", threadId: "thread-1" },
+        workspaceSessionGeneration: "workspace-a",
+        appServerConnectionGeneration: "app-a",
+        writer: {},
+        subscription: {},
+        runtime: {},
+        pendingApprovals: [],
+        approvalHistory: [],
+        approvalDecisionAttempts: [],
+        deleteObservation: null,
+      })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-10",
+        threadKey: { codexHomeIdentity: "home-a", threadId: "thread-1" },
+        coverages: [{
+          coverage: "observation_snapshot",
+          status: "current",
+          generations: {
+            daemonProcessGeneration: "daemon-a",
+            remoteTransportGeneration: null,
+            workspaceSessionGeneration: "workspace-a",
+            appServerConnectionGeneration: "app-a",
+          },
+          source: "observation_query",
+          observedAt: 1,
+          hydratedAt: 1,
+        }],
+      });
+
+    await getAuthoritativeObservationSnapshot("ws-10", "thread-1");
+
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      1,
+      "get_authoritative_observation_snapshot",
+      { workspaceId: "ws-10", threadId: "thread-1" },
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "get_projection_freshness", {
+      workspaceId: "ws-10",
+      threadId: "thread-1",
+    });
+  });
+
+  it("rejects an observation result when its apply-time generation changed", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock
+      .mockResolvedValueOnce({
+        workspaceId: "ws-10",
+        threadKey: { codexHomeIdentity: "home-a", threadId: "thread-1" },
+        workspaceSessionGeneration: "workspace-a",
+        appServerConnectionGeneration: "app-a",
+      })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-10",
+        threadKey: { codexHomeIdentity: "home-a", threadId: "thread-1" },
+        coverages: [{
+          coverage: "observation_snapshot",
+          status: "current",
+          generations: {
+            daemonProcessGeneration: "daemon-a",
+            remoteTransportGeneration: null,
+            workspaceSessionGeneration: "workspace-b",
+            appServerConnectionGeneration: "app-b",
+          },
+          source: "observation_query",
+          observedAt: 2,
+          hydratedAt: 2,
+        }],
+      });
+
+    await expect(
+      getAuthoritativeObservationSnapshot("ws-10", "thread-1"),
+    ).rejects.toBeInstanceOf(StaleAuthoritativeReadError);
+  });
+
+  it("rejects a thread read whose coverage is no longer current", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock
+      .mockResolvedValueOnce({ thread: { id: "thread-1" } })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-10",
+        threadKey: { codexHomeIdentity: "home-a", threadId: "thread-1" },
+        coverages: [{
+          coverage: "thread_detail",
+          status: "stale",
+          generations: {
+            daemonProcessGeneration: "daemon-a",
+            remoteTransportGeneration: null,
+            workspaceSessionGeneration: "workspace-a",
+            appServerConnectionGeneration: "app-a",
+          },
+          source: "thread_read",
+          observedAt: 1,
+          hydratedAt: 1,
+        }],
+      });
+
+    await expect(readThread("ws-10", "thread-1")).rejects.toBeInstanceOf(
+      StaleAuthoritativeReadError,
     );
   });
 

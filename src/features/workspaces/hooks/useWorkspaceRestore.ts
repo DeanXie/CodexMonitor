@@ -6,18 +6,13 @@ const INITIAL_THREAD_LIST_MAX_PAGES = 6;
 type WorkspaceRestoreOptions = {
   workspaces: WorkspaceInfo[];
   hasLoaded: boolean;
-  connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  listThreadsForWorkspaces: (
-    workspaces: WorkspaceInfo[],
-    options?: { preserveState?: boolean; maxPages?: number },
-  ) => Promise<void>;
+  recoverWorkspace: (workspace: WorkspaceInfo) => Promise<unknown>;
 };
 
 export function useWorkspaceRestore({
   workspaces,
   hasLoaded,
-  connectWorkspace,
-  listThreadsForWorkspaces,
+  recoverWorkspace,
 }: WorkspaceRestoreOptions) {
   const restoredWorkspaces = useRef(new Set<string>());
 
@@ -31,27 +26,18 @@ export function useWorkspaceRestore({
     if (pending.length === 0) {
       return;
     }
-    pending.forEach((workspace) => {
-      restoredWorkspaces.current.add(workspace.id);
-    });
     void (async () => {
-      const connectedTargets: WorkspaceInfo[] = [];
       for (const workspace of pending) {
-        const wasConnected = workspace.connected;
+        restoredWorkspaces.current.add(workspace.id);
         try {
-          if (!wasConnected) {
-            await connectWorkspace(workspace);
-          }
-          connectedTargets.push({ ...workspace, connected: true });
+          await recoverWorkspace(workspace);
         } catch {
+          restoredWorkspaces.current.delete(workspace.id);
           // Silent: connection errors show in debug panel.
         }
       }
-      if (connectedTargets.length > 0) {
-        await listThreadsForWorkspaces(connectedTargets, {
-          maxPages: INITIAL_THREAD_LIST_MAX_PAGES,
-        });
-      }
     })();
-  }, [connectWorkspace, hasLoaded, listThreadsForWorkspaces, workspaces]);
+  }, [hasLoaded, recoverWorkspace, workspaces]);
 }
+
+export { INITIAL_THREAD_LIST_MAX_PAGES };

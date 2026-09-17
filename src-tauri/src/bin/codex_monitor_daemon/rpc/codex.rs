@@ -107,6 +107,24 @@ pub(super) async fn try_handle(
                     }),
             )
         }
+        "get_authoritative_observation_snapshot" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let thread_id = match parse_string(params, "threadId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .get_authoritative_observation_snapshot(workspace_id, thread_id)
+                    .await
+                    .and_then(|snapshot| {
+                        serde_json::to_value(snapshot).map_err(|error| error.to_string())
+                    }),
+            )
+        }
         "get_projection_freshness" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,

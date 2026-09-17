@@ -12,6 +12,7 @@ type UseRemoteThreadRefreshOnFocusOptions = {
   suspendPolling?: boolean;
   reconnectWorkspace?: (workspace: WorkspaceInfo) => Promise<unknown> | unknown;
   refreshThread: (workspaceId: string, threadId: string) => Promise<unknown> | unknown;
+  recoverWorkspace?: (workspace: WorkspaceInfo) => Promise<unknown> | unknown;
 };
 
 export function useRemoteThreadRefreshOnFocus({
@@ -22,12 +23,14 @@ export function useRemoteThreadRefreshOnFocus({
   suspendPolling = false,
   reconnectWorkspace,
   refreshThread,
+  recoverWorkspace,
 }: UseRemoteThreadRefreshOnFocusOptions) {
   const workspaceId = activeWorkspace?.id ?? null;
   const refreshThreadRef = useRef(refreshThread);
   const reconnectWorkspaceRef = useRef(reconnectWorkspace);
   const activeWorkspaceRef = useRef(activeWorkspace);
   const workspaceConnectedRef = useRef(Boolean(activeWorkspace?.connected));
+  const recoverWorkspaceRef = useRef(recoverWorkspace);
 
   useEffect(() => {
     refreshThreadRef.current = refreshThread;
@@ -36,6 +39,10 @@ export function useRemoteThreadRefreshOnFocus({
   useEffect(() => {
     reconnectWorkspaceRef.current = reconnectWorkspace;
   }, [reconnectWorkspace]);
+
+  useEffect(() => {
+    recoverWorkspaceRef.current = recoverWorkspace;
+  }, [recoverWorkspace]);
 
   useEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
@@ -85,6 +92,12 @@ export function useRemoteThreadRefreshOnFocus({
       }
       refreshInFlight = true;
       void (async () => {
+        if (recoverWorkspaceRef.current && activeWorkspaceRef.current) {
+          await Promise.resolve(
+            recoverWorkspaceRef.current(activeWorkspaceRef.current),
+          );
+          return;
+        }
         const reconnectPromise = ensureWorkspaceConnected();
         if (reconnectPromise) {
           await reconnectPromise;

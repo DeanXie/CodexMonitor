@@ -581,6 +581,40 @@ export type WriterAdmissionObservationSnapshot = {
   sessionEndEvidence: WriterAdmissionSessionEndEvidenceSnapshot | null;
 };
 
+export type ThreadSubscriptionObservationSnapshot = {
+  threadKey: { codexHomeIdentity: string; threadId: string };
+  workspaceSessionGeneration: string;
+  appServerConnectionGeneration: string;
+  state: string;
+  observedAt: number | null;
+  attemptId: string | null;
+  requestedFullThreadId: string | null;
+  evidence: Record<string, unknown> | null;
+};
+
+export type ThreadRuntimeAvailabilityObservationSnapshot = {
+  threadKey: { codexHomeIdentity: string; threadId: string };
+  workspaceSessionGeneration: string;
+  appServerConnectionGeneration: string;
+  state: "unknown" | "loaded_observed" | "not_loaded_observed";
+  observedAt: number | null;
+  evidenceSource: string | null;
+};
+
+export type AuthoritativeObservationSnapshot = {
+  workspaceId: string;
+  threadKey: { codexHomeIdentity: string; threadId: string };
+  workspaceSessionGeneration: string;
+  appServerConnectionGeneration: string;
+  writer: WriterAdmissionObservationSnapshot;
+  subscription: ThreadSubscriptionObservationSnapshot;
+  runtime: ThreadRuntimeAvailabilityObservationSnapshot;
+  pendingApprovals: Array<Record<string, unknown>>;
+  approvalHistory: Array<Record<string, unknown>>;
+  approvalDecisionAttempts: Array<Record<string, unknown>>;
+  deleteObservation: Record<string, unknown> | null;
+};
+
 export type ProjectionFreshnessStatus =
   | "not_hydrated"
   | "hydrating"

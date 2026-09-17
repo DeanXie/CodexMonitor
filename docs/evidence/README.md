@@ -104,3 +104,11 @@ current and stale generation delivery, missing-generation failure, hydration
 boundaries, same-payload provenance, and multi-client transport binding without
 adding mutation replay. The implementation evidence index is
 `phase-3-5-4b/generation-tagged-event-delivery.md`.
+
+Phase 3.5.4c authoritative recovery fixtures are stored in
+`../../src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/`. They
+freeze reload, reconnect, WorkspaceSession replacement, daemon restart,
+selected-thread and observation hydration, stale-result isolation, partial
+failure, event interleaving, and multi-client convergence without replaying a
+mutation. The implementation evidence index is
+`phase-3-5-4c/authoritative-recovery-hydration.md`.

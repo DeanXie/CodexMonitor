@@ -1,0 +1,1 @@
+{"scenario":"frontend-reload","workspaceId":"workspace-sanitized","selectedThreadId":"thread-sanitized","expectedReads":["list_workspaces","thread/list","thread/read","observation/query"]}

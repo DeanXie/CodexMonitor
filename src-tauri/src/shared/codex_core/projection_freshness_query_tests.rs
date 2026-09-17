@@ -1,6 +1,7 @@
 use super::{
-    get_projection_freshness_core, get_writer_admission_observation_with_freshness_core,
-    list_threads_with_freshness_core, read_thread_with_freshness_core,
+    get_authoritative_observation_snapshot_with_freshness_core, get_projection_freshness_core,
+    get_writer_admission_observation_with_freshness_core, list_threads_with_freshness_core,
+    read_thread_with_freshness_core,
 };
 use crate::backend::app_server::WorkspaceSession;
 use crate::shared::codex_core::writer_admission_observation::WorkspaceSessionGeneration;
@@ -361,4 +362,126 @@ async fn observation_query_instruments_observation_coverage_without_dispatch() {
     );
     assert_eq!(session.next_id.load(Ordering::SeqCst), next_id_before);
     stop_session(&session).await;
+}
+
+#[tokio::test]
+async fn authoritative_observation_snapshot_preserves_separate_models_without_dispatch() {
+    let runtime = ProjectionFreshnessRuntime::default();
+    let session = session("session-authoritative-snapshot").await;
+    let workspaces = Mutex::new(HashMap::from([(WORKSPACE_ID.to_string(), workspace())]));
+    let sessions = Mutex::new(HashMap::from([(
+        WORKSPACE_ID.to_string(),
+        Arc::clone(&session),
+    )]));
+    let next_id_before = session.next_id.load(Ordering::SeqCst);
+
+    let observation = get_authoritative_observation_snapshot_with_freshness_core(
+        &workspaces,
+        &sessions,
+        &runtime,
+        WORKSPACE_ID,
+        THREAD_ID,
+    )
+    .await
+    .expect("authoritative observation query succeeds");
+
+    assert_eq!(observation.workspace_id, WORKSPACE_ID);
+    assert_eq!(observation.thread_key.thread_id, THREAD_ID);
+    assert_eq!(
+        observation.workspace_session_generation,
+        "session-authoritative-snapshot"
+    );
+    assert_eq!(
+        observation.app_server_connection_generation,
+        "session-authoritative-snapshot-connection"
+    );
+    assert_eq!(
+        observation.writer.state,
+        super::writer_admission_observation::WriterAdmissionObservationSnapshotState::NotObserved
+    );
+    assert_eq!(
+        observation.subscription.state,
+        super::thread_lifecycle_observation::ThreadSubscriptionObservationState::NotObserved
+    );
+    assert_eq!(
+        observation.runtime.state,
+        super::thread_lifecycle_observation::ThreadRuntimeAvailabilityState::Unknown
+    );
+    assert!(observation.pending_approvals.is_empty());
+    assert!(observation.approval_history.is_empty());
+    assert!(observation.approval_decision_attempts.is_empty());
+    assert!(observation.delete_observation.is_none());
+    assert_eq!(session.next_id.load(Ordering::SeqCst), next_id_before);
+
+    let freshness = get_projection_freshness_core(
+        &workspaces,
+        &sessions,
+        &runtime,
+        WORKSPACE_ID,
+        Some(THREAD_ID),
+    )
+    .await
+    .expect("freshness query");
+    assert_eq!(
+        freshness.status(ProjectionFreshnessCoverage::ObservationSnapshot),
+        Some(ProjectionFreshnessStatus::Current)
+    );
+    assert_eq!(
+        freshness.status(ProjectionFreshnessCoverage::ThreadDetail),
+        Some(ProjectionFreshnessStatus::NotHydrated)
+    );
+    stop_session(&session).await;
+}
+
+#[tokio::test]
+async fn stale_thread_read_response_cannot_be_current_for_replacement_generation() {
+    let runtime = Arc::new(ProjectionFreshnessRuntime::default());
+    let old_session = session("session-old").await;
+    let replacement_session = session("session-new").await;
+    let sessions = Arc::new(Mutex::new(HashMap::from([(
+        WORKSPACE_ID.to_string(),
+        Arc::clone(&old_session),
+    )])));
+    let task = {
+        let runtime = Arc::clone(&runtime);
+        let sessions = Arc::clone(&sessions);
+        tokio::spawn(async move {
+            read_thread_with_freshness_core(
+                &sessions,
+                &runtime,
+                WORKSPACE_ID.to_string(),
+                THREAD_ID.to_string(),
+            )
+            .await
+        })
+    };
+    let request_id = await_pending_request(&old_session).await;
+    sessions
+        .lock()
+        .await
+        .insert(WORKSPACE_ID.to_string(), Arc::clone(&replacement_session));
+    deliver_response(
+        &old_session,
+        request_id,
+        json!({"id": request_id, "result": {"thread": {"id": THREAD_ID}}}),
+    )
+    .await;
+    task.await.unwrap().expect("old read completed");
+
+    let workspaces = Mutex::new(HashMap::from([(WORKSPACE_ID.to_string(), workspace())]));
+    let snapshot = get_projection_freshness_core(
+        &workspaces,
+        &sessions,
+        &runtime,
+        WORKSPACE_ID,
+        Some(THREAD_ID),
+    )
+    .await
+    .expect("replacement freshness query");
+    assert_eq!(
+        snapshot.status(ProjectionFreshnessCoverage::ThreadDetail),
+        Some(ProjectionFreshnessStatus::Stale)
+    );
+    stop_session(&old_session).await;
+    stop_session(&replacement_session).await;
 }

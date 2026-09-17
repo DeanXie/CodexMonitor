@@ -12,6 +12,7 @@ type WorkspaceRefreshOptions = {
   ) => Promise<void>;
   backendMode?: string;
   pollIntervalMs?: number;
+  recoverWorkspaces?: (workspaces: WorkspaceInfo[]) => Promise<unknown>;
 };
 
 export function useWorkspaceRefreshOnFocus({
@@ -20,6 +21,7 @@ export function useWorkspaceRefreshOnFocus({
   listThreadsForWorkspaces,
   backendMode = "local",
   pollIntervalMs = REMOTE_WORKSPACE_REFRESH_INTERVAL_MS,
+  recoverWorkspaces,
 }: WorkspaceRefreshOptions) {
   const optionsRef = useRef({
     workspaces,
@@ -27,6 +29,7 @@ export function useWorkspaceRefreshOnFocus({
     listThreadsForWorkspaces,
     backendMode,
     pollIntervalMs,
+    recoverWorkspaces,
   });
   useEffect(() => {
     optionsRef.current = {
@@ -35,6 +38,7 @@ export function useWorkspaceRefreshOnFocus({
       listThreadsForWorkspaces,
       backendMode,
       pollIntervalMs,
+      recoverWorkspaces,
     };
   });
 
@@ -52,6 +56,7 @@ export function useWorkspaceRefreshOnFocus({
         workspaces: ws,
         refreshWorkspaces: refresh,
         listThreadsForWorkspaces: listThreads,
+        recoverWorkspaces: recover,
       } = optionsRef.current;
       void (async () => {
         let latestWorkspaces = ws;
@@ -65,7 +70,11 @@ export function useWorkspaceRefreshOnFocus({
         }
         const connected = latestWorkspaces.filter((entry) => entry.connected);
         if (connected.length > 0) {
-          await listThreads(connected, { preserveState: true });
+          if (recover) {
+            await recover(connected);
+          } else {
+            await listThreads(connected, { preserveState: true });
+          }
         }
       })().finally(() => {
         refreshInFlight = false;

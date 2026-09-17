@@ -1,6 +1,6 @@
 # Phase 3.5.4 — Projection / Recovery / Telemetry
 
-Status: Phase 3.5.4a Projection Freshness Authority and Phase 3.5.4b Generation-tagged Event Delivery are **PASS / COMPLETE / FROZEN**. Phase 3.5.4 remains **IN PROGRESS**. Phase 3.5.4c is not started.
+Status: Phase 3.5.4a Projection Freshness Authority, Phase 3.5.4b Generation-tagged Event Delivery, and Phase 3.5.4c Authoritative Recovery / Hydration are **PASS / COMPLETE / FROZEN**. Phase 3.5.4 remains **IN PROGRESS**. Phase 3.5.4d is not started.
 
 ## Projection freshness authority
 
@@ -95,13 +95,56 @@ owner, lease, or completeness proof. The same payload under another generation
 has distinct provenance. Multiple Remote clients can receive the same shared
 session event while each delivery is bound to its own transport generation.
 
+## Authoritative recovery and hydration
+
+The recovery chain is `list_workspaces`, conditional `connect_workspace`,
+authoritative `thread/list`, optional exact selected `thread/read`, a read-only
+observation snapshot, and then an existing safe local live attach when a caller
+needs one. `connect_workspace` is used only when the listed WorkspaceSession is
+not connected. It establishes session authority; it does not resume a Thread,
+replay a Turn, or acquire writer authority.
+
+Each authoritative read advances only its own coverage. Workspace listing can
+advance `workspace_catalog`; Thread listing can advance `thread_catalog`; an
+exact Thread read can advance that `thread_detail`; and the aggregate
+observation query can advance only `observation_snapshot`. A failure therefore
+leaves already completed coverages valid and classifies only the failed
+coverage as `unavailable` or `unknown` according to the observed failure.
+
+The App and daemon expose one `get_authoritative_observation_snapshot` contract
+implemented by the shared core. Its payload aggregates read-only snapshots for
+writer admission, subscription, runtime availability, pending and historical
+approvals, approval-decision attempts, and delete observation. Those fields
+remain independent authority models; aggregation creates no combined business
+state and no inference from missing data. The query never connects a workspace
+or dispatches a mutation.
+
+Frontend apply gates require the matching coverage to be `current`. Observation
+results must additionally match their returned WorkspaceSession and app-server
+connection generations. A generation change while a read is in flight leaves
+the old result stale/historical, so it cannot mutate the replacement generation.
+Reload, reconnect, WorkspaceSession replacement, and daemon restart converge by
+re-reading authority. They never clear cached data into an asserted absence and
+never replay `thread/resume`, approval decisions, Thread delete, or upstream
+unsubscribe.
+
+Recovery triggers share a per-workspace single flight within one frontend
+coordinator. Separate Remote frontends retain independent caches and may each
+perform read-only hydration against the same shared WorkspaceSession truth;
+there is no recovery owner, lease, or Remote client identity. Events remain
+incremental only: they cannot promote unhydrated/stale coverage or replace the
+authoritative baseline.
+
 ## Frozen boundaries
 
-Phase 3.5.4a-b add no UI, recovery orchestration, persistence, polling loop,
-automatic retry/replay, client identity, owner, lease, `FREE`, `AVAILABLE`, or
-`RELEASED` semantics. Phase 3.5.4c owns later work.
+Phase 3.5.4a-c add no recovery UI, telemetry persistence, generic polling loop,
+automatic mutation retry/replay, client identity, owner, lease, `FREE`,
+`AVAILABLE`, or `RELEASED` semantics. Phase 3.5.4d owns later user-visible
+freshness status and comprehensive missed-event detection.
 
 Compatibility fixtures are stored under `docs/fixtures/projection-freshness/`
 and `docs/fixtures/generation-tagged-events/`; implementation evidence is
 indexed under `docs/evidence/phase-3-5-4a/` and
-`docs/evidence/phase-3-5-4b/`.
+`docs/evidence/phase-3-5-4b/`. Phase 3.5.4c sanitized recovery fixtures live
+under `src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/`, with
+implementation evidence under `docs/evidence/phase-3-5-4c/`.

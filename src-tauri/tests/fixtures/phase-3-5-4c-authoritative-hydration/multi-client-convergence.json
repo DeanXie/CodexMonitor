@@ -1,0 +1,1 @@
+{"scenario":"multi-client-convergence","clients":["transport-a","transport-b"],"sharedWorkspaceGeneration":"workspace-a","sharedAuthority":true}

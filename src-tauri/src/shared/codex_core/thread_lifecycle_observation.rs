@@ -495,6 +495,17 @@ pub(crate) struct ThreadRuntimeAvailabilityObservation {
     pub evidence_source: ThreadRuntimeAvailabilityEvidenceSource,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ThreadRuntimeAvailabilityObservationSnapshot {
+    pub thread_key: CodexThreadKey,
+    pub workspace_session_generation: String,
+    pub app_server_connection_generation: String,
+    pub state: ThreadRuntimeAvailabilityState,
+    pub observed_at: Option<i64>,
+    pub evidence_source: Option<ThreadRuntimeAvailabilityEvidenceSource>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ThreadRuntimeAvailabilityTracker {
     scope: ThreadLifecycleObservationScope,
@@ -808,6 +819,26 @@ impl ThreadLifecycleObservationRuntime {
         self.lock_observations()
             .get(thread_key)
             .and_then(|entry| entry.runtime.latest_observation().cloned())
+    }
+
+    pub(crate) fn runtime_snapshot(
+        &self,
+        thread_key: &CodexThreadKey,
+    ) -> ThreadRuntimeAvailabilityObservationSnapshot {
+        let observation = self.runtime_observation(thread_key);
+        ThreadRuntimeAvailabilityObservationSnapshot {
+            thread_key: thread_key.clone(),
+            workspace_session_generation: self.workspace_session_generation.as_str().to_string(),
+            app_server_connection_generation: self
+                .app_server_connection_generation
+                .as_str()
+                .to_string(),
+            state: observation
+                .as_ref()
+                .map_or(ThreadRuntimeAvailabilityState::Unknown, |item| item.state),
+            observed_at: observation.as_ref().map(|item| item.observed_at),
+            evidence_source: observation.map(|item| item.evidence_source),
+        }
     }
 
     pub(crate) fn record_runtime_not_loaded(

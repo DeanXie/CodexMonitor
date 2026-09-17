@@ -824,6 +824,23 @@ impl DaemonState {
         .map_err(|error| error.to_string())
     }
 
+    async fn get_authoritative_observation_snapshot(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+    ) -> Result<shared::codex_core::authoritative_recovery::AuthoritativeObservationSnapshot, String>
+    {
+        codex_core::get_authoritative_observation_snapshot_with_freshness_core(
+            &self.workspaces,
+            &self.sessions,
+            &self.projection_freshness,
+            &workspace_id,
+            &thread_id,
+        )
+        .await
+        .map_err(|error| error.to_string())
+    }
+
     async fn get_projection_freshness(
         &self,
         workspace_id: String,

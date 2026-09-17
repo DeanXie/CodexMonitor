@@ -21,9 +21,46 @@ import type {
   WorkspaceInfo,
   AppMention,
   WorkspaceSettings,
+  AuthoritativeObservationSnapshot,
+  ProjectionFreshnessCoverage,
   WriterAdmissionObservationSnapshot,
   ProjectionFreshnessQuerySnapshot,
 } from "../types";
+
+export class StaleAuthoritativeReadError extends Error {
+  constructor(
+    public readonly coverage: ProjectionFreshnessCoverage,
+    message = `authoritative ${coverage} result is not current for the active generation`,
+  ) {
+    super(message);
+    this.name = "StaleAuthoritativeReadError";
+  }
+}
+
+async function requireCurrentProjectionCoverage(
+  workspaceId: string,
+  threadId: string | undefined,
+  coverage: ProjectionFreshnessCoverage,
+  expected?: {
+    workspaceSessionGeneration: string;
+    appServerConnectionGeneration: string;
+  },
+) {
+  const snapshot = await getProjectionFreshness(workspaceId, threadId);
+  const evidence = snapshot.coverages.find(
+    (candidate) => candidate.coverage === coverage,
+  );
+  const generationMatches =
+    !expected ||
+    (evidence?.generations.workspaceSessionGeneration ===
+      expected.workspaceSessionGeneration &&
+      evidence?.generations.appServerConnectionGeneration ===
+        expected.appServerConnectionGeneration);
+  if (!evidence || evidence.status !== "current" || !generationMatches) {
+    throw new StaleAuthoritativeReadError(coverage);
+  }
+  return snapshot;
+}
 import {
   invalidateAppServerEventGenerationContext,
   recordProjectionFreshnessForEventDelivery,
@@ -1122,9 +1159,14 @@ export async function listThreads(
     sortKey,
   });
   try {
-    await getProjectionFreshness(workspaceId);
+    await requireCurrentProjectionCoverage(
+      workspaceId,
+      undefined,
+      "thread_catalog",
+    );
   } catch {
     invalidateAppServerEventGenerationContext(workspaceId);
+    throw new StaleAuthoritativeReadError("thread_catalog");
   }
   return result;
 }
@@ -1151,6 +1193,23 @@ export async function getWriterAdmissionObservation(
   );
 }
 
+export async function getAuthoritativeObservationSnapshot(
+  workspaceId: string,
+  threadId: string,
+) {
+  const result = await invoke<AuthoritativeObservationSnapshot>(
+    "get_authoritative_observation_snapshot",
+    { workspaceId, threadId },
+  );
+  await requireCurrentProjectionCoverage(
+    workspaceId,
+    threadId,
+    "observation_snapshot",
+    result,
+  );
+  return result;
+}
+
 export async function getProjectionFreshness(
   workspaceId: string,
   threadId?: string,
@@ -1166,9 +1225,14 @@ export async function getProjectionFreshness(
 export async function readThread(workspaceId: string, threadId: string) {
   const result = await invoke<any>("read_thread", { workspaceId, threadId });
   try {
-    await getProjectionFreshness(workspaceId, threadId);
+    await requireCurrentProjectionCoverage(
+      workspaceId,
+      threadId,
+      "thread_detail",
+    );
   } catch {
     invalidateAppServerEventGenerationContext(workspaceId);
+    throw new StaleAuthoritativeReadError("thread_detail");
   }
   return result;
 }

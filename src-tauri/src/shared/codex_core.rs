@@ -24,6 +24,7 @@ pub(crate) mod external_thread_admission;
 
 pub(crate) mod approval_decision_provenance;
 pub(crate) mod approval_observation;
+pub(crate) mod authoritative_recovery;
 pub(crate) mod delete_mutation_observation;
 pub(crate) mod thread_lifecycle_observation;
 pub(crate) mod writer_admission_observation;
@@ -468,6 +469,174 @@ pub(crate) async fn get_writer_admission_observation_with_freshness_core(
     let result =
         get_writer_admission_observation_core(workspaces, sessions, workspace_id, full_thread_id)
             .await;
+    if let Some((key, generations)) = key_and_generations {
+        let normalized = result
+            .as_ref()
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+        crate::shared::projection_freshness::record_authoritative_read_outcome(
+            runtime,
+            key,
+            generations,
+            ProjectionFreshnessSource::ObservationQuery,
+            &normalized,
+            projection_freshness_now_ms(),
+        );
+    }
+    result
+}
+
+pub(crate) async fn get_authoritative_observation_snapshot_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: &str,
+    full_thread_id: &str,
+) -> Result<
+    authoritative_recovery::AuthoritativeObservationSnapshot,
+    authoritative_recovery::AuthoritativeObservationQueryError,
+> {
+    use authoritative_recovery::{
+        AuthoritativeObservationQueryError, AuthoritativeObservationSnapshot,
+    };
+
+    if workspace_id.trim().is_empty() {
+        return Err(AuthoritativeObservationQueryError::WorkspaceIdRequired);
+    }
+    if full_thread_id.trim().is_empty() {
+        return Err(AuthoritativeObservationQueryError::FullThreadIdRequired);
+    }
+    if !workspaces.lock().await.contains_key(workspace_id) {
+        return Err(AuthoritativeObservationQueryError::WorkspaceNotFound);
+    }
+    let session = sessions
+        .lock()
+        .await
+        .get(workspace_id)
+        .cloned()
+        .ok_or(AuthoritativeObservationQueryError::WorkspaceSessionUnavailable)?;
+    let codex_home_identity = session
+        .workspace_reconciler
+        .lock()
+        .await
+        .codex_home_identity()
+        .to_string();
+    let thread_key =
+        crate::shared::codex_identity::CodexThreadKey::new(codex_home_identity, full_thread_id);
+    let workspace_session_generation = session
+        .thread_lifecycle_observations
+        .workspace_session_generation()
+        .as_str()
+        .to_string();
+    let app_server_connection_generation = session
+        .thread_lifecycle_observations
+        .app_server_connection_generation()
+        .as_str()
+        .to_string();
+    let matches_thread = |snapshot: &approval_observation::ApprovalObservationSnapshot| {
+        snapshot.identity.thread_id == full_thread_id
+            && snapshot.identity.workspace_session_generation == workspace_session_generation
+            && snapshot.identity.app_server_connection_generation
+                == app_server_connection_generation
+    };
+    let pending_approvals = session
+        .approval_observations
+        .current_pending()
+        .into_iter()
+        .filter(matches_thread)
+        .collect();
+    let approval_history = session
+        .approval_observations
+        .history()
+        .into_iter()
+        .filter(matches_thread)
+        .collect();
+    let approval_decision_attempts = session
+        .approval_observations
+        .decision_attempts()
+        .into_iter()
+        .filter(|attempt| {
+            attempt.workspace_session_generation == workspace_session_generation
+                && attempt.app_server_connection_generation == app_server_connection_generation
+                && attempt
+                    .identity
+                    .as_ref()
+                    .is_some_and(|identity| identity.thread_id == full_thread_id)
+        })
+        .collect();
+
+    Ok(AuthoritativeObservationSnapshot {
+        workspace_id: workspace_id.to_string(),
+        thread_key: thread_key.clone(),
+        workspace_session_generation,
+        app_server_connection_generation,
+        writer: session
+            .writer_admission_observations
+            .current_snapshot(&thread_key),
+        subscription: session
+            .thread_lifecycle_observations
+            .subscription_snapshot(&thread_key),
+        runtime: session
+            .thread_lifecycle_observations
+            .runtime_snapshot(&thread_key),
+        pending_approvals,
+        approval_history,
+        approval_decision_attempts,
+        delete_observation: session
+            .delete_mutation_observations
+            .latest_for_thread(&thread_key),
+    })
+}
+
+pub(crate) async fn get_authoritative_observation_snapshot_with_freshness_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime: &crate::shared::projection_freshness::ProjectionFreshnessRuntime,
+    workspace_id: &str,
+    full_thread_id: &str,
+) -> Result<
+    authoritative_recovery::AuthoritativeObservationSnapshot,
+    authoritative_recovery::AuthoritativeObservationQueryError,
+> {
+    use crate::shared::projection_freshness::{ProjectionFreshnessKey, ProjectionFreshnessSource};
+
+    let context = projection_freshness_session_context(sessions, runtime, workspace_id).await;
+    let key_and_generations = match context {
+        Ok((session, generations)) => {
+            let codex_home_identity = session
+                .workspace_reconciler
+                .lock()
+                .await
+                .codex_home_identity()
+                .to_string();
+            Some((
+                ProjectionFreshnessKey::observation_snapshot(
+                    workspace_id,
+                    crate::shared::codex_identity::CodexThreadKey::new(
+                        codex_home_identity,
+                        full_thread_id,
+                    ),
+                ),
+                generations,
+            ))
+        }
+        Err(_) => None,
+    };
+    if let Some((key, generations)) = &key_and_generations {
+        let _ = runtime.record_hydrating(
+            key.clone(),
+            generations.clone(),
+            ProjectionFreshnessSource::ObservationQuery,
+            projection_freshness_now_ms(),
+        );
+    }
+
+    let result = get_authoritative_observation_snapshot_core(
+        workspaces,
+        sessions,
+        workspace_id,
+        full_thread_id,
+    )
+    .await;
     if let Some((key, generations)) = key_and_generations {
         let normalized = result
             .as_ref()
@@ -1788,6 +1957,9 @@ mod writer_admission_instrumentation_tests;
 #[path = "codex_core/writer_admission_observation_query_tests.rs"]
 mod writer_admission_observation_query_tests;
 
+#[cfg(test)]
+#[path = "codex_core/authoritative_recovery_fixture_tests.rs"]
+mod authoritative_recovery_fixture_tests;
 #[cfg(test)]
 #[path = "codex_core/projection_freshness_query_tests.rs"]
 mod projection_freshness_query_tests;

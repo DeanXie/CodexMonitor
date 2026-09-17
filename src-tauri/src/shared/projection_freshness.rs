@@ -543,7 +543,20 @@ pub(crate) fn record_authoritative_read_outcome(
             let _ = runtime.record_current(key, generations, source, observed_at, observed_at);
         }
         Err(_) => {
-            let _ = runtime.record_unavailable(key, generations, source, observed_at);
+            let error = result
+                .as_ref()
+                .expect_err("error branch")
+                .to_ascii_lowercase();
+            if error.contains("timed out")
+                || error.contains("timeout")
+                || error.contains("cancel")
+                || error.contains("malformed")
+                || error.contains("response lost")
+            {
+                let _ = runtime.record_unknown(key, generations, source, observed_at);
+            } else {
+                let _ = runtime.record_unavailable(key, generations, source, observed_at);
+            }
         }
     }
 }

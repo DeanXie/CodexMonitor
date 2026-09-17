@@ -89,6 +89,19 @@ approval, or delete observations and adds no retry, replay, client identity,
 owner, lease, sequence, or gap inference. Sanitized fixtures live under
 `docs/fixtures/generation-tagged-events/`.
 
+Phase 3.5.4c restores frontend projections through authoritative reads rather
+than event replay. The canonical order is workspace listing, conditional
+WorkspaceSession establishment, `thread/list`, optional exact `thread/read`,
+and a read-only generation-scoped observation snapshot. The shared App/daemon
+snapshot aggregates writer, subscription, runtime, approval, approval-decision,
+and delete evidence without merging those authority models. Each read advances
+only its own freshness coverage, and frontend apply gates reject a late result
+whose WorkspaceSession or app-server connection generation is no longer
+current. Existing events remain incremental after the authoritative baseline;
+they do not make stale or unhydrated coverage current. Recovery performs no
+resume, approval decision, Thread delete, upstream unsubscribe, mutation retry,
+or mutation replay.
+
 Phase 3.5.2d freezes five distinct continuity authorities around this delivery
 path: `RemoteHostIdentity` identifies the host;
 `DaemonProcessGeneration`, `RemoteTransportGeneration`,

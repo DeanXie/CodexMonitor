@@ -1,0 +1,1 @@
+{"scenario":"stale-response-after-generation-change","requestGeneration":"workspace-a","currentGeneration":"workspace-b","apply":false}

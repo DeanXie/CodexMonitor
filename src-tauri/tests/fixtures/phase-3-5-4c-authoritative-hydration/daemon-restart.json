@@ -1,0 +1,1 @@
+{"scenario":"daemon-restart","beforeGeneration":"daemon-a","afterGeneration":"daemon-b","sessionsInitiallyEmpty":true}

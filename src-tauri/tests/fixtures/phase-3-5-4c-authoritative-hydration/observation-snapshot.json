@@ -1,0 +1,1 @@
+{"scenario":"observation-snapshot","models":["writer","subscription","runtime","approval","approvalDecision","delete"],"combinedStateMachine":false}

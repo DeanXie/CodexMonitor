@@ -1,0 +1,1 @@
+{"scenario":"known-event-gap","skipped":2,"affectedCoverages":["thread_catalog","thread_detail","observation_snapshot"],"persistent":false}

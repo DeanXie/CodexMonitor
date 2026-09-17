@@ -19,6 +19,7 @@ import {
   getOpenAppIcon,
   getWriterAdmissionObservation,
   getAuthoritativeObservationSnapshot,
+  getRemoteHostAvailability,
   StaleAuthoritativeReadError,
   listThreads,
   listMcpServerStatus,
@@ -95,6 +96,14 @@ describe("tauri invoke wrappers", () => {
       }
       return undefined;
     });
+  });
+
+  it("reads layered remote host availability without deriving projection truth", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce([]);
+
+    await expect(getRemoteHostAvailability()).resolves.toEqual([]);
+
+    expect(invoke).toHaveBeenCalledWith("get_remote_host_availability");
   });
 
   it("uses the permanent delete command for deleteThread", async () => {

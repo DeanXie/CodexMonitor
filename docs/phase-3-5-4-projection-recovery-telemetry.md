@@ -1,6 +1,6 @@
 # Phase 3.5.4 — Projection / Recovery / Telemetry
 
-Status: Phase 3.5.4a Projection Freshness Authority, Phase 3.5.4b Generation-tagged Event Delivery, and Phase 3.5.4c Authoritative Recovery / Hydration are **PASS / COMPLETE / FROZEN**. Phase 3.5.4 remains **IN PROGRESS**. Phase 3.5.4d is not started.
+Status: Phase 3.5.4a Projection Freshness Authority, Phase 3.5.4b Generation-tagged Event Delivery, Phase 3.5.4c Authoritative Recovery / Hydration, and Phase 3.5.4d Offline / Stale UI & Multi-client Isolation are **PASS / COMPLETE / FROZEN**. Phase 3.5.4 remains **IN PROGRESS**. Phase 3.5.4e is not started.
 
 ## Projection freshness authority
 
@@ -135,12 +135,44 @@ there is no recovery owner, lease, or Remote client identity. Events remain
 incremental only: they cannot promote unhydrated/stale coverage or replace the
 authoritative baseline.
 
+## Offline and stale UI
+
+The Remote shell derives one read-only view model from `ProjectionFreshness`.
+Its compact primary vocabulary is `Current`, `Hydrating`, `Stale`,
+`Unavailable`, and `Unknown`; `not_hydrated` maps to `Unknown`. The four
+coverage values remain independent and are preserved in the status details, so
+a current catalog does not hide stale detail or unavailable observations.
+Transport, authentication, daemon, and Workspace runtime availability remain
+secondary diagnostics. The legacy `Live`, `Polling`, and `Disconnected` value
+is delivery-mode telemetry only and never defines projection freshness.
+
+A daemon broadcast lag emits one ephemeral `app-server-event-gap` marker bound
+to the current daemon-process and Remote transport generations. It contains a
+skipped count and affected coverages, but no persisted sequence, canonical
+version, business revision, replay ledger, or shared authority mutation. Only
+the matching frontend derives those coverages as stale and invokes the existing
+per-workspace single-flight authoritative recovery. A current authoritative
+snapshot for the same generations and a hydration time after the gap clears the
+local marker. Another Remote client is unaffected unless it independently
+observes a gap; clients may temporarily diverge and converge through reads.
+
+Reconnect retains cached content as stale while hydration runs. A new daemon
+process cannot inherit current evidence even when `RemoteHostIdentity` is the
+same. Workspace unavailability remains distinct from transport disconnection.
+Insufficient evidence remains `Unknown`; no UI state claims Thread absence.
+
+Approval controls are actionable only when `observation_snapshot` is current
+and the exact generation-bound approval identity is still `pending`. Delete
+outcome unknown does not render deleted, while a confirmed-delete projection is
+not resurrected by a stale catalog. These UI gates do not change approval or
+delete authority.
+
 ## Frozen boundaries
 
-Phase 3.5.4a-c add no recovery UI, telemetry persistence, generic polling loop,
-automatic mutation retry/replay, client identity, owner, lease, `FREE`,
-`AVAILABLE`, or `RELEASED` semantics. Phase 3.5.4d owns later user-visible
-freshness status and comprehensive missed-event detection.
+Phase 3.5.4a-d add no telemetry persistence, generic polling loop, automatic
+mutation retry/replay, client identity, owner, lease, `FREE`, `AVAILABLE`, or
+`RELEASED` semantics. Gap evidence never becomes canonical truth and never
+dispatches resume, approval, delete, or unsubscribe mutations.
 
 Compatibility fixtures are stored under `docs/fixtures/projection-freshness/`
 and `docs/fixtures/generation-tagged-events/`; implementation evidence is
@@ -148,3 +180,6 @@ indexed under `docs/evidence/phase-3-5-4a/` and
 `docs/evidence/phase-3-5-4b/`. Phase 3.5.4c sanitized recovery fixtures live
 under `src-tauri/tests/fixtures/phase-3-5-4c-authoritative-hydration/`, with
 implementation evidence under `docs/evidence/phase-3-5-4c/`.
+Phase 3.5.4d sanitized UI/gap/multi-client fixtures live under
+`src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/`, with implementation
+evidence under `docs/evidence/phase-3-5-4d/`.

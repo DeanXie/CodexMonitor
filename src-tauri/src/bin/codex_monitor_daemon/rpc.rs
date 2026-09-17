@@ -60,6 +60,29 @@ fn build_event_notification(
     serde_json::to_string(&payload).ok()
 }
 
+fn build_event_gap_notification(
+    skipped: u64,
+    daemon_process_generation: &DaemonProcessGeneration,
+    remote_transport_generation: &RemoteTransportGeneration,
+) -> Option<String> {
+    serde_json::to_string(&json!({
+        "method": "app-server-event-gap",
+        "params": {
+            "skipped": skipped,
+            "observedAt": chrono::Utc::now().timestamp_millis(),
+            "daemonProcessGeneration": daemon_process_generation.as_str(),
+            "remoteTransportGeneration": remote_transport_generation.as_str(),
+            "affectedCoverages": [
+                "thread_catalog",
+                "thread_detail",
+                "observation_snapshot",
+            ],
+            "persistent": false,
+        },
+    }))
+    .ok()
+}
+
 pub(super) fn parse_auth_token(params: &Value) -> Option<String> {
     match params {
         Value::String(value) => Some(value.clone()),
@@ -178,7 +201,19 @@ pub(super) async fn forward_events(
     loop {
         let event = match rx.recv().await {
             Ok(event) => event,
-            Err(broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                let Some(payload) = build_event_gap_notification(
+                    skipped,
+                    &daemon_process_generation,
+                    &remote_transport_generation,
+                ) else {
+                    continue;
+                };
+                if out_tx_events.send(payload).is_err() {
+                    break;
+                }
+                continue;
+            }
             Err(broadcast::error::RecvError::Closed) => break,
         };
 
@@ -284,5 +319,27 @@ mod generation_event_delivery_tests {
             value.pointer("/params/appServerConnectionGeneration"),
             Some(&json!("connection-generation-a"))
         );
+    }
+
+    #[test]
+    fn broadcast_lag_marker_is_ephemeral_and_transport_scoped() {
+        let daemon = DaemonProcessGeneration::new("daemon-generation-a").unwrap();
+        let transport = RemoteTransportGeneration::new("transport-generation-a").unwrap();
+
+        let wire = build_event_gap_notification(3, &daemon, &transport).expect("gap notification");
+        let value: Value = serde_json::from_str(&wire).expect("valid notification");
+
+        assert_eq!(value["method"], "app-server-event-gap");
+        assert_eq!(value["params"]["skipped"], 3);
+        assert_eq!(
+            value["params"]["daemonProcessGeneration"],
+            "daemon-generation-a"
+        );
+        assert_eq!(
+            value["params"]["remoteTransportGeneration"],
+            "transport-generation-a"
+        );
+        assert_eq!(value["params"]["persistent"], false);
+        assert!(value["params"].get("sequence").is_none());
     }
 }

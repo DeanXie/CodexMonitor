@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 import type { ApprovalRequest, WorkspaceInfo } from "../../../types";
 import { ApprovalToasts } from "./ApprovalToasts";
 
@@ -29,6 +30,8 @@ const approvals: ApprovalRequest[] = [
   },
 ];
 
+afterEach(cleanup);
+
 describe("ApprovalToasts", () => {
   it("renders live-region semantics and handles Enter on primary request", () => {
     const onDecision = vi.fn();
@@ -56,5 +59,25 @@ describe("ApprovalToasts", () => {
     fireEvent.keyDown(window, { key: "Enter" });
     expect(onDecision).not.toHaveBeenCalled();
     document.body.removeChild(input);
+  });
+
+  it("does not expose approval actions when the exact observation is not current", () => {
+    const onDecision = vi.fn();
+    render(
+      <ApprovalToasts
+        approvals={approvals}
+        workspaces={workspaces}
+        onDecision={onDecision}
+        isActionable={() => false}
+      />,
+    );
+
+    expect(screen.getAllByRole("button")).toHaveLength(4);
+    for (const button of screen.getAllByRole("button")) {
+      expect(button.hasAttribute("disabled")).toBe(true);
+    }
+    expect(screen.getAllByText("Approval state is not current.")).toHaveLength(2);
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(onDecision).not.toHaveBeenCalled();
   });
 });

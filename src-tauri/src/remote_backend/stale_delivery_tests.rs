@@ -47,6 +47,26 @@ fn dispatch(gate: &RemoteNotificationDeliveryGate, marker: &str) -> Vec<(String,
     events
 }
 
+fn dispatch_gap(gate: &RemoteNotificationDeliveryGate) -> Vec<(String, String)> {
+    let mut events = Vec::new();
+    let generation = gate
+        .authenticated_generation()
+        .expect("authenticated generation");
+    dispatch_notification_if_current(
+        gate,
+        "app-server-event-gap",
+        serde_json::json!({
+            "skipped": 2,
+            "persistent": false,
+            "daemonProcessGeneration": "daemon-generation-current",
+            "remoteTransportGeneration": generation.as_str(),
+            "affectedCoverages": ["thread_catalog", "thread_detail", "observation_snapshot"]
+        }),
+        |event, payload| events.push((event.to_string(), payload.to_string())),
+    );
+    events
+}
+
 #[test]
 fn remote_event_binds_current_transport_generation() {
     let authority = RemoteNotificationDeliveryAuthority::default();
@@ -110,6 +130,19 @@ fn remote_clients_bind_same_shared_event_to_independent_transport_generations() 
     assert_eq!(second_events.len(), 1);
     assert!(first_events[0].1.contains("transport-generation-first"));
     assert!(second_events[0].1.contains("transport-generation-second"));
+}
+
+#[test]
+fn gap_marker_is_delivered_only_to_current_transport_generation() {
+    let authority = RemoteNotificationDeliveryAuthority::default();
+    let stale = authenticated_gate(&authority, "transport-generation-stale");
+    let current = authenticated_gate(&authority, "transport-generation-current");
+    authority.publish_current(generation("transport-generation-current"));
+
+    assert!(dispatch_gap(&stale).is_empty());
+    let delivered = dispatch_gap(&current);
+    assert_eq!(delivered.len(), 1);
+    assert_eq!(delivered[0].0, "app-server-event-gap");
 }
 
 #[test]

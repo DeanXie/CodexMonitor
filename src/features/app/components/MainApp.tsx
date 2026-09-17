@@ -51,6 +51,7 @@ import { useMainAppThreadCodexState } from "@app/hooks/useMainAppThreadCodexStat
 import { useMainAppWorktreeState } from "@app/hooks/useMainAppWorktreeState";
 import { useMainAppWorkspaceActions } from "@app/hooks/useMainAppWorkspaceActions";
 import { useMainAppWorkspaceLifecycle } from "@app/hooks/useMainAppWorkspaceLifecycle";
+import { useRemoteProjectionStatus } from "@app/hooks/useRemoteProjectionStatus";
 import { useMainAppMobileThreadRefresh } from "@app/hooks/useMainAppMobileThreadRefresh";
 import { useHomeAccount } from "@app/hooks/useHomeAccount";
 import { AgentMonitorPage } from "@/features/agent-monitor/components/AgentMonitorPage";
@@ -1256,7 +1257,7 @@ export default function MainApp() {
   });
   const { baseWorkspaceRef } = worktreeState;
 
-  useMainAppWorkspaceLifecycle({
+  const { recoverWorkspace } = useMainAppWorkspaceLifecycle({
     activeTab,
     isTablet,
     setActiveTab,
@@ -1271,6 +1272,16 @@ export default function MainApp() {
     threadStatusById,
     remoteThreadConnectionState,
     refreshThread,
+  });
+
+  const remoteProjectionStatus = useRemoteProjectionStatus({
+    backendMode: appSettings.backendMode,
+    activeWorkspace,
+    activeThreadId,
+    activeTargetId: appSettings.activeRemoteBackendId,
+    deliveryMode: remoteThreadConnectionState,
+    recoverWorkspace,
+    approvals,
   });
 
   const {
@@ -1728,6 +1739,10 @@ export default function MainApp() {
     onCancelSwitchAccount: handleCancelSwitchAccount,
     onDecision: handleApprovalDecision,
     onRemember: handleApprovalRemember,
+    isApprovalActionable:
+      appSettings.backendMode === "remote"
+        ? remoteProjectionStatus.isApprovalActionable
+        : undefined,
     onUserInputSubmit: handleUserInputSubmit,
     onPlanAccept: handlePlanAccept,
     onPlanSubmitChanges: handlePlanSubmitChanges,
@@ -2034,6 +2049,10 @@ export default function MainApp() {
       hasActiveWorkspace: Boolean(activeWorkspace),
       backendMode: appSettings.backendMode,
       remoteThreadConnectionState: compactThreadConnectionState,
+      projectionStatusModel:
+        appSettings.backendMode === "remote"
+          ? remoteProjectionStatus.model
+          : null,
     },
   });
 

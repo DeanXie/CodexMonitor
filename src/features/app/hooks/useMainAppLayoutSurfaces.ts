@@ -65,6 +65,7 @@ type UseMainAppLayoutSurfacesArgs = {
   onCancelSwitchAccount: SidebarProps["onCancelSwitchAccount"];
   onDecision: LayoutNodesOptions["primary"]["approvalToastsProps"]["onDecision"];
   onRemember: LayoutNodesOptions["primary"]["approvalToastsProps"]["onRemember"];
+  isApprovalActionable?: LayoutNodesOptions["primary"]["approvalToastsProps"]["isActionable"];
   onUserInputSubmit: LayoutNodesOptions["primary"]["messagesProps"]["onUserInputSubmit"];
   onPlanAccept: LayoutNodesOptions["primary"]["messagesProps"]["onPlanAccept"];
   onPlanSubmitChanges: LayoutNodesOptions["primary"]["messagesProps"]["onPlanSubmitChanges"];
@@ -271,6 +272,7 @@ function buildPrimarySurface({
   onCancelSwitchAccount,
   onDecision,
   onRemember,
+  isApprovalActionable,
   onUserInputSubmit,
   onPlanAccept,
   onPlanSubmitChanges,
@@ -576,6 +578,7 @@ function buildPrimarySurface({
       workspaces,
       onDecision,
       onRemember,
+      isActionable: isApprovalActionable,
     },
     updateToastProps: {
       state: appModalsAboutOpen ? { stage: "idle" as const } : updaterState,

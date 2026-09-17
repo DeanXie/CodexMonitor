@@ -102,6 +102,16 @@ they do not make stale or unhydrated coverage current. Recovery performs no
 resume, approval decision, Thread delete, upstream unsubscribe, mutation retry,
 or mutation replay.
 
+Phase 3.5.4d maps the existing coverage-specific freshness snapshots to the
+Remote shell's `Current`, `Hydrating`, `Stale`, `Unavailable`, and `Unknown`
+states. Availability layers and the legacy live-delivery mode remain separate
+diagnostics. When a daemon broadcast receiver reports lag, it emits an
+ephemeral `app-server-event-gap` marker bound to that daemon process and Remote
+transport generation. The marker invalidates only the matching frontend's
+affected coverage view and triggers the existing read-only single-flight
+recovery. It has no durable sequence and does not mutate shared session,
+writer, subscription, runtime, approval, delete, or Thread authority.
+
 Phase 3.5.2d freezes five distinct continuity authorities around this delivery
 path: `RemoteHostIdentity` identifies the host;
 `DaemonProcessGeneration`, `RemoteTransportGeneration`,

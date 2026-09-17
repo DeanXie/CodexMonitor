@@ -1,6 +1,8 @@
 import { SidebarCollapseButton } from "@/features/layout/components/SidebarToggleControls";
 import type { ComponentProps } from "react";
 import { MainAppShell } from "@app/components/MainAppShell";
+import { ProjectionStatusIndicator } from "@app/components/ProjectionStatusIndicator";
+import type { ProjectionStatusModel } from "@app/orchestration/projectionStatusModel";
 
 type UseMainAppShellPropsArgs = {
   shell: Pick<
@@ -23,6 +25,7 @@ type UseMainAppShellPropsArgs = {
     hasActiveWorkspace: boolean;
     backendMode: "local" | "remote";
     remoteThreadConnectionState: "live" | "polling" | "disconnected";
+    projectionStatusModel: ProjectionStatusModel | null;
   };
 };
 
@@ -34,29 +37,8 @@ export function useMainAppShellProps({
 }: UseMainAppShellPropsArgs) {
   const showThreadConnectionIndicator =
     topbar.hasActiveWorkspace && topbar.backendMode === "remote";
-  const topbarActionsNode = showThreadConnectionIndicator ? (
-    <span
-      className={`compact-workspace-live-indicator ${
-        topbar.remoteThreadConnectionState === "live"
-          ? "is-live"
-          : topbar.remoteThreadConnectionState === "polling"
-            ? "is-polling"
-            : "is-disconnected"
-      }`}
-      title={
-        topbar.remoteThreadConnectionState === "live"
-          ? "Receiving live thread events"
-          : topbar.remoteThreadConnectionState === "polling"
-            ? "Connected, syncing thread state by polling"
-            : "Disconnected from backend"
-      }
-    >
-      {topbar.remoteThreadConnectionState === "live"
-        ? "Live"
-        : topbar.remoteThreadConnectionState === "polling"
-          ? "Polling"
-          : "Disconnected"}
-    </span>
+  const topbarActionsNode = showThreadConnectionIndicator && topbar.projectionStatusModel ? (
+    <ProjectionStatusIndicator model={topbar.projectionStatusModel} />
   ) : null;
 
   const desktopTopbarLeftNodeWithToggle = !topbar.isCompact ? (

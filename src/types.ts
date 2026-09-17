@@ -661,6 +661,80 @@ export type ProjectionFreshnessQuerySnapshot = {
   coverages: ProjectionFreshnessSnapshot[];
 };
 
+export type RemoteTransportAvailabilityState =
+  | "NOT_CONFIGURED"
+  | "CONNECTING"
+  | "CONNECTED"
+  | "ENDPOINT_UNREACHABLE"
+  | "DISCONNECTED"
+  | "UNKNOWN";
+
+export type RemoteAuthAvailabilityState =
+  | "NOT_ATTEMPTED"
+  | "AUTHENTICATING"
+  | "AUTHENTICATED"
+  | "FAILED"
+  | "UNKNOWN";
+
+export type RemoteDaemonAvailabilityState =
+  | "NOT_OBSERVED"
+  | "VALIDATING"
+  | "AVAILABLE"
+  | "PROTOCOL_UNSUPPORTED"
+  | "IDENTITY_MISMATCH"
+  | "SERVICE_MISMATCH"
+  | "INVALID_RESPONSE"
+  | "UNKNOWN";
+
+export type RemoteRuntimeAvailabilityState =
+  | "NOT_OBSERVED"
+  | "STARTING"
+  | "READY"
+  | "UNAVAILABLE"
+  | "UNKNOWN";
+
+export type RemoteHostAvailabilitySnapshot = {
+  targetId: string;
+  expectedRemoteHostIdentity: string | null;
+  observedRemoteHostIdentity: string | null;
+  attemptId: number;
+  transport: RemoteTransportAvailabilityState;
+  auth: RemoteAuthAvailabilityState;
+  daemon: RemoteDaemonAvailabilityState;
+  runtime: {
+    workspaceId: string | null;
+    state: RemoteRuntimeAvailabilityState;
+  };
+  observedAt: number;
+  lastSuccessfulHandshakeAt: number | null;
+  lastRuntimeReadyAt: number | null;
+  daemonProcessGeneration?: string | null;
+  diagnostics: Array<{
+    stage: string;
+    message: string;
+    observedAt: number;
+    attemptId: number;
+  }>;
+};
+
+export type ProjectionDeliveryGapEvidence = {
+  workspaceId: string;
+  affectedCoverages: ProjectionFreshnessCoverage[];
+  skipped: number;
+  observedAt: number;
+  daemonProcessGeneration: string | null;
+  remoteTransportGeneration: string | null;
+};
+
+export type AppServerEventGap = {
+  skipped: number;
+  observedAt: number;
+  daemonProcessGeneration: string;
+  remoteTransportGeneration: string;
+  affectedCoverages: ProjectionFreshnessCoverage[];
+  persistent?: false;
+};
+
 export type LocalUsageDay = {
   day: string;
   inputTokens: number;

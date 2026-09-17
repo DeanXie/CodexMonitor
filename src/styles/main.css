@@ -923,6 +923,45 @@
   background: color-mix(in srgb, var(--status-error) 12%, transparent);
 }
 
+.projection-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.projection-status-primary {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.projection-status-indicator.is-stale .projection-status-primary,
+.projection-status-indicator.is-hydrating .projection-status-primary {
+  color: var(--warning-text, var(--text-primary));
+}
+
+.projection-status-indicator.is-unavailable .projection-status-primary,
+.projection-status-indicator.is-unknown .projection-status-primary {
+  color: var(--text-muted);
+}
+
+.projection-status-availability,
+.projection-status-delivery {
+  color: var(--text-muted);
+}
+
+.approval-toast-stale-warning {
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .compact-codex-refresh-icon.spinning {
   animation: compact-codex-refresh-spin var(--ds-spinner-dur) linear infinite;
 }

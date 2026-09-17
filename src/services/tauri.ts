@@ -25,6 +25,7 @@ import type {
   ProjectionFreshnessCoverage,
   WriterAdmissionObservationSnapshot,
   ProjectionFreshnessQuerySnapshot,
+  RemoteHostAvailabilitySnapshot,
 } from "../types";
 
 export class StaleAuthoritativeReadError extends Error {
@@ -1220,6 +1221,10 @@ export async function getProjectionFreshness(
   });
   recordProjectionFreshnessForEventDelivery(snapshot);
   return snapshot;
+}
+
+export async function getRemoteHostAvailability() {
+  return invoke<RemoteHostAvailabilitySnapshot[]>("get_remote_host_availability");
 }
 
 export async function readThread(workspaceId: string, threadId: string) {

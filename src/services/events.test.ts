@@ -3,11 +3,13 @@ import type { Event, EventCallback, UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import currentLocalAppEvent from "../../docs/fixtures/generation-tagged-events/current-local-app-event.json";
 import currentRemoteEvent from "../../docs/fixtures/generation-tagged-events/current-remote-event.json";
-import type { AppServerEvent } from "../types";
+import type { AppServerEvent, AppServerEventGap } from "../types";
 import type { GlobalSourceSnapshot } from "@/features/agent-monitor/global-source/types";
 import {
   clearAppServerEventGenerationContext,
   recordProjectionFreshnessForEventDelivery,
+  subscribeAppServerEventGaps,
+  subscribeProjectionFreshnessSnapshots,
   subscribeAppServerEvents,
   subscribeGlobalSourceSnapshot,
   subscribeMenuCycleCollaborationMode,
@@ -339,6 +341,90 @@ describe("events subscriptions", () => {
     expect(onEvent).toHaveBeenCalledTimes(2);
     expect(onEvent).toHaveBeenNthCalledWith(1, oldEvent);
     expect(onEvent).toHaveBeenNthCalledWith(2, nextEvent);
+    cleanup();
+  });
+
+  it("known_gap_is_scoped_to_hydrated_workspaces_on_this_frontend", () => {
+    recordProjectionFreshnessForEventDelivery({
+      ...currentFreshness(),
+      coverages: [{
+        ...currentFreshness().coverages[0],
+        generations: {
+          ...generations,
+          daemonProcessGeneration: "daemon-current",
+          remoteTransportGeneration: "transport-current",
+        },
+      }],
+    });
+    const onGap = vi.fn();
+    const cleanup = subscribeAppServerEventGaps(onGap);
+    const call = vi.mocked(listen).mock.calls.find(
+      ([event]) => event === "app-server-event-gap",
+    );
+    const handler = call?.[1] as EventCallback<AppServerEventGap>;
+
+    handler({
+      event: "app-server-event-gap",
+      id: 17,
+      payload: {
+        skipped: 3,
+        observedAt: 20,
+        daemonProcessGeneration: "daemon-current",
+        remoteTransportGeneration: "transport-current",
+        affectedCoverages: ["thread_catalog", "thread_detail", "observation_snapshot"],
+      },
+    });
+
+    expect(onGap).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId: "ws-1",
+      skipped: 3,
+    }));
+    cleanup();
+  });
+
+  it("stale_transport_gap_is_not_delivered", () => {
+    recordProjectionFreshnessForEventDelivery({
+      ...currentFreshness(),
+      coverages: [{
+        ...currentFreshness().coverages[0],
+        generations: {
+          ...generations,
+          daemonProcessGeneration: "daemon-current",
+          remoteTransportGeneration: "transport-current",
+        },
+      }],
+    });
+    const onGap = vi.fn();
+    const cleanup = subscribeAppServerEventGaps(onGap);
+    const call = vi.mocked(listen).mock.calls.find(
+      ([event]) => event === "app-server-event-gap",
+    );
+    const handler = call?.[1] as EventCallback<AppServerEventGap>;
+
+    handler({
+      event: "app-server-event-gap",
+      id: 18,
+      payload: {
+        skipped: 1,
+        observedAt: 20,
+        daemonProcessGeneration: "daemon-current",
+        remoteTransportGeneration: "transport-stale",
+        affectedCoverages: ["thread_catalog"],
+      },
+    });
+
+    expect(onGap).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it("authoritative_freshness_snapshots_are_observable_without_new_authority", () => {
+    const onSnapshot = vi.fn();
+    const cleanup = subscribeProjectionFreshnessSnapshots(onSnapshot);
+    const snapshot = currentFreshness();
+
+    recordProjectionFreshnessForEventDelivery(snapshot);
+
+    expect(onSnapshot).toHaveBeenCalledWith(snapshot);
     cleanup();
   });
 

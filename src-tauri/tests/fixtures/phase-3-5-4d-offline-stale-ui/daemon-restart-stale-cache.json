@@ -1,0 +1,1 @@
+{"scenario":"daemon-restart-stale-cache","evidenceDaemonGeneration":"daemon-1","currentDaemonGeneration":"daemon-2","expectedUi":"Stale"}

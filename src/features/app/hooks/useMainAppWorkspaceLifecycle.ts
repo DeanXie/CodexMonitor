@@ -128,4 +128,6 @@ export function useMainAppWorkspaceLifecycle({
     refreshThread,
     recoverWorkspace,
   });
+
+  return { recoverWorkspace };
 }

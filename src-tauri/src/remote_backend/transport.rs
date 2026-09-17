@@ -134,6 +134,27 @@ pub(crate) fn dispatch_notification_if_current<F>(
                 emit(method, params);
             }
         }
+        "app-server-event-gap" => {
+            let transport_matches = params
+                .get("remoteTransportGeneration")
+                .and_then(Value::as_str)
+                == Some(generation.as_str());
+            let has_daemon_generation = params
+                .get("daemonProcessGeneration")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty());
+            let has_gap = params
+                .get("skipped")
+                .and_then(Value::as_u64)
+                .is_some_and(|value| value > 0);
+            let has_coverages = params
+                .get("affectedCoverages")
+                .and_then(Value::as_array)
+                .is_some_and(|values| !values.is_empty());
+            if transport_matches && has_daemon_generation && has_gap && has_coverages {
+                emit(method, params);
+            }
+        }
         "terminal-output" | "terminal-exit" => emit(method, params),
         _ => {}
     }

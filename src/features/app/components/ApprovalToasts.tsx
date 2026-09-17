@@ -16,6 +16,7 @@ type ApprovalToastsProps = {
   workspaces: WorkspaceInfo[];
   onDecision: (request: ApprovalRequest, decision: "accept" | "decline") => void;
   onRemember?: (request: ApprovalRequest, command: string[]) => void;
+  isActionable?: (request: ApprovalRequest) => boolean;
 };
 
 export function ApprovalToasts({
@@ -23,6 +24,7 @@ export function ApprovalToasts({
   workspaces,
   onDecision,
   onRemember,
+  isActionable = () => true,
 }: ApprovalToastsProps) {
   const workspaceLabels = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace.name])),
@@ -32,7 +34,7 @@ export function ApprovalToasts({
   const primaryRequest = approvals[approvals.length - 1];
 
   useEffect(() => {
-    if (!primaryRequest) {
+    if (!primaryRequest || !isActionable(primaryRequest)) {
       return;
     }
 
@@ -56,7 +58,7 @@ export function ApprovalToasts({
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onDecision, primaryRequest]);
+  }, [isActionable, onDecision, primaryRequest]);
 
   if (!approvals.length) {
     return null;
@@ -92,6 +94,7 @@ export function ApprovalToasts({
   return (
     <ToastViewport className="approval-toasts" role="region" ariaLive="assertive">
       {approvals.map((request) => {
+        const actionable = isActionable(request);
         const workspaceName = workspaceLabels.get(request.workspace_id);
         const params = request.params ?? {};
         const commandInfo = getApprovalCommandInfo(params);
@@ -137,8 +140,14 @@ export function ApprovalToasts({
               )}
             </div>
             <ToastActions className="approval-toast-actions">
+              {!actionable ? (
+                <span className="approval-toast-stale-warning">
+                  Approval state is not current.
+                </span>
+              ) : null}
               <button
                 className="secondary"
+                disabled={!actionable}
                 onClick={() => onDecision(request, "decline")}
               >
                 Decline
@@ -146,6 +155,7 @@ export function ApprovalToasts({
               {commandInfo && onRemember ? (
                 <button
                   className="ghost approval-toast-remember"
+                  disabled={!actionable}
                   onClick={() => onRemember(request, commandInfo.tokens)}
                   title={`Allow commands that start with ${commandInfo.preview}`}
                 >
@@ -154,6 +164,7 @@ export function ApprovalToasts({
               ) : null}
               <button
                 className="primary"
+                disabled={!actionable}
                 onClick={() => onDecision(request, "accept")}
               >
                 Approve (Enter)

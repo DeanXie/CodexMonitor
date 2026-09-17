@@ -1,10 +1,12 @@
 import { listen } from "@tauri-apps/api/event";
 import type {
+  AppServerEventGap,
   AppServerEvent,
   DictationEvent,
   DictationModelStatus,
   ProjectionFreshnessGenerationVector,
   ProjectionFreshnessQuerySnapshot,
+  ProjectionDeliveryGapEvidence,
   TrayOpenThreadPayload,
 } from "../types";
 import type { GlobalSourceSnapshot } from "@/features/agent-monitor/global-source/types";
@@ -104,6 +106,9 @@ const appServerEventGenerationContexts = new Map<
   string,
   AppServerEventGenerationContext
 >();
+const projectionFreshnessListeners = new Set<
+  Listener<ProjectionFreshnessQuerySnapshot>
+>();
 
 function hasRequiredSessionGenerations(
   generations: ProjectionFreshnessGenerationVector,
@@ -150,6 +155,13 @@ function shouldDeliverAppServerEvent(event: AppServerEvent): boolean {
 export function recordProjectionFreshnessForEventDelivery(
   snapshot: ProjectionFreshnessQuerySnapshot,
 ): void {
+  for (const listener of projectionFreshnessListeners) {
+    try {
+      listener(snapshot);
+    } catch (error) {
+      console.error("[events] projection freshness listener failed", error);
+    }
+  }
   const threadCatalog = snapshot.coverages.find(
     (coverage) => coverage.coverage === "thread_catalog",
   );
@@ -166,6 +178,13 @@ export function recordProjectionFreshnessForEventDelivery(
   });
 }
 
+export function subscribeProjectionFreshnessSnapshots(
+  onSnapshot: Listener<ProjectionFreshnessQuerySnapshot>,
+): Unsubscribe {
+  projectionFreshnessListeners.add(onSnapshot);
+  return () => projectionFreshnessListeners.delete(onSnapshot);
+}
+
 export function invalidateAppServerEventGenerationContext(
   workspaceId: string,
 ): void {
@@ -180,6 +199,7 @@ const appServerHub = createEventHub<AppServerEvent>(
   "app-server-event",
   shouldDeliverAppServerEvent,
 );
+const appServerGapHub = createEventHub<AppServerEventGap>("app-server-event-gap");
 const globalSourceSnapshotHub = createEventHub<GlobalSourceSnapshot>(
   "global-source-snapshot-updated",
 );
@@ -219,6 +239,32 @@ export function subscribeAppServerEvents(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return appServerHub.subscribe(onEvent, options);
+}
+
+export function subscribeAppServerEventGaps(
+  onGap: (gap: ProjectionDeliveryGapEvidence) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return appServerGapHub.subscribe((gap) => {
+    for (const [workspaceId, context] of appServerEventGenerationContexts) {
+      if (
+        gap.daemonProcessGeneration ===
+          context.generations.daemonProcessGeneration &&
+        gap.remoteTransportGeneration ===
+          context.generations.remoteTransportGeneration
+      ) {
+        context.hasCurrentCoverage = false;
+        onGap({
+          workspaceId,
+          affectedCoverages: gap.affectedCoverages,
+          skipped: gap.skipped,
+          observedAt: gap.observedAt,
+          daemonProcessGeneration: gap.daemonProcessGeneration,
+          remoteTransportGeneration: gap.remoteTransportGeneration,
+        });
+      }
+    }
+  }, options);
 }
 
 export function subscribeGlobalSourceSnapshot(

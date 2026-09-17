@@ -112,3 +112,10 @@ selected-thread and observation hydration, stale-result isolation, partial
 failure, event interleaving, and multi-client convergence without replaying a
 mutation. The implementation evidence index is
 `phase-3-5-4c/authoritative-recovery-hydration.md`.
+
+Phase 3.5.4d offline/stale UI fixtures are stored in
+`../../src-tauri/tests/fixtures/phase-3-5-4d-offline-stale-ui/`. They freeze
+coverage-specific display states, layered availability, ephemeral gap evidence,
+duplicate/out-of-order handling, reconnect/restart cache behavior,
+multi-client isolation/convergence, and approval/delete stale safety. The
+implementation evidence index is `phase-3-5-4d/offline-stale-ui.md`.

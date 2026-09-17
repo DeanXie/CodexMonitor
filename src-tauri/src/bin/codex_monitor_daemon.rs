@@ -890,7 +890,29 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        codex_core::delete_thread_core(&self.sessions, workspace_id, thread_id).await
+        codex_core::delete_thread_core(
+            &self.sessions,
+            workspace_id,
+            thread_id,
+            self.remote_host_identity.clone(),
+        )
+        .await
+    }
+
+    async fn delete_thread_with_remote_context(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+        remote_context: &RemoteRequestDispatchContext,
+    ) -> Result<Value, String> {
+        codex_core::delete_thread_core_with_remote_context(
+            &self.sessions,
+            workspace_id,
+            thread_id,
+            self.remote_host_identity.clone(),
+            Some(remote_context),
+        )
+        .await
     }
 
     async fn compact_thread(
@@ -1851,6 +1873,7 @@ mod tests {
             writer_admission_observations,
             thread_lifecycle_observations: Default::default(),
             approval_observations: Default::default(),
+            delete_mutation_observations: Default::default(),
             codex_args: None,
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),

@@ -6,6 +6,7 @@ use crate::shared::remote_request_provenance::{
 use crate::shared::codex_core::thread_lifecycle_observation::ThreadSubscriptionObservationState;
 use crate::shared::codex_core::writer_admission_observation::WriterAdmissionObservationState;
 use crate::shared::codex_core::approval_decision_provenance::ApprovalDecisionState;
+use crate::shared::codex_core::delete_mutation_observation::DeleteMutationState;
 use std::sync::atomic::Ordering;
 
 async fn respond_to_resume(session: &WorkspaceSession, thread_id: &str) {
@@ -30,6 +31,28 @@ async fn respond_to_resume(session: &WorkspaceSession, thread_id: &str) {
     panic!("resume request was not dispatched");
 }
 
+async fn respond_to_delete(session: &WorkspaceSession) {
+    for _ in 0..100 {
+        let request_id = session.pending.lock().await.keys().next().copied();
+        if let Some(request_id) = request_id {
+            session
+                .pending
+                .lock()
+                .await
+                .remove(&request_id)
+                .expect("pending delete request")
+                .send(json!({
+                    "id": request_id,
+                    "result": {},
+                }))
+                .expect("deliver delete response");
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("delete request was not dispatched");
+}
+
 fn remote_context(
     generation: &str,
     request_id: u64,
@@ -50,6 +73,56 @@ fn remote_context(
         .expect("dispatch starts");
     let context = RemoteRequestDispatchContext::new(Arc::clone(&provenance), key.clone());
     (provenance, key, context)
+}
+
+#[test]
+fn remote_delete_binds_transport_to_exact_session_attempt() {
+    run_async_test(async {
+        let tmp = make_temp_dir("remote-delete-correlation");
+        let workspace_id = "remote-delete-correlation-workspace";
+        let thread_id = "0199a8c0-1111-7222-8333-444455556666";
+        let state = test_state(&tmp);
+        insert_workspace(&state, workspace_id, &tmp.to_string_lossy()).await;
+        let session = make_session(make_workspace_entry(workspace_id, &tmp.to_string_lossy()));
+        state
+            .sessions
+            .lock()
+            .await
+            .insert(workspace_id.to_string(), Arc::clone(&session));
+        let (provenance, key, context) =
+            remote_context("transport-delete-a", 61, "delete_thread");
+
+        let call = rpc::handle_rpc_request_with_context(
+            &state,
+            "delete_thread",
+            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+            "daemon-test".to_string(),
+            Some(&context),
+        );
+        let response = respond_to_delete(&session);
+        let (result, ()) = tokio::join!(call, response);
+        assert_eq!(result.expect("delete succeeds")["result"], json!({}));
+
+        let attempt = provenance
+            .snapshot(&key)
+            .expect("transport provenance")
+            .session_attempt
+            .expect("delete attempt correlation");
+        assert_eq!(attempt.kind, SessionAttemptKind::DeleteMutation);
+        assert_eq!(attempt.workspace_id, workspace_id);
+        assert_eq!(attempt.thread_key.thread_id, thread_id);
+        assert_eq!(
+            session
+                .delete_mutation_observations
+                .latest_for_thread(&attempt.thread_key)
+                .expect("delete observation")
+                .state,
+            DeleteMutationState::DeleteConfirmed
+        );
+
+        stop_session(&session).await;
+        let _ = std::fs::remove_dir_all(tmp);
+    });
 }
 
 async fn stop_session(session: &WorkspaceSession) {

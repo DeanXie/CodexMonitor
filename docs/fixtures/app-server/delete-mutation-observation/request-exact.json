@@ -1,0 +1,6 @@
+{
+  "method": "thread/delete",
+  "params": {
+    "threadId": "0199a8c0-1111-7222-8333-444455556666"
+  }
+}

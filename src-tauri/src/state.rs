@@ -48,6 +48,9 @@ pub(crate) struct AppState {
     pub(crate) codex_login_cancels: Mutex<HashMap<String, CodexLoginCancelState>>,
     pub(crate) tcp_daemon: Mutex<TcpDaemonRuntime>,
     #[cfg(desktop)]
+    pub(crate) remote_host_identity:
+        Result<crate::shared::remote_host_identity::RemoteHostIdentity, String>,
+    #[cfg(desktop)]
     pub(crate) global_rollout_runtime: crate::global_sources::runtime::GlobalRolloutRuntime,
 }
 
@@ -61,6 +64,9 @@ impl AppState {
         let settings_path = data_dir.join("settings.json");
         let workspaces = read_workspaces(&storage_path).unwrap_or_default();
         let app_settings = read_settings(&settings_path).unwrap_or_default();
+        #[cfg(desktop)]
+        let remote_host_identity =
+            crate::shared::remote_host_identity::load_or_initialize_remote_host_identity(&data_dir);
         Self {
             creation_coordinator: Default::default(),
             execution_settings_evidence: Default::default(),
@@ -75,6 +81,8 @@ impl AppState {
             dictation: Mutex::new(DictationState::default()),
             codex_login_cancels: Mutex::new(HashMap::new()),
             tcp_daemon: Mutex::new(TcpDaemonRuntime::default()),
+            #[cfg(desktop)]
+            remote_host_identity,
             #[cfg(desktop)]
             global_rollout_runtime: crate::global_sources::runtime::GlobalRolloutRuntime::default(),
         }

@@ -80,3 +80,13 @@ families, exact generation/approval identity scope, single-admitted-attempt
 gate, write-boundary classification, and zero retry/replay contract. The
 fixtures are deterministic fake-authority inputs only; they do not answer a
 real approval request or claim that a dispatched response was applied.
+
+## Delete mutation observation
+
+`delete-mutation-observation/` freezes the Phase 3.5.3c exact full-Thread-ID
+request, bundled empty-success response, active-writer rejection,
+current-generation `thread/deleted` confirmation, post-dispatch response-loss,
+and session-ended unresolved contracts. The fixtures contain sanitized UUIDs
+and no real Thread, rollout, A3 target, Remote-client identity, delete owner, or
+lease. They are consumed only by fake app-server and deterministic session
+tests; retry and replay remain zero.

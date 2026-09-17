@@ -1,0 +1,7 @@
+{
+  "id": 42,
+  "error": {
+    "code": -32600,
+    "message": "thread already has an active writer"
+  }
+}

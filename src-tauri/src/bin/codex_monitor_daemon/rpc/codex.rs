@@ -211,7 +211,14 @@ pub(super) async fn try_handle(
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            Some(state.delete_thread(workspace_id, thread_id).await)
+            Some(match remote_context {
+                Some(remote_context) => {
+                    state
+                        .delete_thread_with_remote_context(workspace_id, thread_id, remote_context)
+                        .await
+                }
+                None => state.delete_thread(workspace_id, thread_id).await,
+            })
         }
         "compact_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {

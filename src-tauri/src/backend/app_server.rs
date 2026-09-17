@@ -23,6 +23,10 @@ use crate::shared::codex_core::approval_observation::{
     ApprovalSessionEndEvidenceKind,
 };
 use crate::shared::codex_core::creation_coordination::{CreationCoordinator, DispatchBoundary};
+use crate::shared::codex_core::delete_mutation_observation::{
+    classify_delete_dispatch_error, is_exact_delete_success, DeleteAttemptId,
+    DeleteMutationFailureKind, DeleteMutationObservationRuntime,
+};
 use crate::shared::codex_core::thread_lifecycle_observation::{
     AppServerConnectionEndEvidenceKind, ThreadLifecycleObservationRuntime,
     ThreadRuntimeAvailabilityEvidenceSource, ThreadSubscriptionEvidenceSource,
@@ -35,6 +39,7 @@ use crate::shared::codex_core::writer_admission_observation::{
 use crate::shared::codex_identity::CodexThreadKey;
 use crate::shared::execution_settings_ingestion::ExecutionSettingsEvidenceRuntime;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
+use crate::shared::remote_host_identity::RemoteHostIdentity;
 use crate::shared::remote_request_provenance::{
     RemoteRequestDispatchContext, SessionAttemptProvenance,
 };
@@ -902,6 +907,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) writer_admission_observations: WriterAdmissionObservationRuntime,
     pub(crate) thread_lifecycle_observations: ThreadLifecycleObservationRuntime,
     pub(crate) approval_observations: ApprovalObservationRuntime,
+    pub(crate) delete_mutation_observations: DeleteMutationObservationRuntime,
     // Shared process owner survives session reconnect; this is only an observer.
     pub(crate) creation_coordinator: Mutex<Option<CreationCoordinator>>,
     pub(crate) runtime_observation_keys: Mutex<HashSet<String>>,
@@ -934,6 +940,44 @@ struct ApprovalDecisionDispatchGuard {
     attempt_id: ApprovalDecisionAttemptId,
     boundary: DispatchBoundary,
     completed: bool,
+}
+
+struct DeleteDispatchGuard<'a> {
+    runtime: &'a DeleteMutationObservationRuntime,
+    attempt_id: DeleteAttemptId,
+    boundary: DispatchBoundary,
+    completed: bool,
+}
+
+impl DeleteDispatchGuard<'_> {
+    fn complete(&mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for DeleteDispatchGuard<'_> {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        let observed_at = unix_timestamp_ms() as i64;
+        if self.boundary.crossed() {
+            let _ = self
+                .runtime
+                .record_dispatched(&self.attempt_id, observed_at);
+            let _ = self.runtime.record_outcome_unknown(
+                &self.attempt_id,
+                DeleteMutationFailureKind::Cancellation,
+                observed_at,
+            );
+        } else {
+            let _ = self.runtime.record_not_dispatched(
+                &self.attempt_id,
+                DeleteMutationFailureKind::Cancellation,
+                observed_at,
+            );
+        }
+    }
 }
 
 impl ApprovalDecisionDispatchGuard {
@@ -1045,6 +1089,8 @@ impl WorkspaceSession {
         };
         self.approval_observations
             .record_session_ended(approval_end_kind, diagnostic, observed_at);
+        self.delete_mutation_observations
+            .record_session_ended(observed_at);
         ended_writer_observations
     }
 
@@ -1371,6 +1417,143 @@ impl WorkspaceSession {
             None,
         )
         .await
+    }
+
+    pub(crate) async fn send_delete_request_for_workspace(
+        &self,
+        workspace_id: &str,
+        requested_thread_id: &str,
+        remote_host_identity: RemoteHostIdentity,
+        remote_context: Option<&RemoteRequestDispatchContext>,
+    ) -> Result<Value, String> {
+        let codex_home_identity = self
+            .workspace_reconciler
+            .lock()
+            .await
+            .codex_home_identity()
+            .to_string();
+        let thread_key = CodexThreadKey::new(codex_home_identity, requested_thread_id);
+        let workspace_generation = self
+            .delete_mutation_observations
+            .workspace_session_generation()
+            .as_str()
+            .to_string();
+        let app_server_generation = self
+            .delete_mutation_observations
+            .app_server_connection_generation()
+            .as_str()
+            .to_string();
+        let attempt_id = self
+            .delete_mutation_observations
+            .begin_delete(
+                remote_host_identity,
+                thread_key.clone(),
+                requested_thread_id,
+                &workspace_generation,
+                &app_server_generation,
+                unix_timestamp_ms() as i64,
+            )
+            .map_err(|error| format!("delete mutation observation failed: {error:?}"))?;
+        if let Some(remote_context) = remote_context {
+            let provenance = SessionAttemptProvenance::delete_mutation(
+                workspace_id,
+                &workspace_generation,
+                &app_server_generation,
+                thread_key,
+                attempt_id.as_str(),
+            )?;
+            let runtime = self.delete_mutation_observations.clone();
+            let lost_attempt_id = attempt_id.clone();
+            if let Err(error) = remote_context.bind_session_attempt_with_transport_loss_hook(
+                provenance,
+                Arc::new(move |observed_at| {
+                    let _ = runtime.record_dispatched(&lost_attempt_id, observed_at);
+                    let _ = runtime.record_outcome_unknown(
+                        &lost_attempt_id,
+                        DeleteMutationFailureKind::ResponseLost,
+                        observed_at,
+                    );
+                }),
+            ) {
+                self.delete_mutation_observations
+                    .record_not_dispatched(
+                        &attempt_id,
+                        DeleteMutationFailureKind::DispatchDisconnected,
+                        unix_timestamp_ms() as i64,
+                    )
+                    .map_err(|observation_error| {
+                        format!(
+                            "{error}; delete mutation observation failed: {observation_error:?}"
+                        )
+                    })?;
+                return Err(error);
+            }
+        }
+        let boundary = DispatchBoundary::default();
+        let mut guard = DeleteDispatchGuard {
+            runtime: &self.delete_mutation_observations,
+            attempt_id: attempt_id.clone(),
+            boundary: boundary.clone(),
+            completed: false,
+        };
+        let response = self
+            .send_request_for_workspace_observed(
+                workspace_id,
+                "thread/delete",
+                json!({ "threadId": requested_thread_id }),
+                Some(&boundary),
+            )
+            .await;
+        if boundary.crossed() {
+            self.delete_mutation_observations
+                .record_dispatched(&attempt_id, unix_timestamp_ms() as i64)
+                .map_err(|error| format!("delete mutation observation failed: {error:?}"))?;
+        }
+        match response {
+            Ok(response) => {
+                self.delete_mutation_observations
+                    .record_response(&attempt_id, &response, unix_timestamp_ms() as i64)
+                    .map_err(|error| format!("delete mutation observation failed: {error:?}"))?;
+                guard.complete();
+                if is_exact_delete_success(&response) || response.get("error").is_some() {
+                    Ok(response)
+                } else {
+                    Err(
+                        "thread/delete response did not contain exact direct deletion evidence"
+                            .to_string(),
+                    )
+                }
+            }
+            Err(error) => {
+                if boundary.crossed() {
+                    self.delete_mutation_observations
+                        .record_outcome_unknown(
+                            &attempt_id,
+                            classify_delete_dispatch_error(&error),
+                            unix_timestamp_ms() as i64,
+                        )
+                        .map_err(|observation_error| {
+                            format!(
+                                "{error}; delete mutation observation failed: {observation_error:?}"
+                            )
+                        })?;
+                } else {
+                    self.delete_mutation_observations
+                        .record_not_dispatched(
+                            &attempt_id,
+                            classify_delete_dispatch_error(&error),
+                            unix_timestamp_ms() as i64,
+                        )
+                        .map_err(|observation_error| {
+                            format!(
+                                "{error}; delete mutation observation failed: {observation_error:?}"
+                            )
+                        })?;
+                }
+                guard.complete();
+                Err(error)
+            }
+        }
     }
 
     pub(crate) async fn send_upstream_unsubscribe_request_for_workspace_with_remote_context(
@@ -1889,6 +2072,14 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
             .app_server_connection_generation()
             .clone(),
     );
+    let delete_mutation_observations = DeleteMutationObservationRuntime::new(
+        thread_lifecycle_observations
+            .workspace_session_generation()
+            .clone(),
+        thread_lifecycle_observations
+            .app_server_connection_generation()
+            .clone(),
+    );
     let session = Arc::new(WorkspaceSession {
         codex_args,
         child: Mutex::new(child),
@@ -1902,6 +2093,7 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
         writer_admission_observations,
         thread_lifecycle_observations,
         approval_observations,
+        delete_mutation_observations,
         creation_coordinator: Mutex::new(None),
         runtime_observation_keys: Mutex::new(HashSet::new()),
         runtime_observation_clock: AtomicU64::new(0),
@@ -1998,6 +2190,16 @@ pub(crate) async fn spawn_workspace_session_in_environment<E: EventSink>(
                 &value,
                 settings_observed_at as i64,
             );
+            if method_name == Some("thread/deleted") {
+                if let Some(ref deleted_thread_id) = thread_id {
+                    let _ = session_clone
+                        .delete_mutation_observations
+                        .record_current_thread_deleted(
+                            deleted_thread_id,
+                            settings_observed_at as i64,
+                        );
+                }
+            }
             if completed_request
                 .as_ref()
                 .is_some_and(|request| request.method == "thread/start")

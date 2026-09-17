@@ -187,6 +187,7 @@ mod tests {
             writer_admission_observations: Default::default(),
             thread_lifecycle_observations: Default::default(),
             approval_observations: Default::default(),
+            delete_mutation_observations: Default::default(),
             runtime_observation_keys: Mutex::new(std::collections::HashSet::new()),
             runtime_observation_clock: AtomicU64::new(0),
             hidden_thread_ids: Mutex::new(HashSet::new()),

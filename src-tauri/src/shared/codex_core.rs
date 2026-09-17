@@ -24,8 +24,21 @@ pub(crate) mod external_thread_admission;
 
 pub(crate) mod approval_decision_provenance;
 pub(crate) mod approval_observation;
+pub(crate) mod delete_mutation_observation;
 pub(crate) mod thread_lifecycle_observation;
 pub(crate) mod writer_admission_observation;
+
+#[cfg(test)]
+#[path = "codex_core/delete_mutation_observation_tests.rs"]
+mod delete_mutation_observation_tests;
+
+#[cfg(test)]
+#[path = "codex_core/delete_mutation_instrumentation_tests.rs"]
+mod delete_mutation_instrumentation_tests;
+
+#[cfg(test)]
+#[path = "codex_core/delete_mutation_protocol_fixture_tests.rs"]
+mod delete_mutation_protocol_fixture_tests;
 
 #[cfg(test)]
 #[path = "codex_core/approval_observation_tests.rs"]
@@ -662,11 +675,33 @@ pub(crate) async fn delete_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
     thread_id: String,
+    remote_host_identity: crate::shared::remote_host_identity::RemoteHostIdentity,
+) -> Result<Value, String> {
+    delete_thread_core_with_remote_context(
+        sessions,
+        workspace_id,
+        thread_id,
+        remote_host_identity,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn delete_thread_core_with_remote_context(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+    remote_host_identity: crate::shared::remote_host_identity::RemoteHostIdentity,
+    remote_context: Option<&RemoteRequestDispatchContext>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id });
     session
-        .send_request_for_workspace(&workspace_id, "thread/delete", params)
+        .send_delete_request_for_workspace(
+            &workspace_id,
+            &thread_id,
+            remote_host_identity,
+            remote_context,
+        )
         .await
 }
 

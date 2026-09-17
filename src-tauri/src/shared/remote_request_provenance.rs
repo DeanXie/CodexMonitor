@@ -69,6 +69,7 @@ pub(crate) enum SessionAttemptKind {
     WriterAdmission,
     UpstreamUnsubscribe,
     ApprovalDecision,
+    DeleteMutation,
 }
 
 impl SessionAttemptProvenance {
@@ -122,6 +123,23 @@ impl SessionAttemptProvenance {
         )
     }
 
+    pub(crate) fn delete_mutation(
+        workspace_id: impl Into<String>,
+        workspace_session_generation: impl Into<String>,
+        app_server_connection_generation: impl Into<String>,
+        thread_key: CodexThreadKey,
+        attempt_id: impl Into<String>,
+    ) -> Result<Self, String> {
+        Self::new(
+            SessionAttemptKind::DeleteMutation,
+            workspace_id,
+            workspace_session_generation,
+            Some(app_server_connection_generation.into()),
+            thread_key,
+            attempt_id,
+        )
+    }
+
     fn new(
         kind: SessionAttemptKind,
         workspace_id: impl Into<String>,
@@ -154,7 +172,9 @@ impl SessionAttemptProvenance {
         }
         if matches!(
             value.kind,
-            SessionAttemptKind::UpstreamUnsubscribe | SessionAttemptKind::ApprovalDecision
+            SessionAttemptKind::UpstreamUnsubscribe
+                | SessionAttemptKind::ApprovalDecision
+                | SessionAttemptKind::DeleteMutation
         ) && value
             .app_server_connection_generation
             .as_deref()

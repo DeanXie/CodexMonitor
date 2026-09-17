@@ -485,8 +485,17 @@ pub(crate) async fn delete_thread(
         )
         .await
     } else {
-        codex_core::delete_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone())
-            .await
+        let remote_host_identity = state
+            .remote_host_identity
+            .clone()
+            .map_err(|error| format!("delete authority unavailable: {error}"))?;
+        codex_core::delete_thread_core(
+            &state.sessions,
+            workspace_id.clone(),
+            thread_id.clone(),
+            remote_host_identity,
+        )
+        .await
     };
     #[cfg(desktop)]
     reconcile_after_confirmed_delete(
@@ -516,6 +525,9 @@ where
     >,
 {
     let response = delete_result?;
+    if !crate::shared::codex_core::delete_mutation_observation::is_exact_delete_success(&response) {
+        return Ok(response);
+    }
     reconciliation.await.map_err(|error| {
         format!("thread/delete succeeded but deletion reconciliation failed: {error}")
     })?;
@@ -1278,19 +1290,53 @@ mod deletion_tests {
 
     #[tokio::test]
     async fn successful_official_delete_waits_for_completed_reconciliation() {
-        let result = reconcile_after_confirmed_delete(Ok(json!({ "ok": true })), async {
-            Ok(DeletionReconciliationReport {
-                monitor_delete_operation_id: "operation".to_string(),
-                registry_retirement_count: 1,
-                watcher_source_retirement_count: 1,
-                checkpoint_rewritten: true,
-                reconciliation_state: Some(DeletionReconciliationState::Completed),
-                ..DeletionReconciliationReport::default()
+        let result =
+            reconcile_after_confirmed_delete(Ok(json!({ "id": 7, "result": {} })), async {
+                Ok(DeletionReconciliationReport {
+                    monitor_delete_operation_id: "operation".to_string(),
+                    registry_retirement_count: 1,
+                    watcher_source_retirement_count: 1,
+                    checkpoint_rewritten: true,
+                    reconciliation_state: Some(DeletionReconciliationState::Completed),
+                    ..DeletionReconciliationReport::default()
+                })
             })
+            .await;
+
+        assert_eq!(result, Ok(json!({ "id": 7, "result": {} })));
+    }
+
+    #[tokio::test]
+    async fn ambiguous_delete_outcome_does_not_poll_reconciliation_or_create_tombstone() {
+        let reconciliation_polled = AtomicBool::new(false);
+        let result = reconcile_after_confirmed_delete(
+            Ok(json!({ "id": 8, "result": { "ok": true } })),
+            async {
+                reconciliation_polled.store(true, Ordering::SeqCst);
+                Ok(DeletionReconciliationReport::default())
+            },
+        )
+        .await;
+
+        assert_eq!(result, Ok(json!({ "id": 8, "result": { "ok": true } })));
+        assert!(!reconciliation_polled.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn active_writer_rejection_does_not_poll_reconciliation_or_create_tombstone() {
+        let reconciliation_polled = AtomicBool::new(false);
+        let response = json!({
+            "id": 9,
+            "error": {"code": -32600, "message": "already has an active writer"}
+        });
+        let result = reconcile_after_confirmed_delete(Ok(response.clone()), async {
+            reconciliation_polled.store(true, Ordering::SeqCst);
+            Ok(DeletionReconciliationReport::default())
         })
         .await;
 
-        assert_eq!(result, Ok(json!({ "ok": true })));
+        assert_eq!(result, Ok(response));
+        assert!(!reconciliation_polled.load(Ordering::SeqCst));
     }
 }
 

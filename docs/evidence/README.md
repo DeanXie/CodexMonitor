@@ -69,3 +69,11 @@ transport-to-session attempt correlation, dispatch-boundary ambiguity, and
 zero retry/replay using fake app-server and daemon transport authority only.
 The implementation evidence index is
 `phase-3-5-3b/approval-decision-provenance-freeze.md`.
+
+Phase 3.5.3c delete-authority fixtures are stored in
+`../fixtures/app-server/delete-mutation-observation/`. They freeze exact-ID
+admission, current-generation confirmation, active-writer rejection,
+post-dispatch unknown outcome, session-end ambiguity, zero retry/replay, and
+the confirmed-only tombstone gate using fake app-server authority. The
+implementation evidence index is
+`phase-3-5-3c/delete-authority-freeze.md`.

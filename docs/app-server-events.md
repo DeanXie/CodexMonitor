@@ -291,17 +291,22 @@ events are currently not routed:
 
 These are v2 request methods CodexMonitor currently sends to Codex app-server:
 
-- `thread/delete` permanently removes the selected thread. Codex app-server
-  also deletes its spawned descendants. Current upstream integration coverage
-  emits `thread/deleted` child-first for every deleted thread and then observes
-  an empty `thread/loaded/list`. CodexMonitor does not depend on that per-child
-  notification granularity: after a successful delete it persists a canonical
-  fullThreadId tombstone for the root and confirmed descendants, retires their
-  Registry/Watcher/checkpoint state, and then performs an authoritative
-  `thread/list` reconciliation with anchor preservation disabled. Independent
-  `thread/deleted` notifications are retained as confirmation evidence but do
-  not create a local delete operation or infer a descendant closure.
-  Sanitized protocol evidence lives in
+- `thread/delete` permanently removes the exact requested full Thread ID.
+  Codex app-server also deletes its spawned descendants. CodexMonitor admits no
+  title/cwd/fuzzy delete target and binds each explicit request to one
+  `DeleteAttemptId`, the exact `CodexThreadKey`, Host identity, and current
+  WorkspaceSession/app-server generations. The bundled empty success response
+  and an exact current-generation `thread/deleted` notification are direct
+  `delete_confirmed` evidence; active-writer `-32600` is `delete_rejected`.
+  Post-dispatch response loss, disconnect, cancellation, or malformed response
+  is `delete_outcome_unknown`, never a tombstone. Only confirmed deletion
+  persists the canonical fullThreadId tombstone, retires Registry/Watcher/
+  checkpoint state, and permits authoritative reconciliation. Missing rollout,
+  `thread/closed`, runtime `notLoaded`, UI removal, and stale notification
+  evidence do not confirm deletion. Retry and replay are zero. Sanitized fake
+  app-server evidence lives in
+  `docs/fixtures/app-server/delete-mutation-observation/`; cascade projection
+  evidence remains in
   `docs/fixtures/app-server/thread-delete-cascade.protocol.json`.
 
 - `thread/start`

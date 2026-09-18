@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "identityHierarchy": [
+    "RemoteHostIdentity",
+    "DaemonProcessGeneration",
+    "RemoteTransportGeneration",
+    "WorkspaceSessionGeneration",
+    "AppServerConnectionGeneration",
+    "CodexThreadKey",
+    "CodexTurnKey"
+  ],
+  "authorityInvariants": {
+    "observedEqualsRequested": false,
+    "requestedEqualsEstimated": false,
+    "noEvidenceMeansUnknown": true,
+    "canonicalThreadEqualsUiProjection": false,
+    "canonicalThreadEqualsTransportAvailability": false,
+    "transportGenerationEqualsClientIdentity": false,
+    "workspaceSessionEqualsAppServerConnection": false,
+    "sameHostIdentityMeansSameSession": false,
+    "recoveryEqualsMutationReplay": false
+  },
+  "mutationPolicy": {
+    "resumeThread": { "retry": 0, "replay": 0 },
+    "approvalDecision": { "retry": 0, "replay": 0 },
+    "threadDelete": { "retry": 0, "replay": 0 },
+    "upstreamUnsubscribe": { "retry": 0, "replay": 0 },
+    "forceTakeover": false
+  },
+  "observationAuthorities": [
+    "WriterAdmissionObservation",
+    "ThreadSubscriptionObservation",
+    "ThreadRuntimeAvailabilityObservation"
+  ],
+  "writerStates": [
+    "NOT_OBSERVED",
+    "ADMISSION_PENDING",
+    "ADMITTED_FOR_SESSION",
+    "BLOCKED_BY_ACTIVE_WRITER",
+    "ADMISSION_OUTCOME_UNKNOWN",
+    "SESSION_ENDED_RELEASE_UNOBSERVED"
+  ],
+  "approval": {
+    "exactCurrentIdentityRequired": true,
+    "staleOrUnavailableActionable": false,
+    "decisionDispatchedMeansAccepted": false
+  },
+  "delete": {
+    "exactCodexThreadKeyRequired": true,
+    "confirmedCreatesTombstone": true,
+    "unknownCreatesTombstone": false,
+    "projectionAbsenceConfirmsDelete": false
+  },
+  "projection": {
+    "coverages": [
+      "workspace_catalog",
+      "thread_catalog",
+      "thread_detail",
+      "observation_snapshot"
+    ],
+    "eventPromotesToCurrent": false
+  },
+  "eventGap": {
+    "mutatesSharedAuthority": false,
+    "otherClientBecomesStale": false,
+    "streamCompletenessProven": false
+  },
+  "ui": {
+    "states": ["Current", "Hydrating", "Stale", "Unavailable", "Unknown"],
+    "staleMeansAbsent": false,
+    "unavailableMeansAbsent": false,
+    "unknownMeansIdle": false,
+    "disconnectedMeansDeleted": false,
+    "deliveryModesAreProjectionTruth": false
+  },
+  "remainingNotProven": [
+    "duplicate_or_late_approval_response_exact_upstream_behavior",
+    "concurrent_duplicate_delete_exact_upstream_ordering_or_winner",
+    "daemon_broadcast_event_stream_completeness"
+  ]
+}

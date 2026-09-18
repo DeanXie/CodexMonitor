@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "phase": "3.5",
+  "status": "PASS_COMPLETE_FROZEN",
+  "sourceBaseCommit": "c8f3d1db095a60a4ffdde4360c5ea8bccc41d6b2",
+  "environment": {
+    "platform": "windows",
+    "bundledCodexVersion": "codex-cli 0.153.4",
+    "e2eMode": "isolated_non_destructive_read_only"
+  },
+  "credentialBoundary": {
+    "credentialPreflight": "PASS",
+    "authentication": "PASS",
+    "temporaryCredentialDeleted": true,
+    "secretContaminationAudit": "PASS",
+    "credentialMaterialRecorded": false
+  },
+  "isolatedE2e": {
+    "result": "PASS",
+    "remoteHostIdentity": "8c378ecb-b39c-41e3-8780-000a4f84a534",
+    "daemonProcessGeneration": "33180f12-6fce-4040-b0da-c25a7297e0fa",
+    "initialTransportGeneration": "776f1c95-649c-4286-bb73-6f485ed4388b",
+    "reconnectedTransportGeneration": "238d2d76-9e25-4af7-8f70-4f8b8e40fcdb",
+    "workspaceSessionGeneration": "131be58e-a4f6-43d3-b8e2-924af3130018",
+    "appServerConnectionGeneration": "9452b407-ac5b-4b5b-8e83-56b898ecbc38",
+    "exactThreadIdMatch": true,
+    "generationTaggedEventObserved": true,
+    "staleOldGenerationRejected": true,
+    "projectionHydratedCurrent": true,
+    "projectionRehydratedCurrent": true,
+    "forbiddenRealMutationCounts": {
+      "resumeThread": 0,
+      "approvalDecision": 0,
+      "threadDelete": 0,
+      "upstreamUnsubscribe": 0,
+      "forceTakeover": 0
+    },
+    "setupMutationCounts": {
+      "disposableThreadStart": 0,
+      "disposableTurnStart": 0,
+      "localSyntheticLiveAttach": 1
+    }
+  },
+  "freshVerification": {
+    "nodeAcceptance": { "passed": 9, "failed": 0 },
+    "frontendAcceptance": { "passed": 4, "failed": 0 },
+    "rustAcceptance": { "passed": 8, "failed": 0 },
+    "rustAllTargets": { "passed": 2020, "failed": 0, "ignored": 7 },
+    "cargoCheckAllTargets": "PASS",
+    "cargoFmtCheck": "PASS",
+    "typecheck": "PASS",
+    "frontendFull": { "passed": 1247, "failed": 6, "waivedBaseline": 6 },
+    "gitDiffCheck": "PASS",
+    "newWaivers": 0
+  },
+  "notProven": [
+    "daemon_broadcast_event_stream_completeness",
+    "upstream_duplicate_or_late_approval_response_exact_behavior",
+    "upstream_concurrent_duplicate_delete_exact_ordering_or_winner_semantics"
+  ],
+  "phase4Started": false
+}

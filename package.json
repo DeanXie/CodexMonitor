@@ -22,6 +22,7 @@
     "codemod:ds:dry": "npm run codemod:modal-shell -- --dry-run && npm run codemod:panel-shell -- --dry-run && npm run codemod:toast-shell -- --dry-run",
     "codemod:ds": "npm run codemod:modal-shell && npm run codemod:panel-shell && npm run codemod:toast-shell",
     "test": "vitest run",
+    "test:phase-3-5-final": "node --test scripts/phase-3-5-final-acceptance.test.mjs && vitest run src/features/app/orchestration/phase35FinalAcceptance.test.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",

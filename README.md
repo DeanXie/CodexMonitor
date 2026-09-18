@@ -260,6 +260,15 @@ npm run typecheck
 cd src-tauri && cargo check
 ```
 
+Phase 3.5 final integration acceptance is frozen in
+`docs/phase-3-5-final-integration-acceptance.md`. Run its focused contract
+suite with:
+
+```bash
+npm run test:phase-3-5-final
+cd src-tauri && cargo test phase_3_5_final_acceptance --lib
+```
+
 ## Codebase Navigation
 
 For task-oriented file lookup ("if you need X, edit Y"), use:

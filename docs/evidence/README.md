@@ -126,3 +126,10 @@ ProjectionFreshness, generation-event, authoritative recovery, offline/stale
 UI, multi-client, approval/delete safety, telemetry, no-persistence,
 authority-precedence, and zero mutation replay contract. The closeout evidence
 index is `phase-3-5-4e/compatibility-closeout.md`.
+
+Phase 3.5 final integration acceptance fixtures are stored in
+`../fixtures/phase-3-5-final-acceptance/`. They aggregate the frozen Phase
+3.5.1-3.5.4 authority contracts. The sanitized authenticated isolated
+read-only E2E and closeout record is `phase-3-5-final/final-acceptance.json`;
+its scope and explicit NOT PROVEN boundaries are documented in
+`phase-3-5-final/README.md`.

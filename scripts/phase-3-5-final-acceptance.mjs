@@ -93,6 +93,13 @@ export function sanitizeAcceptanceEvidence(raw) {
     exactThreadIdMatch: raw.exactThreadIdMatch ?? null,
     generationTaggedEventObserved: raw.generationTaggedEventObserved ?? null,
     staleOldGenerationRejected: raw.staleOldGenerationRejected ?? null,
+    staleOldGenerationEvidence: {
+      classification: "DETERMINISTIC_FIXTURE_CONTRACT",
+      source: "docs/fixtures/remote-transport-coordination/stale-delivery.json",
+      productionFunctionRegression: "PASS",
+      realTransportLateNotificationScenario: "NOT_EXECUTED",
+      installedAppManualUiScenario: "NOT_EXECUTED",
+    },
     projectionHydratedCurrent: raw.projectionHydratedCurrent ?? null,
     projectionRehydratedCurrent: raw.projectionRehydratedCurrent ?? null,
     forbiddenMutationCounts: raw.forbiddenMutationCounts ?? null,
@@ -112,6 +119,12 @@ export function validateAcceptanceEvidence(evidence) {
     throw new Error("reconnect did not mint a new transport generation");
   }
   if (!evidence.staleOldGenerationRejected) throw new Error("stale generation rejection missing");
+  if (evidence.staleOldGenerationEvidence?.classification !== "DETERMINISTIC_FIXTURE_CONTRACT") {
+    throw new Error("stale generation evidence classification missing");
+  }
+  if (evidence.staleOldGenerationEvidence?.realTransportLateNotificationScenario !== "NOT_EXECUTED") {
+    throw new Error("real transport late-notification status must remain NOT_EXECUTED");
+  }
   if (!evidence.generationTaggedEventObserved) throw new Error("generation-tagged event missing");
   if (!evidence.projectionHydratedCurrent || !evidence.projectionRehydratedCurrent) {
     throw new Error("projection hydration did not reach current");

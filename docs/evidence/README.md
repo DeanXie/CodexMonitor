@@ -132,4 +132,6 @@ Phase 3.5 final integration acceptance fixtures are stored in
 3.5.1-3.5.4 authority contracts. The sanitized authenticated isolated
 read-only E2E and closeout record is `phase-3-5-final/final-acceptance.json`;
 its scope and explicit NOT PROVEN boundaries are documented in
-`phase-3-5-final/README.md`.
+`phase-3-5-final/README.md`. Its stale-old-generation boolean is explicitly
+classified as deterministic fixture/contract evidence, with production-function
+regression coverage PASS and the real delayed old-socket scenario NOT_EXECUTED.

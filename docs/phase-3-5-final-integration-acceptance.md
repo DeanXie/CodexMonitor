@@ -1,6 +1,7 @@
 # Phase 3.5 Final Integration Acceptance
 
-Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **NOT STARTED**.
+Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS**; its current
+authority is `docs/phase-4-0-truth-release-boundary.md`.
 
 ## Acceptance boundary
 
@@ -19,14 +20,13 @@ The credential boundary is frozen as follows:
 - credential contents, hashes, token material, and private Thread contents are
   never evidence.
 
-## Real read-only E2E result
+## Real daemon/Node integration evidence
 
 The authenticated lane proved:
 
 - exact-ID list/read against the disposable Thread;
 - generation-tagged event observation;
 - reconnect creates a new Remote transport generation;
-- old-generation delivery is rejected after reconnect;
 - authoritative projection hydration and rehydration return current coverage;
 - forbidden real mutation counts remain zero for `thread/resume`, approval
   decision, `thread/delete`, upstream `thread/unsubscribe`, and force takeover.
@@ -34,6 +34,22 @@ The authenticated lane proved:
 The local synthetic live attach used to observe delivery is not an upstream
 unsubscribe or writer mutation. No disposable Thread or Turn was created during
 the authenticated run.
+
+## Evidence classification correction
+
+The original sanitized result is preserved. Its
+`isolatedE2e.staleOldGenerationRejected` value was populated by
+`loadStaleDeliveryFixture`, not by injecting a delayed notification from the old
+socket into the real daemon/Node run. The corrected classification is:
+
+- real daemon/Node integration: **PROVEN** for the items above;
+- production-function stale-generation isolation regression: **PASS**;
+- deterministic stale-delivery fixture/contract assertion: **PASS**;
+- real transport late old-generation notification scenario: **NOT_EXECUTED**;
+- installed-app/manual UI acceptance: **NOT_EXECUTED** for this final lane.
+
+This provenance correction does not classify stale-generation isolation as a
+product failure and does not reopen A3.
 
 ## Frozen authority
 

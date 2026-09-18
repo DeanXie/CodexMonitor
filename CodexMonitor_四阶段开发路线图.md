@@ -618,7 +618,7 @@ projections、`projectAssigned` 与 `sidebarVisible`。
 - 六向结果固定为：Desktop → Monitor 在 idle 时 PASS、Desktop → CLI 在 idle 时 PASS、Monitor → Desktop PASS、Monitor → CLI PASS、CLI exec → Desktop PASS、CLI exec → Monitor PASS；全部 Gate 的 duplicate canonical Thread 均为 0。
 - `BLOCKED_BY_ACTIVE_WRITER` 是 occupied 状态的正确并发保护，不是 resume capability failure；idle A2/B2 已证明 writer 释放后可继续同一 Thread。
 - CLI 兼容性 caveat 固定为：Codex `0.151.0-alpha.7.2` interactive resume / exec resume 均 PASS；PATH Codex `0.147.0` interactive authentication/discovery UNKNOWN、exec resume `no rollout found`。根因归类为 CLI version/history/protocol compatibility boundary，不为兼容旧 `0.147.0` 修改 Phase 3.1。
-- Phase 3.2 — Project / Workspace Interoperability = PASS / COMPLETE：3.2.0 = FORENSICS COMPLETE，3.2.1 = PASS / FROZEN，3.2.1a = PASS，3.2.2 = PASS / FROZEN，3.2.3 = PASS / FROZEN，3.2.4 = PASS / FROZEN，3.2.5 Contract Fixtures / Focused E2E = PASS。Phase 3.3.0 = FORENSICS COMPLETE；Phase 3.3.1 / 3.3.2 = PASS / FROZEN；Phase 3.3.3 Forensics / Contract = COMPLETE；Phase 3.3.3a = PASS / FROZEN；Phase 3.3.3b = GO / NOT STARTED。
+- Phase 3.2 — Project / Workspace Interoperability = PASS / COMPLETE：3.2.0 = FORENSICS COMPLETE，3.2.1 = PASS / FROZEN，3.2.1a = PASS，3.2.2 = PASS / FROZEN，3.2.3 = PASS / FROZEN，3.2.4 = PASS / FROZEN，3.2.5 Contract Fixtures / Focused E2E = PASS。Phase 3.3、3.4 与 3.5 均已完成；Phase 3 当前状态为 PASS / COMPLETE through Phase 3.5，Phase 3.5 = PASS / COMPLETE / FROZEN。
 - 6 个既有 zh-CN locale/date failures 继续作为已批准的 non-blocking test debt，不阻塞 Phase 3.1 收口。
 - 本地不存在 `../Codex`，因此 upstream protocol hash 未刷新；该项记为 non-blocking verification gap。
 
@@ -688,69 +688,48 @@ Project
 
 # Phase 4 — Productization
 
-## 目标
+## 当前状态
 
-把 CodexMonitor 从开发项目变成真正每天使用的软件。
+**IN PROGRESS**。P4.0 Truth / Release Boundary Freeze 已完成，下一实现切片为
+P4.1。完整且唯一的 Phase 4 产品/发行合同见
+[`docs/phase-4-0-truth-release-boundary.md`](docs/phase-4-0-truth-release-boundary.md)。
 
-## 主要能力
+## 目标与平台顺序
 
-### 启动体验
+将 CodexMonitor 从工程/开发态系统转化为用户可日常安装、启动、运行与维护
+的产品化软件。平台交付顺序冻结为 Windows Daily-use Release、macOS
+release/acceptance、iOS real target/build/device acceptance。Windows 里程碑完成
+不等于 Phase 4 完成，也不替代 macOS/iOS 验收。
 
-- 打开 Codex 自动伴随启动 Monitor
-- 或统一启动器：
-  - Codex
-  - Monitor
-- Monitor 可后台常驻
+## 已批准的产品边界
 
-### 系统托盘
+十一项发行身份、更新、白名单迁移、单一主入口、关闭到托盘、app-owned
+daemon 生命周期、快捷方式、单一独立 Monitor Window、无默认第三方上报的
+诊断、轻量 Timeline/Session History、Project-to-Workspace 去重统计决策均为
+**USER-APPROVED**，不再列为 undecided。P4.0 不实施这些行为。
 
-支持：
+## 实施顺序
 
-- Idle
-- Running
-- Sub-Agent active
-- Completed
-- Failed
+1. P4.0 — Truth / Release Boundary Freeze
+2. P4.1 — Release Identity / Version / Migration / Update Safety
+3. P4.2 — Windows Installable Daily-use Baseline
+4. P4.3 — Launcher / Tray / Background Lifecycle
+5. P4.4 — Independent Monitor Window
+6. P4.5 — Logging / Diagnostics / Crash Recovery
+7. P4.6 — UI / Timeline / History / Project Statistics Closeout
+8. P4.7 — Platform Release Acceptance
 
-任务开始时自动更新托盘状态。
+## Windows Daily-use Milestone
 
-### 独立 Monitor Window
-
-最终支持：
-
-```text
-显示器 1
-Codex Chat / IDE
-
-显示器 2
-Agent Monitor
-```
-
-要求共享同一 Runtime Source，而不是启动两个独立 Runtime Store。
-
-### 正式发布
-
-- Windows `.exe`
-- Installer
-- Desktop shortcut
-- 自动更新
-- 配置迁移
-- 稳定版本管理
-- 正式日志与诊断
-- Crash recovery
-
-### UI 产品化
-
-- Compact / Full 模式
-- Source / freshness
-- Agent Timeline
-- Session History
-- Usage Analytics
-- 项目级统计
+该 milestone 不是新 Phase。P4.1-P4.4 完成且不存在阻断安全日用的 P4.5
+critical blocker 时可标记 **AVAILABLE**；Phase 4 仍保持 **IN PROGRESS**，继续
+完成 P4.5-P4.7。
 
 ## Phase 4 完成标准
 
-> 不需要开发环境即可像普通桌面软件一样长期稳定运行。
+P4.0-P4.7 全部完成，各平台结论独立记录；用户无需开发环境即可像普通软件
+长期稳定运行。Adaptive Model Router 继续属于 Advanced Phase，不是 Phase 4
+或 Windows milestone 的完成条件。
 
 ---
 
@@ -978,22 +957,13 @@ Phase 2 — Global Sources
    DEFERRED / NOT A PHASE 2 COMPLETION GATE
 
 Phase 3 — Cross-Surface Interoperability
-├─ 3.0 FORENSICS COMPLETE
-├─ 3.1.1 PASS
-├─ 3.1.2 / 3.1.2b PASS
-├─ Cross-Surface Resume six-way E2E PASS
-├─ 3.1 Shared Thread Identity / Resume PASS / COMPLETE
-├─ 3.2 Project / Workspace Interoperability PASS / COMPLETE
-│  ├─ 3.2.0 Focused Forensics & Contract FORENSICS COMPLETE
-│  ├─ 3.2.1 Root Locator Contract PASS / FROZEN
-│  ├─ 3.2.1a Canonical Ambiguity Correction PASS
-│  ├─ 3.2.2 Scoped ThreadWorkspaceRelation PASS / FROZEN
-│  ├─ 3.2.3 Monitor Runtime Reconciliation PASS / FROZEN
-│  ├─ 3.2.4 Desktop Projection Read Adapter PASS / FROZEN
-│  └─ 3.2.5 Contract Fixtures / Focused E2E PASS
+PASS / COMPLETE through Phase 3.5 ✅
+└─ Phase 3.5 PASS / COMPLETE / FROZEN
 
 Phase 4 — Productization
-NOT STARTED
+IN PROGRESS
+├─ P4.0 Truth / Release Boundary Freeze PASS / COMPLETE / FROZEN
+└─ next implementation slice: P4.1
 
 Advanced — Adaptive Model Router
 RESERVED
@@ -1005,19 +975,12 @@ RESERVED
 
 下一任务：
 
-**Phase 3.3.3b — Execution Settings Evidence Ingestion（GO / NOT STARTED）**
+**P4.1 — Release Identity / Version / Migration / Update Safety**
 
-Phase 3.3.0 = FORENSICS COMPLETE；Phase 3.3.1 / 3.3.2 = PASS / FROZEN；Phase 3.3.3 Forensics / Contract = COMPLETE；Phase 3.3.3a Execution Settings Evidence Model = PASS / FROZEN。实现提交：`bf2f930`。Contract 与验证详情见 [Phase 3.3.3a](docs/phase-3-3-3a-execution-settings-evidence.md)。
-
-Execution settings evidence 以 `CodexThreadKey + THREAD_DEFAULT | TURN_EXECUTION { fullTurnId } + field` 分区，requested / serverEffective / persistedObserved 三层独立且 append-only。assessment 固定为 UNKNOWN / REQUESTED_ONLY / EFFECTIVE_CONFIRMED / OBSERVED_CONFIRMED / MATCH / MISMATCH / CONFLICT；OVERRIDDEN 仅可作为 MISMATCH reason。
-
-`comparisonId` 仅是 evidence correlation identity，不是 Thread 或 Turn identity。3.3.3b 必须使用可证明的 request / Turn / settings correlation；不得以时间接近、相同 model/cwd/prompt 或最近 settings event 猜测。只有 Thread ID 的 settings update 保持 THREAD_DEFAULT snapshot，不归入 Turn。
-
-最终验证：Phase 3.3.3a focused 20 passed；Phase 3.3.2 coordination 26 passed；Phase 3.3.1 acknowledgement 18 passed；Phase 3.2 workspace 77 passed / 1 ignored；Phase 3.1 exact-ID 5 passed；Rust lib 449 passed / 3 ignored。cargo check --all-targets、cargo fmt --check、npm run typecheck、git diff --check 均通过。Phase 3.3.3b 保持 GO / NOT STARTED，未自行开始。
-
-核心验收：
-
-> Phase 2.5 Desktop forensics、Slice 1、Slice 2、Real E2E A/B/C/D 与 Final Agent Monitor UI 均已 PASS；Phase 2 Global Sources 正式 COMPLETE。
+Phase 1、Phase 2、Phase 3（through Phase 3.5）均已完成；Phase 3.5 为
+PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项产品决策、
+平台顺序、P4.0-P4.7 路线图与 Windows Daily-use Milestone。P4.1 才能开始
+identifier、版本 authority、迁移和 updater 安全实现。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 

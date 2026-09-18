@@ -84,6 +84,10 @@ test("evidence requires exact identity, reconnect generation change, hydration, 
     initialTransportGeneration: "transport-a",
     reconnectedTransportGeneration: "transport-b",
     staleOldGenerationRejected: true,
+    staleOldGenerationEvidence: {
+      classification: "DETERMINISTIC_FIXTURE_CONTRACT",
+      realTransportLateNotificationScenario: "NOT_EXECUTED",
+    },
     generationTaggedEventObserved: true,
     projectionHydratedCurrent: true,
     projectionRehydratedCurrent: true,
@@ -207,4 +211,24 @@ test("reused acceptance state validates workspace config without rewriting it", 
 test("stale delivery fixture proves old-generation evidence cannot reach or change current state", async () => {
   const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   assert.equal(await loadStaleDeliveryFixture(repositoryRoot), true);
+});
+
+test("final acceptance labels stale delivery as fixture evidence rather than real transport E2E", async () => {
+  const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const evidence = JSON.parse(
+    await readFile(
+      path.join(repositoryRoot, "docs", "evidence", "phase-3-5-final", "final-acceptance.json"),
+      "utf8",
+    ),
+  );
+  assert.equal(evidence.isolatedE2e.staleOldGenerationRejected, true);
+  assert.equal(
+    evidence.isolatedE2e.staleOldGenerationEvidence.classification,
+    "DETERMINISTIC_FIXTURE_CONTRACT",
+  );
+  assert.equal(
+    evidence.isolatedE2e.staleOldGenerationEvidence.realTransportLateNotificationScenario,
+    "NOT_EXECUTED",
+  );
+  assert.equal(evidence.evidenceCorrection.preservesOriginalResult, true);
 });

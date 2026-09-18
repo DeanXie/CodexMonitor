@@ -26,6 +26,13 @@
     "exactThreadIdMatch": true,
     "generationTaggedEventObserved": true,
     "staleOldGenerationRejected": true,
+    "staleOldGenerationEvidence": {
+      "classification": "DETERMINISTIC_FIXTURE_CONTRACT",
+      "source": "docs/fixtures/remote-transport-coordination/stale-delivery.json",
+      "productionFunctionRegression": "PASS",
+      "realTransportLateNotificationScenario": "NOT_EXECUTED",
+      "installedAppManualUiScenario": "NOT_EXECUTED"
+    },
     "projectionHydratedCurrent": true,
     "projectionRehydratedCurrent": true,
     "forbiddenRealMutationCounts": {
@@ -58,5 +65,13 @@
     "upstream_duplicate_or_late_approval_response_exact_behavior",
     "upstream_concurrent_duplicate_delete_exact_ordering_or_winner_semantics"
   ],
+  "evidenceCorrection": {
+    "preservesOriginalResult": true,
+    "originalField": "isolatedE2e.staleOldGenerationRejected",
+    "correction": "The field is deterministic fixture/contract evidence and is not a real delayed old-socket notification E2E.",
+    "realIntegrationStatusUnchanged": "PASS",
+    "productIsolationRegressionStatus": "PASS",
+    "phase4StartedFieldScope": "HISTORICAL_AT_ACCEPTANCE_CLOSEOUT"
+  },
   "phase4Started": false
 }

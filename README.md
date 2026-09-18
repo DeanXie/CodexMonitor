@@ -269,6 +269,10 @@ npm run test:phase-3-5-final
 cd src-tauri && cargo test phase_3_5_final_acceptance --lib
 ```
 
+Phase 4 product/release decisions and implementation gates are frozen in
+`docs/phase-4-0-truth-release-boundary.md`; the root roadmap remains the sole
+current-state authority.
+
 ## Codebase Navigation
 
 For task-oriented file lookup ("if you need X, edit Y"), use:

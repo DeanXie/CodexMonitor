@@ -79,6 +79,8 @@ Run in dev mode:
 npm run tauri:dev
 ```
 
+Linked Worktrees automatically use a unique external Cargo target with incremental compilation disabled. The main checkout continues to use `src-tauri/target`. See `docs/build-storage-governance.md` for reporting, disk guards, closeout, and orphan cleanup.
+
 ## iOS Support (WIP)
 
 iOS support is currently in progress.
@@ -113,8 +115,7 @@ Use the standalone daemon control CLI when you want iOS remote mode without keep
 Build binaries:
 
 ```bash
-cd src-tauri
-cargo build --bin codex_monitor_daemon --bin codex_monitor_daemonctl
+npm run rust:build -- --bin codex_monitor_daemon --bin codex_monitor_daemonctl
 ```
 
 Examples:
@@ -242,7 +243,7 @@ Build the production Tauri bundle:
 npm run tauri:build
 ```
 
-Artifacts will be in `src-tauri/target/release/bundle/` (platform-specific subfolders).
+Main-checkout artifacts are in `src-tauri/target/release/bundle/`. Linked Worktrees use the external target printed by `npm run storage:prepare`.
 
 ### Windows (opt-in)
 
@@ -277,7 +278,8 @@ Recommended validation commands:
 npm run lint
 npm run test
 npm run typecheck
-cd src-tauri && cargo check
+npm run rust:check
+npm run storage:report
 ```
 
 Phase 3.5 final integration acceptance is frozen in
@@ -286,7 +288,7 @@ suite with:
 
 ```bash
 npm run test:phase-3-5-final
-cd src-tauri && cargo test phase_3_5_final_acceptance --lib
+npm run rust:test -- phase_3_5_final_acceptance --lib
 ```
 
 Phase 4 product/release decisions and implementation gates are frozen in

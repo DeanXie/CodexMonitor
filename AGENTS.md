@@ -134,7 +134,7 @@ Run validations based on touched areas:
 
 - Always: `npm run typecheck`
 - Frontend behavior/state/hooks/components: `npm run test`
-- Rust backend changes: `cd src-tauri && cargo check`
+- Rust backend changes: `npm run rust:check`
 - Use targeted tests for touched modules before full-suite runs when iterating.
 
 ## Quick Runbook
@@ -147,7 +147,8 @@ npm run doctor:strict
 npm run tauri:dev
 npm run test
 npm run typecheck
-cd src-tauri && cargo check
+npm run rust:check
+npm run storage:report
 ```
 
 Release build:
@@ -155,6 +156,13 @@ Release build:
 ```bash
 npm run tauri:build
 ```
+
+## Ephemeral Worktree Build Storage
+
+- In linked Agent Worktrees, use `npm run rust:check`, `npm run rust:test`, `npm run tauri:dev`, and `npm run tauri:build` so the project injects a unique external Cargo target and `CARGO_INCREMENTAL=0`.
+- Do not run bare Cargo build/check/test commands in an ephemeral Worktree. `storage:report` classifies any resulting `src-tauri/target` as `LEGACY-IN-TREE`.
+- When an Agent phase is accepted or closed, run `npm run storage:closeout -- --accepted` to review the exact candidate, then complete the lifecycle with `npm run storage:closeout -- --apply --accepted`. The command never removes the Git Worktree or branch.
+- The main checkout retains `src-tauri/target` and its existing incremental behavior. See `docs/build-storage-governance.md`.
 
 Focused test runs:
 

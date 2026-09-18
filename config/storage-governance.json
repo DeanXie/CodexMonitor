@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "thresholds": {
+    "totalWarningGiB": 80,
+    "totalCriticalGiB": 120,
+    "targetWarningGiB": 25,
+    "targetCriticalGiB": 40,
+    "freeWarningGiB": 100,
+    "freeBlockGiB": 50
+  },
+  "orphanMinimumAgeDays": 7,
+  "operationLockStaleMinutes": 5,
+  "report": {
+    "totalTimeoutMs": 30000,
+    "externalScanTimeoutMs": 30000,
+    "legacyScanTimeoutMs": 5000,
+    "maxEntriesPerScan": 1000000
+  }
+}

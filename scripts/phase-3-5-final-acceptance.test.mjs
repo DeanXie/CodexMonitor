@@ -9,11 +9,20 @@ import {
   assertCredentialCopyPaths,
   assertIsolatedAcceptancePaths,
   loadStaleDeliveryFixture,
+  resolveCargoTargetDir,
   sanitizeAcceptanceEvidence,
   validateExistingWorkspaceConfig,
   validateAcceptanceEvidence,
   withTemporaryCredential,
 } from "./phase-3-5-final-acceptance.mjs";
+
+test("acceptance artifacts follow the wrapper-provided Cargo target", () => {
+  assert.equal(
+    resolveCargoTargetDir("F:\\repo", { CARGO_TARGET_DIR: "F:\\external\\agent-target" }),
+    "F:\\external\\agent-target",
+  );
+  assert.equal(resolveCargoTargetDir("F:\\repo", {}), "F:\\repo\\src-tauri\\target");
+});
 
 test("acceptance RPC allowlist excludes every remote mutation", () => {
   assert.deepEqual(ALLOWED_REMOTE_METHODS, [

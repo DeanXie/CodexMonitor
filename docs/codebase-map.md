@@ -8,6 +8,9 @@ Related docs:
 - Phase 4 product/release contract: `docs/phase-4-0-truth-release-boundary.md`
 - Version authority/tooling: `VERSION.json`, `release-identity.json`,
   `scripts/version-authority.mjs`
+- Worktree build storage policy/tooling: `config/storage-governance.json`,
+  `scripts/storage-governance.mjs`, `scripts/storage-governance-core.mjs`,
+  `docs/build-storage-governance.md`
 - Controlled whitelist migration preparation: `src-tauri/src/shared/migration_core.rs`,
   `src-tauri/src/shared/migration_core_tests.rs`,
   `docs/phase-4-1c-whitelist-migration.md`
@@ -38,6 +41,7 @@ If a behavior must work in both app and daemon, implement it in `src-tauri/src/s
 | Add/change app-server event handling in UI | `src/services/events.ts`, `src/features/app/hooks/useAppServerEvents.ts`, `src/utils/appServerEvents.ts`, `src/features/threads/utils/threadNormalize.ts` |
 | Change thread state transitions | `src/features/threads/hooks/useThreadsReducer.ts`, `src/features/threads/hooks/threadReducer/*`, `src/features/threads/hooks/useThreads.ts`, focused thread hooks under `src/features/threads/hooks/*` |
 | Change workspace lifecycle/worktree behavior | `src/features/workspaces/hooks/useWorkspaces.ts`, `src-tauri/src/workspaces/commands.rs`, `src-tauri/src/shared/workspaces_core.rs`, `src-tauri/src/shared/workspaces_core/*`, `src-tauri/src/shared/worktree_core.rs` |
+| Change Cargo target isolation, disk guard, report, closeout, or orphan cleanup | `config/storage-governance.json`, `scripts/storage-governance.mjs`, `scripts/storage-governance-core.mjs`, matching tests, `docs/build-storage-governance.md` |
 | Change settings model/load/update | `src/features/settings/components/SettingsView.tsx`, `src/features/settings/hooks/useAppSettings.ts`, `src/services/tauri.ts`, `src-tauri/src/settings/mod.rs`, `src-tauri/src/shared/settings_core.rs`, `src-tauri/src/types.rs`, `src/types.ts` |
 | Change Git/GitHub backend behavior | `src/features/git/hooks/*`, `src/services/tauri.ts`, `src-tauri/src/git/mod.rs`, `src-tauri/src/shared/git_ui_core.rs`, `src-tauri/src/shared/git_ui_core/*`, `src-tauri/src/shared/git_core.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc/git.rs` |
 | Change prompts CRUD/listing behavior | `src/features/prompts/hooks/useCustomPrompts.ts`, `src/features/prompts/components/PromptPanel.tsx`, `src/services/tauri.ts`, `src-tauri/src/prompts.rs`, `src-tauri/src/shared/prompts_core.rs`, `src-tauri/src/bin/codex_monitor_daemon/rpc.rs` |

@@ -315,10 +315,15 @@ export async function validateExistingWorkspaceConfig({ configPath, workspaceId,
   }
 }
 
+export function resolveCargoTargetDir(repositoryRoot, env = process.env) {
+  return path.resolve(env.CARGO_TARGET_DIR?.trim() || path.join(repositoryRoot, "src-tauri", "target"));
+}
+
 export async function runAcceptance() {
   const scriptPath = fileURLToPath(import.meta.url);
   const repositoryRoot = path.resolve(path.dirname(scriptPath), "..");
-  const acceptanceRoot = path.join(repositoryRoot, "src-tauri", "target", "phase-3-5-final-acceptance");
+  const cargoTargetDir = resolveCargoTargetDir(repositoryRoot);
+  const acceptanceRoot = path.join(cargoTargetDir, "phase-3-5-final-acceptance");
   const configuredRunRoot = process.env.PHASE_3_5_ACCEPTANCE_RUN_ROOT;
   const threadId = process.env.PHASE_3_5_ACCEPTANCE_THREAD_ID;
   if (!configuredRunRoot || !threadId) {
@@ -341,7 +346,7 @@ export async function runAcceptance() {
   await Promise.all([codexHome, daemonDataDir, workspacePath].map((dir) => stat(dir)));
   await assertDisposableThreadRollout(codexHome, threadId);
 
-  const daemonBin = process.env.PHASE_3_5_DAEMON_BIN || path.join(repositoryRoot, "src-tauri", "target", "debug", "codex_monitor_daemon.exe");
+  const daemonBin = process.env.PHASE_3_5_DAEMON_BIN || path.join(cargoTargetDir, "debug", "codex_monitor_daemon.exe");
   const workspaceId = "phase-3-5-final-disposable-workspace";
   await validateExistingWorkspaceConfig({
     configPath: path.join(daemonDataDir, "workspaces.json"),

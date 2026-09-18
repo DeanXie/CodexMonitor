@@ -142,3 +142,10 @@ version projection, deterministic drift repair, monotonic Build bumps, target
 DeanX identity, unchanged legacy runtime identity, and stable inactive Windows
 installer identity. The authority and closeout record is
 `../phase-4-1b-release-version-authority.md`.
+
+P4.1c whitelist-migration fixtures are stored in
+`../fixtures/phase-4-1c-whitelist-migration/`. They freeze explicit-root,
+source-read-only discovery, field allowlisting, credential and canonical-data
+exclusion, workspace identity preservation, deferred RemoteHostIdentity,
+staging ownership, validation, interruption recovery, and rollback without
+activation. The evidence index is `phase-4-1c/README.md`.

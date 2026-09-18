@@ -1,0 +1,24 @@
+{
+  "theme": "dark",
+  "uiScale": 1.25,
+  "backendMode": "remote",
+  "remoteBackendProvider": "tcp",
+  "remoteBackendHost": "127.0.0.1:54060",
+  "remoteBackendToken": "fake-token-DO-NOT-MIGRATE",
+  "remoteBackends": [
+    {
+      "id": "host-a",
+      "name": "Host A",
+      "provider": "tcp",
+      "host": "127.0.0.1:54060",
+      "token": "fake-token-DO-NOT-MIGRATE",
+      "remoteHostIdentity": "fake-host-identity",
+      "lastConnectedAtMs": 42,
+      "futureNestedField": "excluded-value"
+    }
+  ],
+  "activeRemoteBackendId": "host-a",
+  "futureUnknownField": "excluded-value",
+  "futureRequiredSetting": "required-value",
+  "requiredMigrationFields": []
+}

@@ -1,6 +1,7 @@
 # P4.1b — Release Identity Contract / Version Authority
 
-Status: **PASS / COMPLETE / FROZEN**. P4.1c is **NOT STARTED**.
+Status: **PASS / COMPLETE / FROZEN**. P4.1c is complete and frozen; P4.1d is
+not started.
 
 ## Software version authority
 
@@ -9,7 +10,7 @@ Root `VERSION.json` is the only current version authority:
 ```json
 {
   "version": "0.7.68",
-  "build": 1,
+  "build": 2,
   "status": "development"
 }
 ```
@@ -19,6 +20,9 @@ no historical Build was inferred. Build increments monotonically for a verified
 product-state change and never resets when A, B, or C changes. A.B.C remains
 the platform ordering version. Build is traceability metadata, not SemVer
 precedence. `status` remains `development` until explicit release authorization.
+
+P4.1c closeout advanced the current authority to Build 2 without changing
+SemVer or development status.
 
 `scripts/version-authority.mjs` provides separate `check`, `sync`, `bump`, and
 `trace` operations. Bump changes only `VERSION.json`; sync is explicit. Check is
@@ -48,9 +52,9 @@ Monitor`, `com.dimillian.codexmonitor`, and
 cutover. No data directory, daemonctl lookup, user setting, credential,
 RemoteHostIdentity, or installed product is read or migrated in P4.1b.
 
-The identity manifest schema and its `configSchemaVersion` are independent of
-software version and Build. P4.1c owns migration behavior; Build changes never
-increment configuration schema automatically.
+The identity manifest's `configSchemaVersion` is the P4.1c migration/config
+schema authority and is independent of software version and Build. Build
+changes never increment configuration schema automatically.
 
 ## Build and release gates
 

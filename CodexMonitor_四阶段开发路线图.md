@@ -690,8 +690,8 @@ Project
 
 ## 当前状态
 
-**IN PROGRESS**。P4.0、P4.1a 与 P4.1b Release Identity Contract / Version
-Authority 已完成；下一实现切片为 P4.1c。完整且唯一的 Phase 4 产品/发行合同见
+**IN PROGRESS**。P4.0、P4.1a、P4.1b 与 P4.1c 已完成并冻结；P4.1d runtime
+activation 尚未开始。完整且唯一的 Phase 4 产品/发行合同见
 [`docs/phase-4-0-truth-release-boundary.md`](docs/phase-4-0-truth-release-boundary.md)。
 
 ## 目标与平台顺序
@@ -963,9 +963,11 @@ PASS / COMPLETE through Phase 3.5 ✅
 Phase 4 — Productization
 IN PROGRESS
 ├─ P4.0 Truth / Release Boundary Freeze PASS / COMPLETE / FROZEN
-├─ P4.1a Release Safety Switches PASS / COMPLETE / FROZEN
-├─ P4.1b Release Identity Contract / Version Authority PASS / COMPLETE / FROZEN
-└─ next implementation slice: P4.1c
+└─ P4.1 — Release Identity / Version / Migration / Update Safety IN PROGRESS
+   ├─ P4.1a Release Safety Switches PASS / COMPLETE / FROZEN
+   ├─ P4.1b Release Identity Contract / Version Authority PASS / COMPLETE / FROZEN
+   ├─ P4.1c Controlled Whitelist Migration Engine PASS / COMPLETE / FROZEN
+   └─ next implementation slice: P4.1d
 
 Advanced — Adaptive Model Router
 RESERVED
@@ -977,14 +979,15 @@ RESERVED
 
 下一任务：
 
-**P4.1c — Configuration Migration Engine**
+**P4.1d — Migration Activation / Runtime Identity Cutover**
 
 Phase 1、Phase 2、Phase 3（through Phase 3.5）均已完成；Phase 3.5 为
 PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项产品决策、
 平台顺序、P4.0-P4.7 路线图与 Windows Daily-use Milestone。P4.1a 已停用继承
 的 updater 与第三方 Sentry 自动上报链路；P4.1b 已冻结 DeanX target identity、
-`VERSION.json`、Build 规则与 drift gate，且未激活 runtime identifier。下一步
-P4.1c 仅实现受控配置迁移；当前尚未开始。
+`VERSION.json`、Build 规则与 drift gate，且未激活 runtime identifier。P4.1c
+只准备显式 root、白名单化、无凭据的 staging 数据；真实 identifier/data-dir/
+RemoteHostIdentity cutover 仍仅属于 P4.1d，且当前未开始。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 

@@ -231,9 +231,10 @@ npm run version:trace
 `version:bump` changes only `VERSION.json`. Run `version:sync` explicitly to
 project the version into package/Cargo/Tauri/Apple files. Production build and
 release entry points fail closed on drift; they never repair it automatically.
-The future DeanX distribution identity is frozen in `release-identity.json`,
-but the active runtime identity remains legacy until P4.1c/P4.1d migration and
-cutover are complete.
+The future DeanX distribution identity is frozen in `release-identity.json`.
+P4.1c provides an internal explicit-root, whitelist-only migration preparation
+engine, but the active runtime identity and data directory remain legacy until
+P4.1d cutover. P4.1c never runs automatically and never migrates credentials.
 
 Build the production Tauri bundle:
 
@@ -291,6 +292,10 @@ cd src-tauri && cargo test phase_3_5_final_acceptance --lib
 Phase 4 product/release decisions and implementation gates are frozen in
 `docs/phase-4-0-truth-release-boundary.md`; the root roadmap remains the sole
 current-state authority.
+
+The P4.1c migration allowlist, staging state machine, security boundary, and
+rollback contract are documented in
+`docs/phase-4-1c-whitelist-migration.md`.
 
 ## Codebase Navigation
 

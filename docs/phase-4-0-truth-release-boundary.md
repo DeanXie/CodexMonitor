@@ -2,7 +2,8 @@
 
 Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS**. P4.1a Release
 Safety Switches and P4.1b Release Identity Contract / Version Authority are
-complete; P4.1c migration remains **NOT STARTED**.
+complete. P4.1c whitelist migration preparation is complete and frozen; P4.1d
+runtime activation has not started.
 
 The root `CodexMonitor_四阶段开发路线图.md` remains the sole current-state
 authority. This document is the Phase 4 product/release contract, not a second
@@ -91,11 +92,14 @@ facts to migrate in P4.1, not approved DeanX release settings:
 - P4.5 still owns local logging, diagnostics export, and crash recovery.
 
 P4.1b establishes root `VERSION.json` as the single software version authority
-at `v0.7.68 · Build 1 · development`. Package/Cargo/Tauri/Apple projections,
+at `v0.7.68 · Build 2 · development`. Build 1 remains the first formal unified
+version-authority baseline. Package/Cargo/Tauri/Apple projections,
 drift checks, deterministic bump/sync tooling, and commit trace output all flow
 from it. Build remains monotonic and never substitutes for SemVer ordering.
 The DeanX target identity is frozen in `release-identity.json`, while the active
-runtime identifiers and data locations remain legacy pending P4.1c/P4.1d.
+runtime identifiers and data locations remain legacy pending P4.1d. P4.1c
+prepares only sanitized, allowlisted staging data from explicit roots and does
+not migrate credentials or RemoteHostIdentity.
 
 The main checkout's local `.gitignore` addition, metadata-only `main.rs` state,
 and two development BAT files are not production build or installed-runtime

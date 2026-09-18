@@ -15,6 +15,7 @@ pub(crate) mod git_rpc;
 pub(crate) mod git_ui_core;
 pub(crate) mod global_sources_core;
 pub(crate) mod local_usage_core;
+pub(crate) mod migration_core;
 #[cfg(any(not(desktop), test))]
 pub(crate) mod mobile_thread_routing;
 pub(crate) mod process_core;
@@ -78,6 +79,10 @@ mod phase_3_5_4_compatibility_tests;
 #[cfg(test)]
 #[path = "phase_3_5_final_acceptance_tests.rs"]
 mod phase_3_5_final_acceptance_tests;
+
+#[cfg(test)]
+#[path = "migration_core_tests.rs"]
+mod migration_core_tests;
 
 #[cfg(all(test, desktop))]
 #[path = "desktop_projection_handling_tests.rs"]

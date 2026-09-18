@@ -1,0 +1,17 @@
+{
+  "phase": "P4.1c",
+  "source": "read_only",
+  "target": "staged_only",
+  "activation": "P4.1d",
+  "credentials": "never_migrated",
+  "remoteHostIdentity": "deferred",
+  "runtimeState": "excluded",
+  "states": [
+    "not_started",
+    "preflighted",
+    "staging",
+    "validated",
+    "ready_for_activation",
+    "failed"
+  ]
+}

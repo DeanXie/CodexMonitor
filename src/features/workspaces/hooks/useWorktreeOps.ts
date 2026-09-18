@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import * as Sentry from "@sentry/react";
 import type { DebugEntry, WorkspaceInfo } from "../../../types";
 import {
   addClone as addCloneService,
@@ -64,12 +63,6 @@ export function useWorktreeOps({
         if (options?.activate !== false) {
           setActiveWorkspaceId(workspace.id);
         }
-        Sentry.metrics.count("worktree_agent_created", 1, {
-          attributes: {
-            workspace_id: workspace.id,
-            parent_id: parent.id,
-          },
-        });
         return workspace;
       } catch (error) {
         onDebug?.({
@@ -110,12 +103,6 @@ export function useWorktreeOps({
         const workspace = await addCloneService(source.id, trimmedFolder, trimmedName);
         setWorkspaces((prev) => [...prev, workspace]);
         setActiveWorkspaceId(workspace.id);
-        Sentry.metrics.count("clone_agent_created", 1, {
-          attributes: {
-            workspace_id: workspace.id,
-            parent_id: source.id,
-          },
-        });
         return workspace;
       } catch (error) {
         onDebug?.({

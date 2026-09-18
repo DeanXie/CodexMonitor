@@ -1,8 +1,8 @@
 # Phase 4.0 — Truth / Release Boundary Freeze
 
-Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS** and the next
-implementation slice is **P4.1 — Release Identity / Version / Migration /
-Update Safety**.
+Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS**. P4.1a Release
+Safety Switches is complete; the remaining P4.1 identity, version, and migration
+work starts with P4.1b.
 
 The root `CodexMonitor_四阶段开发路线图.md` remains the sole current-state
 authority. This document is the Phase 4 product/release contract, not a second
@@ -84,11 +84,11 @@ facts to migrate in P4.1, not approved DeanX release settings:
 - Tauri/package/Cargo version: `0.7.68`;
 - Tauri identifier: `com.dimillian.codexmonitor`;
 - iOS identifier family: `com.dimillian.codexmonitor`;
-- updater endpoint: the Dimillian/CodexMonitor GitHub release feed;
-- updater public key: the existing upstream public key;
-- release workflow/update UI references: Dimillian/CodexMonitor;
-- Sentry runtime is currently initialized and therefore must be explicitly
-  disabled under the P4.5 contract before release.
+- the original upstream updater endpoint, public key, SDK, plugin, permissions,
+  UI/menu entry points, updater artifacts, and manifest workflow are disabled
+  by P4.1a;
+- third-party Sentry initialization and event calls are disabled by P4.1a;
+- P4.5 still owns local logging, diagnostics export, and crash recovery.
 
 P4.0 does not alter these values. P4.1 must establish a single version
 authority for `A.B.C + Build N`, package/Cargo/Tauri consistency, build-number

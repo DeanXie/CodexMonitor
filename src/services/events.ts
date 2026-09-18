@@ -207,7 +207,6 @@ const dictationDownloadHub = createEventHub<DictationModelStatus>("dictation-dow
 const dictationEventHub = createEventHub<DictationEvent>("dictation-event");
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
 const terminalExitHub = createEventHub<TerminalExitEvent>("terminal-exit");
-const updaterCheckHub = createEventHub<void>("updater-check");
 const trayOpenThreadHub = createEventHub<TrayOpenThreadPayload>("tray-open-thread");
 const menuNewAgentHub = createEventHub<void>("menu-new-agent");
 const menuNewWorktreeAgentHub = createEventHub<void>("menu-new-worktree-agent");
@@ -300,15 +299,6 @@ export function subscribeTerminalExit(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return terminalExitHub.subscribe(onEvent, options);
-}
-
-export function subscribeUpdaterCheck(
-  onEvent: () => void,
-  options?: SubscriptionOptions,
-): Unsubscribe {
-  return updaterCheckHub.subscribe(() => {
-    onEvent();
-  }, options);
 }
 
 export function subscribeTrayOpenThread(

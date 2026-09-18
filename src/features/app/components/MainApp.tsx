@@ -190,7 +190,6 @@ export default function MainApp() {
     queueSaveSettings,
   });
   const {
-    isMobileRuntime,
     showMobileSetupWizard,
     mobileSetupWizardProps,
     handleMobileConnectSuccess,
@@ -200,8 +199,6 @@ export default function MainApp() {
     queueSaveSettings,
     refreshWorkspaces,
   });
-  const updaterEnabled = !isMobileRuntime;
-
   const workspacesById = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),
     [workspaces],
@@ -576,14 +573,11 @@ export default function MainApp() {
     updaterState,
     startUpdate,
     dismissUpdate,
-    postUpdateNotice,
-    dismissPostUpdateNotice,
     handleTestNotificationSound,
     handleTestSystemNotification,
   } = useUpdaterController({
-    enabled: updaterEnabled,
-    autoCheckOnMount:
-      !appSettingsLoading && appSettings.automaticAppUpdateChecksEnabled,
+    enabled: false,
+    autoCheckOnMount: false,
     notificationSoundsEnabled: appSettings.notificationSoundsEnabled,
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
     subagentSystemNotificationsEnabled:
@@ -1890,13 +1884,9 @@ export default function MainApp() {
     setActiveTab,
     tabletTab,
     showMobilePollingFetchStatus,
-    appModalsAboutOpen:
-      appModalsProps.settingsOpen && appModalsProps.settingsSection === 'about',
     updaterState,
     startUpdate,
     dismissUpdate,
-    postUpdateNotice,
-    dismissPostUpdateNotice,
     errorToasts,
     dismissErrorToast,
     showDebugButton,

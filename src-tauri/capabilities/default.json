@@ -11,8 +11,6 @@
         "core:webview:allow-set-webview-zoom",
         "opener:default",
         "dialog:default",
-        "process:default",
-        "updater:default",
         "window-state:default",
         "liquid-glass:default",
         "notification:default",
@@ -34,7 +32,6 @@
         "core:webview:allow-set-webview-zoom",
         "opener:default",
         "dialog:default",
-        "process:default",
         "notification:default"
       ]
     }

@@ -752,24 +752,20 @@ describe("SettingsView Display", () => {
 });
 
 describe("SettingsView About", () => {
-  it("toggles automatic app update checks", async () => {
+  it("shows the custom-distribution updater as disabled", () => {
     const onToggleAutomaticAppUpdateChecks = vi.fn();
     renderAboutSection({
       onToggleAutomaticAppUpdateChecks,
       appSettings: { automaticAppUpdateChecksEnabled: false },
     });
 
-    const row = screen
-      .getByText("Automatically check for app updates")
-      .closest(".settings-toggle-row") as HTMLElement | null;
-    if (!row) {
-      throw new Error("Expected automatic app update checks row");
-    }
-    fireEvent.click(within(row).getByRole("button"));
-
-    await waitFor(() => {
-      expect(onToggleAutomaticAppUpdateChecks).toHaveBeenCalledTimes(1);
-    });
+    expect(
+      screen.getByText(
+        "Automatic and manual in-app updates are disabled for this distribution.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Check for updates")).toBeNull();
+    expect(onToggleAutomaticAppUpdateChecks).not.toHaveBeenCalled();
   });
 });
 

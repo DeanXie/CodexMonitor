@@ -3,9 +3,7 @@ import { useUpdater } from "../../update/hooks/useUpdater";
 import { useAgentSoundNotifications } from "../../notifications/hooks/useAgentSoundNotifications";
 import { useAgentSystemNotifications } from "../../notifications/hooks/useAgentSystemNotifications";
 import { useWindowFocusState } from "../../layout/hooks/useWindowFocusState";
-import { useTauriEvent } from "./useTauriEvent";
 import { playNotificationSound } from "../../../utils/notificationSounds";
-import { subscribeUpdaterCheck } from "../../../services/events";
 import { sendNotification } from "../../../services/tauri";
 import type { DebugEntry } from "../../../types";
 
@@ -41,8 +39,6 @@ export function useUpdaterController({
     startUpdate,
     checkForUpdates,
     dismiss,
-    postUpdateNotice,
-    dismissPostUpdateNotice,
   } = useUpdater({
     enabled,
     autoCheckOnMount,
@@ -50,30 +46,6 @@ export function useUpdaterController({
   });
   const isWindowFocused = useWindowFocusState();
   const nextTestSoundIsError = useRef(false);
-
-  const subscribeUpdaterCheckEvent = useCallback(
-    (handler: () => void) =>
-      subscribeUpdaterCheck(handler, {
-        onError: (error) => {
-          onDebug({
-            id: `${Date.now()}-client-updater-menu-error`,
-            timestamp: Date.now(),
-            source: "error",
-            label: "updater/menu-error",
-            payload: error instanceof Error ? error.message : String(error),
-          });
-        },
-      }),
-    [onDebug],
-  );
-
-  useTauriEvent(
-    subscribeUpdaterCheckEvent,
-    () => {
-      void checkForUpdates({ announceNoUpdate: true });
-    },
-    { enabled },
-  );
 
   useAgentSoundNotifications({
     enabled: notificationSoundsEnabled,
@@ -122,8 +94,6 @@ export function useUpdaterController({
     startUpdate,
     checkForUpdates,
     dismissUpdate: dismiss,
-    postUpdateNotice,
-    dismissPostUpdateNotice,
     handleTestNotificationSound,
     handleTestSystemNotification,
   };

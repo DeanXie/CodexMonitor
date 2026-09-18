@@ -15,8 +15,6 @@ jobs:
       CODESIGN_IDENTITY: ${{ vars.CODESIGN_IDENTITY }}
       NOTARY_PROFILE_NAME: ${{ vars.NOTARY_PROFILE_NAME }}
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -77,17 +75,9 @@ jobs:
             --issuer "$APPLE_API_ISSUER_ID" \
             --key "private_keys/AuthKey.p8"
 
-      - name: Write Tauri signing key
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.tauri"
-          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codexmonitor.key"
-
       - name: Build app bundle
         run: |
           set -euo pipefail
-          export TAURI_SIGNING_PRIVATE_KEY
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/codexmonitor.key")"
           npm run tauri -- build --bundles app
 
       - name: Build daemon binaries
@@ -142,19 +132,6 @@ jobs:
             -ov -format UDZO \
             release-artifacts/CodexMonitor_${VERSION}_aarch64.dmg
 
-          COPYFILE_DISABLE=1 tar -czf \
-            "src-tauri/target/release/bundle/macos/Codex Monitor.app.tar.gz" \
-            -C src-tauri/target/release/bundle/macos "Codex Monitor.app"
-
-          npm run tauri signer sign -- \
-            -f "$HOME/.tauri/codexmonitor.key" \
-            -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
-            "src-tauri/target/release/bundle/macos/Codex Monitor.app.tar.gz"
-
-          cp "src-tauri/target/release/bundle/macos/Codex Monitor.app.tar.gz" \
-            release-artifacts/CodexMonitor.app.tar.gz
-          cp "src-tauri/target/release/bundle/macos/Codex Monitor.app.tar.gz.sig" \
-            release-artifacts/CodexMonitor.app.tar.gz.sig
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -163,16 +140,11 @@ jobs:
           path: |
             release-artifacts/CodexMonitor.zip
             release-artifacts/CodexMonitor_*_aarch64.dmg
-            release-artifacts/CodexMonitor.app.tar.gz
-            release-artifacts/CodexMonitor.app.tar.gz.sig
 
   build_linux:
     name: linux bundles (${{ matrix.arch }})
     runs-on: ${{ matrix.platform }}
     environment: release
-    env:
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
     strategy:
       fail-fast: false
       matrix:
@@ -206,17 +178,9 @@ jobs:
       - name: install frontend dependencies
         run: npm ci
 
-      - name: Write Tauri signing key
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.tauri"
-          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codexmonitor.key"
-
       - name: build AppImage and RPM
         run: |
           set -euo pipefail
-          export TAURI_SIGNING_PRIVATE_KEY
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/codexmonitor.key")"
           npm run tauri -- build --bundles appimage,rpm
 
       - name: Validate Linux bundle outputs
@@ -244,9 +208,6 @@ jobs:
   build_windows:
     runs-on: windows-latest
     environment: release
-    env:
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -275,28 +236,10 @@ jobs:
       - name: install frontend dependencies
         run: npm ci
 
-      - name: Write Tauri signing key
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import base64
-          import os
-          from pathlib import Path
-
-          raw = base64.b64decode(os.environ["TAURI_SIGNING_PRIVATE_KEY_B64"])
-          home = Path.home()
-          target = home / ".tauri"
-          target.mkdir(parents=True, exist_ok=True)
-          (target / "codexmonitor.key").write_bytes(raw)
-          PY
-
       - name: build windows bundles
         shell: bash
         run: |
           set -euo pipefail
-          export TAURI_SIGNING_PRIVATE_KEY
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/codexmonitor.key")"
           npm run tauri:build:win
 
       - name: Upload Windows artifacts
@@ -374,7 +317,7 @@ jobs:
             rpm -qp --requires "$rpm_file"
           done
 
-      - name: Build latest.json
+      - name: Build release notes
         run: |
           set -euo pipefail
           VERSION=$(python3 - <<'PY'
@@ -386,7 +329,6 @@ jobs:
           PY
           )
 
-          SIGNATURE=$(cat release-artifacts/CodexMonitor.app.tar.gz.sig)
           LAST_TAG=$(git tag --sort=-version:refname \
             | grep -v "^v${VERSION}$" \
             | head -n 1 || true)
@@ -434,120 +376,6 @@ jobs:
           Path("release-artifacts/release-notes.md").write_text(notes + "\n")
           PY
 
-          python3 - <<PY
-          import json
-          from datetime import datetime, timezone
-          from pathlib import Path
-          from urllib.parse import quote
-
-          notes = Path("release-artifacts/release-notes.md").read_text().strip()
-          artifacts_dir = Path("release-artifacts")
-
-          def release_url(filename):
-            return f"https://github.com/Dimillian/CodexMonitor/releases/download/v${VERSION}/{quote(filename)}"
-
-          platforms = {
-            "darwin-aarch64": {
-              "url": release_url("CodexMonitor.app.tar.gz"),
-              "signature": "${SIGNATURE}",
-            }
-          }
-
-          appimages = list(artifacts_dir.rglob("*.AppImage.tar.gz"))
-          if not appimages:
-            appimages = list(artifacts_dir.rglob("*.AppImage"))
-          if not appimages:
-            raise SystemExit("No AppImage artifacts found for latest.json")
-
-          def detect_arch(name):
-            lowered = name.lower()
-            if "aarch64" in lowered or "arm64" in lowered:
-              return "aarch64"
-            if "x86_64" in lowered or "amd64" in lowered:
-              return "x86_64"
-            return None
-
-          for appimage in appimages:
-            arch = detect_arch(appimage.name)
-            if not arch:
-              continue
-            sig_path = appimage.with_suffix(appimage.suffix + ".sig")
-            if not sig_path.exists():
-              raise SystemExit(f"Missing signature for {appimage.name}")
-            platforms[f"linux-{arch}"] = {
-              "url": release_url(appimage.name),
-              "signature": sig_path.read_text().strip(),
-            }
-
-          exe_candidates = sorted(artifacts_dir.rglob("*.exe"), key=lambda p: p.name.lower())
-          windows_installer = None
-          preferred_installers = []
-          for candidate in exe_candidates:
-            lowered = candidate.name.lower()
-            if "codexmonitor" in lowered and ("setup" in lowered or "installer" in lowered):
-              preferred_installers.append(candidate)
-          if preferred_installers:
-            windows_installer = preferred_installers[0]
-          else:
-            for candidate in exe_candidates:
-              lowered = candidate.name.lower()
-              if "setup" in lowered or "installer" in lowered:
-                windows_installer = candidate
-                break
-            if windows_installer is None and exe_candidates:
-              windows_installer = exe_candidates[0]
-          if windows_installer is None:
-            raise SystemExit("No Windows installer (.exe) found for latest.json")
-
-          print(f"Selected Windows installer for latest.json: {windows_installer.name}")
-
-          win_sig_path = windows_installer.with_suffix(windows_installer.suffix + ".sig")
-          if not win_sig_path.exists():
-            raise SystemExit(f"Missing signature for {windows_installer.name}")
-
-          platforms["windows-x86_64"] = {
-            "url": release_url(windows_installer.name),
-            "signature": win_sig_path.read_text().strip(),
-          }
-
-          payload = {
-            "version": "${VERSION}",
-            "notes": notes,
-            "pub_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "platforms": platforms,
-          }
-
-          Path("release-artifacts/latest.json").write_text(json.dumps(payload, indent=2) + "\n")
-          PY
-
-      - name: Validate latest.json artifact references
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          from urllib.parse import unquote, urlparse
-
-          artifacts_dir = Path("release-artifacts")
-          latest_path = artifacts_dir / "latest.json"
-          payload = json.loads(latest_path.read_text())
-          available_files = {path.name for path in artifacts_dir.rglob("*") if path.is_file()}
-
-          missing = []
-          for platform, metadata in payload.get("platforms", {}).items():
-            url = metadata.get("url", "")
-            filename = Path(unquote(urlparse(url).path)).name
-            if filename not in available_files:
-              missing.append((platform, filename))
-
-          if missing:
-            print("latest.json references missing artifacts:")
-            for platform, filename in missing:
-              print(f"- {platform}: {filename}")
-            raise SystemExit(1)
-
-          print(f"Validated {len(payload.get('platforms', {}))} latest.json platform URL(s).")
-          PY
 
       - name: Create GitHub release
         env:
@@ -590,13 +418,10 @@ jobs:
             --target "$GITHUB_SHA" \
             release-artifacts/CodexMonitor.zip \
             release-artifacts/CodexMonitor_*_aarch64.dmg \
-            release-artifacts/CodexMonitor.app.tar.gz \
-            release-artifacts/CodexMonitor.app.tar.gz.sig \
             "${appimages[@]}" \
             "${rpms[@]}" \
             "${windows_exes[@]}" \
             "${windows_msis[@]}" \
-            release-artifacts/latest.json
 
       - name: Bump version and open PR
         env:

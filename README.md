@@ -47,7 +47,7 @@ CodexMonitor is a Tauri app for orchestrating multiple Codex agents across local
 - Responsive layouts (desktop/tablet/phone) with tabbed navigation.
 - Sidebar usage and credits meter for account rate limits plus a home usage snapshot.
 - Terminal dock with multiple tabs for background commands (experimental).
-- In-app updates with toast-driven download/install, debug panel copy/clear, sound notifications, plus platform-specific window effects (macOS overlay title bar + vibrancy) and a reduced transparency toggle.
+- Debug panel copy/clear, sound notifications, platform-specific window effects (macOS overlay title bar + vibrancy), and a reduced transparency toggle. In-app updating and third-party Sentry upload are disabled for the first DeanX daily-use distribution.
 
 ## Requirements
 

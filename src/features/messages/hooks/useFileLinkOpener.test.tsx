@@ -41,10 +41,6 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: getCurrentWindowMock,
 }));
 
-vi.mock("@sentry/react", () => ({
-  captureException: vi.fn(),
-}));
-
 vi.mock("../../../services/toasts", () => ({
   pushErrorToast: vi.fn(),
 }));

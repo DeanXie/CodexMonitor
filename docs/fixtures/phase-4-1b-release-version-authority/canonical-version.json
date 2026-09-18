@@ -1,0 +1,8 @@
+{
+  "scenario": "canonical-version",
+  "authority": {
+    "version": "0.7.68",
+    "build": 1,
+    "status": "development"
+  }
+}

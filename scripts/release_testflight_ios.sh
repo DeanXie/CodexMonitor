@@ -257,7 +257,7 @@ if [[ "$SKIP_BUILD" -eq 0 ]]; then
   [[ -n "$NPM_BIN" ]] || fail "Unable to find npm in PATH or common install locations"
 
   if [[ -z "$BUILD_NUMBER" ]]; then
-    BUILD_NUMBER="$(date +%s)"
+    BUILD_NUMBER="$(node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("VERSION.json", "utf8")); process.stdout.write(String(v.build));')"
   fi
 
   log "Building iOS archive and exporting IPA (build number: $BUILD_NUMBER)"

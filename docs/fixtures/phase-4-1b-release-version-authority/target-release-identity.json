@@ -1,0 +1,10 @@
+{
+  "scenario": "target-release-identity",
+  "schemaVersion": 1,
+  "configSchemaVersion": 1,
+  "target": {
+    "productName": "CodexMonitor DeanX",
+    "desktopIdentifier": "io.github.deanxie.codexmonitor",
+    "iosIdentifier": "io.github.deanxie.codexmonitor.ios"
+  }
+}

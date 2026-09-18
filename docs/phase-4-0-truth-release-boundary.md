@@ -1,8 +1,8 @@
 # Phase 4.0 — Truth / Release Boundary Freeze
 
 Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS**. P4.1a Release
-Safety Switches is complete; the remaining P4.1 identity, version, and migration
-work starts with P4.1b.
+Safety Switches and P4.1b Release Identity Contract / Version Authority are
+complete; P4.1c migration remains **NOT STARTED**.
 
 The root `CodexMonitor_四阶段开发路线图.md` remains the sole current-state
 authority. This document is the Phase 4 product/release contract, not a second
@@ -90,10 +90,12 @@ facts to migrate in P4.1, not approved DeanX release settings:
 - third-party Sentry initialization and event calls are disabled by P4.1a;
 - P4.5 still owns local logging, diagnostics export, and crash recovery.
 
-P4.0 does not alter these values. P4.1 must establish a single version
-authority for `A.B.C + Build N`, package/Cargo/Tauri consistency, build-number
-semantics, updater ordering, and commit traceability. SemVer build metadata is
-not assumed to provide updater ordering.
+P4.1b establishes root `VERSION.json` as the single software version authority
+at `v0.7.68 · Build 1 · development`. Package/Cargo/Tauri/Apple projections,
+drift checks, deterministic bump/sync tooling, and commit trace output all flow
+from it. Build remains monotonic and never substitutes for SemVer ordering.
+The DeanX target identity is frozen in `release-identity.json`, while the active
+runtime identifiers and data locations remain legacy pending P4.1c/P4.1d.
 
 The main checkout's local `.gitignore` addition, metadata-only `main.rs` state,
 and two development BAT files are not production build or installed-runtime

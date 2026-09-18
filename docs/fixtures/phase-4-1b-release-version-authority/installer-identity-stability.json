@@ -1,0 +1,10 @@
+{
+  "scenario": "installer-identity-stability",
+  "windowsInstaller": {
+    "productIdentity": "io.github.deanxie.codexmonitor",
+    "productName": "CodexMonitor DeanX",
+    "stableAcrossBuilds": true,
+    "activated": false,
+    "activationPhase": "P4.1d"
+  }
+}

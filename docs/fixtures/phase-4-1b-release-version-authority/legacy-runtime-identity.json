@@ -1,0 +1,6 @@
+{
+  "scenario": "legacy-runtime-identity",
+  "productName": "Codex Monitor",
+  "desktopIdentifier": "com.dimillian.codexmonitor",
+  "iosIdentifier": "com.dimillian.codexmonitor.ios"
+}

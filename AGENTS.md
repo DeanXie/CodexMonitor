@@ -11,6 +11,17 @@ Detailed navigation/runbooks live in:
 - `docs/multi-agent-sync-runbook.md` (upstream `../Codex` sync checklist for multi-agent/config behavior)
 - `README.md` (setup, build, release, and broader project docs)
 
+## Version Authority
+
+- Root `VERSION.json` is the only authority for software `version`, monotonic
+  `build`, and release `status`.
+- Run `npm run version:check` before production builds and releases.
+- Use `npm run version:bump -- <build|patch|minor|major>`, then explicitly run
+  `npm run version:sync`; never edit package, Cargo, Tauri, lockfile, or Apple
+  version projections independently.
+- `release-identity.json` freezes the future DeanX target identity separately
+  from the still-active legacy runtime identity and configuration schema.
+
 ## Project Snapshot
 
 CodexMonitor is a Tauri app that orchestrates Codex agents across local workspaces.

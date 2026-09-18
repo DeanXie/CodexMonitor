@@ -1,0 +1,6 @@
+{
+  "scenario": "package-drift",
+  "authorityVersion": "1.2.3",
+  "projectionVersion": "9.9.9",
+  "expected": "VERSION_DRIFT"
+}

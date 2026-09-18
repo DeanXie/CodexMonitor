@@ -135,3 +135,10 @@ its scope and explicit NOT PROVEN boundaries are documented in
 `phase-3-5-final/README.md`. Its stale-old-generation boolean is explicitly
 classified as deterministic fixture/contract evidence, with production-function
 regression coverage PASS and the real delayed old-socket scenario NOT_EXECUTED.
+
+P4.1b version/identity contract fixtures are stored in
+`../fixtures/phase-4-1b-release-version-authority/`. They cover canonical
+version projection, deterministic drift repair, monotonic Build bumps, target
+DeanX identity, unchanged legacy runtime identity, and stable inactive Windows
+installer identity. The authority and closeout record is
+`../phase-4-1b-release-version-authority.md`.

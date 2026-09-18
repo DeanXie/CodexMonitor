@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "configSchemaVersion": 1,
+  "publisher": {
+    "githubOwner": "DeanXie",
+    "repository": "CodexMonitor"
+  },
+  "legacy": {
+    "productName": "Codex Monitor",
+    "desktopIdentifier": "com.dimillian.codexmonitor",
+    "iosIdentifier": "com.dimillian.codexmonitor.ios"
+  },
+  "target": {
+    "productName": "CodexMonitor DeanX",
+    "desktopIdentifier": "io.github.deanxie.codexmonitor",
+    "iosIdentifier": "io.github.deanxie.codexmonitor.ios"
+  },
+  "windowsInstaller": {
+    "productIdentity": "io.github.deanxie.codexmonitor",
+    "productName": "CodexMonitor DeanX",
+    "stableAcrossBuilds": true,
+    "activated": false,
+    "activationPhase": "P4.1d"
+  },
+  "migrationRequired": true,
+  "activation": {
+    "runtimeIdentity": false,
+    "dataMigration": false,
+    "phase": "P4.1d"
+  }
+}

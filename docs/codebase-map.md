@@ -6,6 +6,8 @@ Related docs:
 
 - Setup/build/release: `README.md`
 - Phase 4 product/release contract: `docs/phase-4-0-truth-release-boundary.md`
+- Version authority/tooling: `VERSION.json`, `release-identity.json`,
+  `scripts/version-authority.mjs`
 - Creation-intent / first-Turn coordination: `docs/phase-3-3-2-creation-coordination.md`
 - iOS remote over Tailscale (TCP): `docs/mobile-ios-tailscale-blueprint.md`
 

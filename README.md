@@ -216,6 +216,25 @@ For new setups, copy `.testflight.local.env.example` to `.testflight.local.env` 
 
 ## Release Build
 
+### Version authority
+
+`VERSION.json` is the sole software version authority. Its display form is
+`vA.B.C · Build N`; Build is monotonic and does not determine SemVer ordering.
+
+```bash
+npm run version:check
+npm run version:bump -- build   # or patch, minor, major
+npm run version:sync
+npm run version:trace
+```
+
+`version:bump` changes only `VERSION.json`. Run `version:sync` explicitly to
+project the version into package/Cargo/Tauri/Apple files. Production build and
+release entry points fail closed on drift; they never repair it automatically.
+The future DeanX distribution identity is frozen in `release-identity.json`,
+but the active runtime identity remains legacy until P4.1c/P4.1d migration and
+cutover are complete.
+
 Build the production Tauri bundle:
 
 ```bash

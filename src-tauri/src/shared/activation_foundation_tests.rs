@@ -1,11 +1,12 @@
 use super::activation_foundation::{
     activation_staging_path, commit_fresh_activation, commit_migration_activation,
-    complete_runtime_validation, inspect_bootstrap_profile, prepare_fresh_activation,
-    prepare_migration_activation, recover_activation, write_activation_journal,
-    ActivationFailPoint, ActivationJournal, ActivationJournalState, BootstrapProfileClassification,
-    LegacyProcessStopEvidence, LoadPermission, RecoveryDisposition, RuntimeProcessGate,
-    RuntimeProcessState, ServiceLifetimeLock,
+    commit_migration_activation_with_stop_guard, complete_runtime_validation,
+    inspect_bootstrap_profile, prepare_fresh_activation, prepare_migration_activation,
+    recover_activation, write_activation_journal, ActivationFailPoint, ActivationJournal,
+    ActivationJournalState, BootstrapProfileClassification, LoadPermission, RecoveryDisposition,
+    RuntimeProcessGate, RuntimeProcessState, ServiceLifetimeLock,
 };
+use super::legacy_migration_entry::{LegacyProcessStopGuard, StopEvidenceState};
 use super::legacy_remote_host_identity_loader_fixture::load_v1;
 use super::remote_host_identity_activation::{
     load_v2_identity, write_v2_identity, HostIdentityV2State, ProtectedLegacyIdentity,
@@ -46,6 +47,22 @@ fn temp_dir(label: &str) -> PathBuf {
 fn write_json(path: &Path, value: &serde_json::Value) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, serde_json::to_vec_pretty(value).unwrap()).unwrap();
+}
+
+struct TestVerifiedStopGuard;
+
+impl LegacyProcessStopGuard for TestVerifiedStopGuard {
+    fn revalidate(&mut self, _source_root: &Path) -> Result<StopEvidenceState, String> {
+        Ok(StopEvidenceState::VerifiedQuiescentWithinSupportedScope)
+    }
+}
+
+fn commit_migration_with_verified_stop(
+    target: &Path,
+    failpoint: Option<ActivationFailPoint>,
+) -> Result<(), String> {
+    let mut guard = TestVerifiedStopGuard;
+    commit_migration_activation_with_stop_guard(target, failpoint, &mut guard)
 }
 
 #[test]
@@ -298,25 +315,21 @@ fn target_change_after_prepare_blocks_fresh_commit() {
 }
 
 #[test]
-fn migration_activation_requires_confirmed_legacy_process_stop() {
-    for evidence in [
-        LegacyProcessStopEvidence::Running,
-        LegacyProcessStopEvidence::Unknown,
-    ] {
-        let root = temp_dir("legacy-stop-gate");
-        let source = root.join("source");
-        let target = root.join("target");
-        write_migration_source(&source);
-        let identity_before = fs::read(source.join("remote-host-identity.json")).unwrap();
-        super::migration_core::stage_migration(&source, &target).unwrap();
-        let error = prepare_migration_activation(&source, &target, evidence).unwrap_err();
-        assert!(error.contains("stop is not confirmed"));
-        assert_eq!(
-            fs::read(source.join("remote-host-identity.json")).unwrap(),
-            identity_before
-        );
-        let _ = fs::remove_dir_all(root);
-    }
+fn migration_commit_requires_backend_stop_guard_for_first_retirement() {
+    let root = temp_dir("legacy-stop-gate");
+    let source = root.join("source");
+    let target = root.join("target");
+    write_migration_source(&source);
+    let identity_before = fs::read(source.join("remote-host-identity.json")).unwrap();
+    super::migration_core::stage_migration(&source, &target).unwrap();
+    prepare_migration_activation(&source, &target).unwrap();
+    let error = commit_migration_activation(&target, None).unwrap_err();
+    assert!(error.contains("controlled legacy process stop evidence is required"));
+    assert_eq!(
+        fs::read(source.join("remote-host-identity.json")).unwrap(),
+        identity_before
+    );
+    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
@@ -472,13 +485,8 @@ fn journal_lag_after_real_retirement_preserves_recovery_and_resumes_without_new_
     let target = root.join("target");
     write_migration_source(&source);
     super::migration_core::stage_migration(&source, &target).unwrap();
-    prepare_migration_activation(
-        &source,
-        &target,
-        LegacyProcessStopEvidence::ConfirmedStopped,
-    )
-    .unwrap();
-    let error = commit_migration_activation(
+    prepare_migration_activation(&source, &target).unwrap();
+    let error = commit_migration_with_verified_stop(
         &target,
         Some(ActivationFailPoint::AfterIdentityReplaceBeforeJournal),
     )
@@ -511,13 +519,8 @@ fn target_move_before_journal_advance_is_recoverable() {
     let target = root.join("target");
     write_migration_source(&source);
     super::migration_core::stage_migration(&source, &target).unwrap();
-    prepare_migration_activation(
-        &source,
-        &target,
-        LegacyProcessStopEvidence::ConfirmedStopped,
-    )
-    .unwrap();
-    assert!(commit_migration_activation(
+    prepare_migration_activation(&source, &target).unwrap();
+    assert!(commit_migration_with_verified_stop(
         &target,
         Some(ActivationFailPoint::AfterTargetMoveBeforeJournal)
     )
@@ -545,12 +548,7 @@ fn concurrent_migration_commit_has_one_successful_committer() {
     let target = root.join("target");
     write_migration_source(&source);
     super::migration_core::stage_migration(&source, &target).unwrap();
-    prepare_migration_activation(
-        &source,
-        &target,
-        LegacyProcessStopEvidence::ConfirmedStopped,
-    )
-    .unwrap();
+    prepare_migration_activation(&source, &target).unwrap();
     let barrier = Arc::new(Barrier::new(2));
     let handles = (0..2)
         .map(|_| {
@@ -558,7 +556,7 @@ fn concurrent_migration_commit_has_one_successful_committer() {
             let barrier = Arc::clone(&barrier);
             thread::spawn(move || {
                 barrier.wait();
-                commit_migration_activation(&target, None)
+                commit_migration_with_verified_stop(&target, None)
             })
         })
         .collect::<Vec<_>>();
@@ -596,13 +594,8 @@ fn every_activation_journal_boundary_has_a_deterministic_recovery_disposition() 
         let target = root.join("target");
         write_migration_source(&source);
         super::migration_core::stage_migration(&source, &target).unwrap();
-        prepare_migration_activation(
-            &source,
-            &target,
-            LegacyProcessStopEvidence::ConfirmedStopped,
-        )
-        .unwrap();
-        assert!(commit_migration_activation(&target, Some(point)).is_err());
+        prepare_migration_activation(&source, &target).unwrap();
+        assert!(commit_migration_with_verified_stop(&target, Some(point)).is_err());
         assert_eq!(recover_activation(&target).unwrap(), expected);
         let _ = fs::remove_dir_all(root);
     }

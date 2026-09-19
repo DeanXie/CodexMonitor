@@ -4,8 +4,9 @@ Status: **PAUSED / RESUME PENDING**.
 
 This directory preserves the Build 5 aggregate closeout attempt as historical
 evidence. It is not current authority for a final P4.1 completion claim.
-P4.1d-4a later resolved R02, R05, and R07 at Build 6; R01, R03, R04, R06, and
-R11 remain open. P4.1 therefore remains **CLOSEOUT IN PROGRESS**.
+P4.1d-4a resolved R02, R05, and R07 at Build 6, and P4.1d-4b resolves R01 and
+R03 at Build 7 for its supported Windows scope. R04, R06, and R11 remain open.
+P4.1 therefore remains **CLOSEOUT IN PROGRESS**.
 
 ## Authorities
 

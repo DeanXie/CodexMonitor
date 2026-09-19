@@ -180,4 +180,5 @@ The Build 5 P4.1e aggregate closeout attempt remains at
 `phase-4-1e/README.md`; it is historical evidence, not current final closeout
 authority. The current machine-readable closeout candidate is
 `../fixtures/phase-4-1-closeout/contract.json` and must remain in progress until
-R01/R03/R04/R06/R11 are resolved and fresh P4.1e acceptance is rerun.
+R04/R06/R11 are resolved and fresh P4.1e acceptance is rerun. R01/R03 are
+closed by `phase-4-1d-4b/README.md` for the supported Windows scope.

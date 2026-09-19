@@ -150,13 +150,6 @@ impl RuntimeProcessGate {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LegacyProcessStopEvidence {
-    ConfirmedStopped,
-    Running,
-    Unknown,
-}
-
 pub(crate) fn inspect_bootstrap_profile(root: &Path) -> Result<BootstrapInspection, String> {
     if !root.exists() {
         return Ok(BootstrapInspection {
@@ -323,11 +316,7 @@ pub(crate) fn write_activation_journal(
 pub(crate) fn prepare_migration_activation(
     source_root: &Path,
     target_root: &Path,
-    legacy_process: LegacyProcessStopEvidence,
 ) -> Result<ActivationJournal, String> {
-    if legacy_process != LegacyProcessStopEvidence::ConfirmedStopped {
-        return Err("legacy process stop is not confirmed".to_string());
-    }
     super::migration_core::validate_staging(target_root).map_err(|error| error.to_string())?;
     super::migration_core::protect_staging_for_activation(target_root)
         .map_err(|error| error.to_string())?;
@@ -381,6 +370,22 @@ pub(crate) fn commit_migration_activation(
     target_root: &Path,
     failpoint: Option<ActivationFailPoint>,
 ) -> Result<(), String> {
+    commit_migration_activation_inner(target_root, failpoint, None)
+}
+
+pub(crate) fn commit_migration_activation_with_stop_guard(
+    target_root: &Path,
+    failpoint: Option<ActivationFailPoint>,
+    stop_guard: &mut dyn super::legacy_migration_entry::LegacyProcessStopGuard,
+) -> Result<(), String> {
+    commit_migration_activation_inner(target_root, failpoint, Some(stop_guard))
+}
+
+fn commit_migration_activation_inner(
+    target_root: &Path,
+    failpoint: Option<ActivationFailPoint>,
+    mut stop_guard: Option<&mut dyn super::legacy_migration_entry::LegacyProcessStopGuard>,
+) -> Result<(), String> {
     let _lock = ActivationCommitLock::acquire(target_root)?;
     let mut journal = read_journal(target_root)?;
     if journal.schema_version != ACTIVATION_SCHEMA_VERSION
@@ -404,6 +409,9 @@ pub(crate) fn commit_migration_activation(
     if source_state == "active_v1" {
         #[cfg(windows)]
         {
+            let stop_guard = stop_guard
+                .as_deref_mut()
+                .ok_or_else(|| "controlled legacy process stop evidence is required".to_string())?;
             let replacement = journal
                 .staging_root
                 .join("identity-recovery/remote-host-identity.v2.retired.json");
@@ -414,6 +422,26 @@ pub(crate) fn commit_migration_activation(
                 &source_identity,
             )
             .map_err(|error| format!("protect legacy identity: {error}"))?;
+            let protected_identity = read_v1_identity_bytes(
+                &guard
+                    .read_all()
+                    .map_err(|error| format!("read protected legacy identity: {error}"))?,
+            )?;
+            let retired = read_recovery_identity(&replacement)?;
+            if retired.state != super::remote_host_identity_activation::HostIdentityV2State::Retired
+                || retired.transaction_id.as_deref() != Some(&journal.transaction_id)
+                || retired.remote_host_identity != protected_identity
+            {
+                return Err("protected legacy identity recovery binding mismatch".to_string());
+            }
+            if stop_guard.revalidate(&journal.source_root)?
+                != super::legacy_migration_entry::StopEvidenceState::VerifiedQuiescentWithinSupportedScope
+            {
+                return Err(
+                    "legacy process stop evidence changed inside retirement protection"
+                        .to_string(),
+                );
+            }
             guard
                 .replace_with(&replacement)
                 .map_err(|error| format!("retire legacy identity: {error}"))?;
@@ -719,6 +747,10 @@ fn read_activation_manifest(path: &Path) -> Result<ActivationManifest, String> {
 
 fn read_v1_identity(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|error| format!("read legacy identity: {error}"))?;
+    read_v1_identity_bytes(&bytes)
+}
+
+fn read_v1_identity_bytes(bytes: &[u8]) -> Result<String, String> {
     let value: Value = serde_json::from_slice(&bytes)
         .map_err(|error| format!("parse legacy identity: {error}"))?;
     if value.get("schemaVersion").and_then(Value::as_u64) != Some(1) {

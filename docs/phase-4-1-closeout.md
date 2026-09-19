@@ -4,9 +4,9 @@ Status: **CLOSEOUT IN PROGRESS**. P4.1e is **PAUSED / RESUME PENDING** and
 P4.2 is not started.
 
 This document is the P4.1 closeout candidate for the first Windows daily-use
-release safety boundary; it is not a final P4.1 completion record. P4.1d-4a is
-**PASS / COMPLETE / FROZEN** and resolves compliance items R02, R05, and R07.
-R01, R03, R04, R06, and R11 remain open before P4.1 can close. Its
+release safety boundary; it is not a final P4.1 completion record. P4.1d-4a
+resolved R02, R05, and R07; P4.1d-4b resolves R01 and R03 for its supported
+Windows process scope. R04, R06, and R11 remain open before P4.1 can close. Its
 machine-readable authority is
 `docs/fixtures/phase-4-1-closeout/contract.json`; the required failure behavior
 is summarized in `docs/phase-4-1-failure-matrix.md`.
@@ -14,7 +14,7 @@ is summarized in `docs/phase-4-1-failure-matrix.md`.
 ## Frozen authority
 
 - `VERSION.json` is the sole software version authority at
-  `v0.7.68 · Build 6 · development`. Build and configuration schema remain
+  `v0.7.68 · Build 7 · development`. Build and configuration schema remain
   independent.
 - Desktop product identity is `CodexMonitor DeanX` /
   `io.github.deanxie.codexmonitor`; iOS retains the legacy identifier pending a
@@ -55,8 +55,8 @@ fake settings, and controlled test processes. The aggregate compatibility suite
 freezes the accepted slice contracts and the current failure-case inventory.
 The Build 5 P4.1e run in `docs/evidence/phase-4-1e/README.md` is historical
 closeout-attempt evidence, not proof that the remaining compliance items are
-closed. P4.1d-4a evidence is recorded separately under
-`docs/evidence/phase-4-1d-4a/`.
+closed. P4.1d-4a and d-4b evidence is recorded separately under
+`docs/evidence/phase-4-1d-4a/` and `docs/evidence/phase-4-1d-4b/`.
 
 Real user settings reads, workspace migration, HostIdentity reads or retirement,
 daemon stop, installation, and profile cutover are **NOT_EXECUTED**. Installed

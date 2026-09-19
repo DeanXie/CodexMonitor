@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use uuid::Uuid;
 
 use crate::shared::activation_foundation::{
@@ -8,6 +9,10 @@ use crate::shared::activation_foundation::{
     complete_runtime_validation, converge_recovered_committed_target, prepare_fresh_activation,
     recover_activation, RecoveryDisposition, RuntimeProcessGate, RuntimeProcessState,
 };
+use crate::shared::legacy_migration_entry::{
+    LegacyMigrationCoordinator, LegacyMigrationPreview, LegacyProcessStopProvider,
+};
+use crate::shared::legacy_process_stop::WindowsLegacyProcessStopProvider;
 use crate::shared::startup_activation::{
     inspect_startup_roots, legacy_root_for_target, StartupDisposition, StartupInspection,
 };
@@ -25,10 +30,26 @@ pub(crate) struct BootstrapState {
     legacy_root: PathBuf,
     status: Mutex<Result<BootstrapStatus, String>>,
     runtime_gate: RuntimeProcessGate,
+    migration: Result<LegacyMigrationCoordinator, String>,
 }
 
 impl BootstrapState {
     pub(crate) fn inspect(target_root: PathBuf) -> Self {
+        let provider = std::env::current_exe()
+            .map_err(|error| {
+                format!("resolve current executable for legacy stop evidence: {error}")
+            })
+            .and_then(|executable| {
+                WindowsLegacyProcessStopProvider::new(executable, std::process::id())
+                    .map(|provider| Arc::new(provider) as Arc<dyn LegacyProcessStopProvider>)
+            });
+        Self::inspect_with_provider(target_root, provider)
+    }
+
+    fn inspect_with_provider(
+        target_root: PathBuf,
+        provider: Result<Arc<dyn LegacyProcessStopProvider>, String>,
+    ) -> Self {
         let (legacy_root, status) = match legacy_root_for_target(&target_root) {
             Ok(legacy_root) => {
                 let status = inspect_startup_roots(&target_root, &legacy_root, |root| {
@@ -43,11 +64,20 @@ impl BootstrapState {
             }
             Err(error) => (PathBuf::new(), Err(error)),
         };
+        let migration = provider.map(|provider| {
+            LegacyMigrationCoordinator::new(
+                legacy_root.clone(),
+                target_root.clone(),
+                provider,
+                Duration::from_secs(300),
+            )
+        });
         Self {
             target_root,
             legacy_root,
             status: Mutex::new(status),
             runtime_gate: RuntimeProcessGate::new(),
+            migration,
         }
     }
 
@@ -118,6 +148,48 @@ impl BootstrapState {
             .map_err(|_| "bootstrap state lock is poisoned".to_string())? = Ok(status);
         Ok(())
     }
+
+    fn preview_legacy_migration(&self) -> Result<LegacyMigrationPreview, String> {
+        let current = self.refresh(false)?;
+        let resumable = current.inspection.disposition == StartupDisposition::RecoveryRequired
+            && recover_activation(&self.target_root)?
+                == RecoveryDisposition::ContinueBeforeRetirement;
+        if current.inspection.disposition != StartupDisposition::LegacyMigrationRequired
+            && !resumable
+        {
+            return Err(
+                "legacy migration is not allowed for the current profile state".to_string(),
+            );
+        }
+        self.migration.as_ref().map_err(Clone::clone)?.preview()
+    }
+
+    fn confirm_legacy_migration(
+        &self,
+        preview_id: &str,
+        intent: &str,
+    ) -> Result<BootstrapStatus, String> {
+        let current = self.refresh(false)?;
+        let resumable = current.inspection.disposition == StartupDisposition::RecoveryRequired
+            && recover_activation(&self.target_root)?
+                == RecoveryDisposition::ContinueBeforeRetirement;
+        if current.inspection.disposition != StartupDisposition::LegacyMigrationRequired
+            && !resumable
+        {
+            return Err(
+                "legacy migration is not allowed for the current profile state".to_string(),
+            );
+        }
+        self.migration
+            .as_ref()
+            .map_err(Clone::clone)?
+            .confirm(preview_id, intent)?;
+        let committed = self.refresh(true)?;
+        if committed.inspection.disposition != StartupDisposition::RuntimeValidationRequired {
+            return Err("legacy migration did not produce a committed profile".to_string());
+        }
+        Ok(committed)
+    }
 }
 
 #[tauri::command]
@@ -155,6 +227,22 @@ pub(crate) fn recover_profile_activation(
     state: tauri::State<'_, BootstrapState>,
 ) -> Result<BootstrapStatus, String> {
     recover_profile_activation_inner(&intent, &state)
+}
+
+#[tauri::command]
+pub(crate) fn preview_legacy_migration(
+    state: tauri::State<'_, BootstrapState>,
+) -> Result<LegacyMigrationPreview, String> {
+    state.preview_legacy_migration()
+}
+
+#[tauri::command]
+pub(crate) fn confirm_legacy_migration(
+    preview_id: String,
+    intent: String,
+    state: tauri::State<'_, BootstrapState>,
+) -> Result<BootstrapStatus, String> {
+    state.confirm_legacy_migration(&preview_id, &intent)
 }
 
 fn recover_profile_activation_inner(
@@ -200,11 +288,61 @@ fn recover_profile_activation_inner(
 mod tests {
     use super::*;
     use crate::shared::activation_foundation::{
-        prepare_migration_activation, ActivationFailPoint, LegacyProcessStopEvidence,
+        commit_migration_activation_with_stop_guard, prepare_migration_activation,
+        ActivationFailPoint,
     };
+    use crate::shared::legacy_migration_entry::{LegacyProcessStopGuard, StopEvidenceState};
     use serde_json::{json, Value};
     use std::fs;
     use std::path::Path;
+
+    struct TestVerifiedStopGuard;
+
+    struct TestRunningProvider;
+
+    struct TestVerifiedProvider;
+
+    impl LegacyProcessStopProvider for TestRunningProvider {
+        fn acquire(
+            &self,
+            _source_root: &Path,
+        ) -> Result<crate::shared::legacy_migration_entry::StopEvidenceAcquisition, String>
+        {
+            Ok(
+                crate::shared::legacy_migration_entry::StopEvidenceAcquisition::Blocked(
+                    StopEvidenceState::Running,
+                ),
+            )
+        }
+    }
+
+    impl LegacyProcessStopProvider for TestVerifiedProvider {
+        fn acquire(
+            &self,
+            _source_root: &Path,
+        ) -> Result<crate::shared::legacy_migration_entry::StopEvidenceAcquisition, String>
+        {
+            Ok(
+                crate::shared::legacy_migration_entry::StopEvidenceAcquisition::Verified(Box::new(
+                    TestVerifiedStopGuard,
+                )),
+            )
+        }
+    }
+
+    impl LegacyProcessStopGuard for TestVerifiedStopGuard {
+        fn revalidate(&mut self, _source_root: &Path) -> Result<StopEvidenceState, String> {
+            Ok(StopEvidenceState::VerifiedQuiescentWithinSupportedScope)
+        }
+    }
+
+    fn commit_with_verified_stop(
+        target: &Path,
+        failpoint: Option<ActivationFailPoint>,
+    ) -> Result<(), String> {
+        let mut guard = TestVerifiedStopGuard;
+        commit_migration_activation_with_stop_guard(target, failpoint, &mut guard)
+    }
 
     fn write_json(path: &Path, value: Value) {
         fs::create_dir_all(path.parent().expect("fixture parent")).unwrap();
@@ -233,6 +371,90 @@ mod tests {
                 "remoteHostIdentity":"6ba7b810-9dad-41d1-80b4-00c04fd430c8"
             }),
         );
+    }
+
+    #[test]
+    fn product_migration_entry_exposes_sanitized_preview_and_backend_stop_failure() {
+        let base = std::env::temp_dir().join(format!(
+            "codex-monitor-p4-1d4b-bootstrap-{}",
+            Uuid::new_v4()
+        ));
+        let legacy = base.join("com.dimillian.codexmonitor");
+        let target = base.join("io.github.deanxie.codexmonitor");
+        write_migration_source(&legacy);
+        let state = BootstrapState::inspect_with_provider(
+            target.clone(),
+            Ok(Arc::new(TestRunningProvider)),
+        );
+
+        let preview = state.preview_legacy_migration().unwrap();
+        let serialized = serde_json::to_string(&preview).unwrap();
+        assert!(!serialized.contains(legacy.to_string_lossy().as_ref()));
+        assert!(!serialized.contains("remoteHostIdentity"));
+        let error = state
+            .confirm_legacy_migration(&preview.preview_id, "confirm_legacy_migration")
+            .unwrap_err();
+        assert!(error.contains("RUNNING"));
+        assert!(!target.exists());
+        assert!(!state.business_access_allowed().unwrap());
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn product_migration_entry_rejects_untrusted_intent_without_process_evidence() {
+        let base =
+            std::env::temp_dir().join(format!("codex-monitor-p4-1d4b-intent-{}", Uuid::new_v4()));
+        let legacy = base.join("com.dimillian.codexmonitor");
+        let target = base.join("io.github.deanxie.codexmonitor");
+        write_migration_source(&legacy);
+        let state = BootstrapState::inspect_with_provider(
+            target.clone(),
+            Ok(Arc::new(TestRunningProvider)),
+        );
+        let preview = state.preview_legacy_migration().unwrap();
+
+        let error = state
+            .confirm_legacy_migration(&preview.preview_id, "confirmedStopped=true")
+            .unwrap_err();
+        assert!(error.contains("explicit legacy migration intent"));
+        assert!(!target.exists());
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_migration_success_stops_at_restart_required_target_committed() {
+        let base =
+            std::env::temp_dir().join(format!("codex-monitor-p4-1d4b-success-{}", Uuid::new_v4()));
+        let legacy = base.join("com.dimillian.codexmonitor");
+        let target = base.join("io.github.deanxie.codexmonitor");
+        write_migration_source(&legacy);
+        let state = BootstrapState::inspect_with_provider(
+            target.clone(),
+            Ok(Arc::new(TestVerifiedProvider)),
+        );
+        let preview = state.preview_legacy_migration().unwrap();
+
+        let committed = state
+            .confirm_legacy_migration(&preview.preview_id, "confirm_legacy_migration")
+            .unwrap();
+
+        assert_eq!(
+            committed.inspection.disposition,
+            StartupDisposition::RuntimeValidationRequired
+        );
+        assert!(committed.restart_required);
+        assert!(!committed.inspection.normal_load_allowed);
+        assert!(!state.business_access_allowed().unwrap());
+        let journal: Value = serde_json::from_slice(
+            &fs::read(
+                base.join(".io.github.deanxie.codexmonitor.codexmonitor-activation-journal.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(journal["state"], "target_committed");
+        let _ = fs::remove_dir_all(base);
     }
 
     #[test]
@@ -321,14 +543,9 @@ mod tests {
         let target = base.join("io.github.deanxie.codexmonitor");
         write_migration_source(&legacy);
         crate::shared::migration_core::stage_migration(&legacy, &target).unwrap();
-        let prepared = prepare_migration_activation(
-            &legacy,
-            &target,
-            LegacyProcessStopEvidence::ConfirmedStopped,
-        )
-        .unwrap();
+        let prepared = prepare_migration_activation(&legacy, &target).unwrap();
         let expected_identity = "6ba7b810-9dad-41d1-80b4-00c04fd430c8";
-        let interrupted = commit_migration_activation(
+        let interrupted = commit_with_verified_stop(
             &target,
             Some(ActivationFailPoint::AfterTargetMoveBeforeJournal),
         )
@@ -382,13 +599,8 @@ mod tests {
         let target = base.join("io.github.deanxie.codexmonitor");
         write_migration_source(&legacy);
         crate::shared::migration_core::stage_migration(&legacy, &target).unwrap();
-        prepare_migration_activation(
-            &legacy,
-            &target,
-            LegacyProcessStopEvidence::ConfirmedStopped,
-        )
-        .unwrap();
-        commit_migration_activation(
+        prepare_migration_activation(&legacy, &target).unwrap();
+        commit_with_verified_stop(
             &target,
             Some(ActivationFailPoint::AfterTargetMoveBeforeJournal),
         )
@@ -418,12 +630,7 @@ mod tests {
         let target = base.join("io.github.deanxie.codexmonitor");
         write_migration_source(&legacy);
         crate::shared::migration_core::stage_migration(&legacy, &target).unwrap();
-        let prepared = prepare_migration_activation(
-            &legacy,
-            &target,
-            LegacyProcessStopEvidence::ConfirmedStopped,
-        )
-        .unwrap();
+        let prepared = prepare_migration_activation(&legacy, &target).unwrap();
         let state = BootstrapState::inspect(target.clone());
         assert_eq!(
             state.initial_status().unwrap().inspection.disposition,

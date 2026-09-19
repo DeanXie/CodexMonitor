@@ -71,7 +71,7 @@ fn validate_identity(identity: &str) -> Result<(), String> {
 #[cfg(windows)]
 pub(crate) struct ProtectedLegacyIdentity {
     path: PathBuf,
-    _guard: fs::File,
+    guard: fs::File,
 }
 
 #[cfg(windows)]
@@ -86,8 +86,20 @@ impl ProtectedLegacyIdentity {
             .open(path)?;
         Ok(Self {
             path: path.to_path_buf(),
-            _guard: guard,
+            guard,
         })
+    }
+
+    pub(crate) fn read_all(&self) -> io::Result<Vec<u8>> {
+        use std::io::{Read, Seek, SeekFrom};
+
+        // Clone the already-protected handle. This deliberately does not reopen the path:
+        // validation and ReplaceFileW remain within the same deny-read retirement context.
+        let mut reader = self.guard.try_clone()?;
+        reader.seek(SeekFrom::Start(0))?;
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes)?;
+        Ok(bytes)
     }
 
     pub(crate) fn replace_with(&self, replacement: &Path) -> io::Result<()> {

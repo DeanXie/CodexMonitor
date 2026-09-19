@@ -1,6 +1,6 @@
 # P4.1d-4a — Recovery Reachability / Root Authority Correction
 
-Status: **PASS / COMPLETE / FROZEN**. Parent P4.1d remains **IN PROGRESS / COMPLIANCE GAPS REMAIN**.
+Status: **PASS / COMPLETE / FROZEN**. Parent P4.1d remains **IN PROGRESS**.
 
 Canonical software authority at this correction's closeout is
 `v0.7.68 · Build 6 · development`.
@@ -33,8 +33,9 @@ material, rewrite legacy settings/workspaces, or publish process readiness.
 Current-process runtime validation remains the only path to `ready`.
 
 A migration still at `continue_before_retirement` is deliberately not resumed:
-the adapter requires new trusted stop evidence. P4.1d-4a does not manufacture
-that evidence and does not implement R03.
+the adapter requires new trusted stop evidence. P4.1d-4b supplies that evidence
+through its backend-native guarded product flow; d-4a itself does not
+manufacture it.
 
 ## R05 root authority
 

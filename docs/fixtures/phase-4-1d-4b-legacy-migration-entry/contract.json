@@ -1,0 +1,30 @@
+{
+  "slice": "P4.1d-4b",
+  "status": "PASS_COMPLETE_FROZEN",
+  "productEntry": {
+    "previewCommand": "preview_legacy_migration",
+    "confirmCommand": "confirm_legacy_migration",
+    "confirmPayload": ["previewId", "intent"],
+    "forbiddenPayload": ["confirmedStopped", "safeToRetire", "processId", "sourceRoot"]
+  },
+  "stopEvidence": {
+    "states": ["RUNNING", "UNKNOWN", "VERIFIED_QUIESCENT_WITHIN_SUPPORTED_SCOPE"],
+    "provider": "windows_native_backend_private",
+    "unknown": "fail_closed",
+    "finalRevalidation": "inside_protected_identity_retirement"
+  },
+  "retirement": {
+    "lockOrder": ["activation_commit_lock", "protected_legacy_identity", "native_stop_revalidation", "ReplaceFileW", "target_commit"],
+    "identityValidation": "same_protected_handle_context",
+    "retiredMatchingTransactionRecovery": "no_second_stop_evidence_or_retirement"
+  },
+  "successBoundary": "target_committed_restart_required",
+  "businessReadyAuthority": "P4.1d-3 current-process runtime validation",
+  "realUserOperations": {
+    "profileRead": 0,
+    "migration": 0,
+    "hostIdentityRetirement": 0,
+    "appOrDaemonStop": 0
+  },
+  "remainingCompliance": ["R04", "R06", "R11"]
+}

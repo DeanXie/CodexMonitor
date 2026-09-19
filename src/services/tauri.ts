@@ -990,6 +990,18 @@ export type BootstrapStatus = {
   runtimeState: "blocked" | "validating" | "ready" | "failed";
 };
 
+export type LegacyMigrationPreview = {
+  previewId: string;
+  sourceSchemaVersion: number;
+  targetSchemaVersion: number;
+  migratableCategories: string[];
+  excludedCategories: string[];
+  deferredCategories: string[];
+  warnings: string[];
+  conflicts: string[];
+  restartRequired: boolean;
+};
+
 export async function getBootstrapStatus(): Promise<BootstrapStatus> {
   return invoke<BootstrapStatus>("get_bootstrap_status");
 }
@@ -1003,6 +1015,17 @@ export async function activateFreshProfile(): Promise<BootstrapStatus> {
 export async function recoverProfileActivation(): Promise<BootstrapStatus> {
   return invoke<BootstrapStatus>("recover_profile_activation", {
     intent: "recover_activation",
+  });
+}
+
+export async function previewLegacyMigration(): Promise<LegacyMigrationPreview> {
+  return invoke<LegacyMigrationPreview>("preview_legacy_migration");
+}
+
+export async function confirmLegacyMigration(previewId: string): Promise<BootstrapStatus> {
+  return invoke<BootstrapStatus>("confirm_legacy_migration", {
+    previewId,
+    intent: "confirm_legacy_migration",
   });
 }
 

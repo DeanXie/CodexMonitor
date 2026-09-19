@@ -15,6 +15,8 @@ pub(crate) mod git_core;
 pub(crate) mod git_rpc;
 pub(crate) mod git_ui_core;
 pub(crate) mod global_sources_core;
+pub(crate) mod legacy_migration_entry;
+pub(crate) mod legacy_process_stop;
 pub(crate) mod local_usage_core;
 pub(crate) mod migration_core;
 #[cfg(any(not(desktop), test))]
@@ -86,6 +88,14 @@ mod phase_3_5_final_acceptance_tests;
 #[cfg(test)]
 #[path = "migration_core_tests.rs"]
 mod migration_core_tests;
+
+#[cfg(test)]
+#[path = "legacy_migration_entry_tests.rs"]
+mod legacy_migration_entry_tests;
+
+#[cfg(test)]
+#[path = "legacy_process_stop_tests.rs"]
+mod legacy_process_stop_tests;
 
 #[cfg(test)]
 mod legacy_remote_host_identity_loader_fixture;

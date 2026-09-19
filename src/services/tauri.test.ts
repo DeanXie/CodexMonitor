@@ -27,6 +27,8 @@ import {
   listMcpServerStatus,
   readThread,
   recoverProfileActivation,
+  previewLegacyMigration,
+  confirmLegacyMigration,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
   listWorkspaces,
@@ -112,6 +114,20 @@ describe("tauri invoke wrappers", () => {
     expect(invoke).toHaveBeenNthCalledWith(3, "recover_profile_activation", {
       intent: "recover_activation",
     });
+  });
+
+  it("uses opaque preview identity and fixed migration intent without stop evidence", async () => {
+    await previewLegacyMigration();
+    await confirmLegacyMigration("preview-1");
+
+    expect(invoke).toHaveBeenNthCalledWith(1, "preview_legacy_migration");
+    expect(invoke).toHaveBeenNthCalledWith(2, "confirm_legacy_migration", {
+      previewId: "preview-1",
+      intent: "confirm_legacy_migration",
+    });
+    expect(JSON.stringify(vi.mocked(invoke).mock.calls)).not.toMatch(
+      /confirmedStopped|safeToRetire|processId|sourceRoot/i,
+    );
   });
 
   it("reads layered remote host availability without deriving projection truth", async () => {

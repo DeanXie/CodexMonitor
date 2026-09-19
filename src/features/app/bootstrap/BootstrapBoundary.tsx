@@ -1,10 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   activateFreshProfile,
+  confirmLegacyMigration,
   getBootstrapStatus,
   isMobileRuntime,
+  previewLegacyMigration,
   recoverProfileActivation,
   type BootstrapStatus,
+  type LegacyMigrationPreview,
 } from "@services/tauri";
 
 type Props = { children: ReactNode };
@@ -14,6 +17,7 @@ export function BootstrapBoundary({ children }: Props) {
   const [mobile, setMobile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [migrationPreview, setMigrationPreview] = useState<LegacyMigrationPreview | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -68,6 +72,32 @@ export function BootstrapBoundary({ children }: Props) {
     }
   };
 
+  const previewMigration = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setMigrationPreview(await previewLegacyMigration());
+    } catch (value) {
+      setError(String(value));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmMigration = async () => {
+    if (!migrationPreview) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setStatus(await confirmLegacyMigration(migrationPreview.previewId));
+      setMigrationPreview(null);
+    } catch (value) {
+      setError(String(value));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <main className="bootstrap-boundary" data-bootstrap-state={status?.inspection.disposition}>
       <section className="bootstrap-boundary__panel">
@@ -82,6 +112,29 @@ export function BootstrapBoundary({ children }: Props) {
           <button type="button" onClick={() => void recoverActivation()} disabled={loading}>
             Recover prepared activation
           </button>
+        ) : null}
+        {(status?.inspection.disposition === "legacy_migration_required" ||
+          status?.inspection.disposition === "recovery_required") &&
+        !migrationPreview ? (
+          <button type="button" onClick={() => void previewMigration()} disabled={loading}>
+            Preview migration
+          </button>
+        ) : null}
+        {migrationPreview ? (
+          <section aria-label="Legacy migration preview">
+            <h2>Data to migrate</h2>
+            <ul>
+              {migrationPreview.migratableCategories.map((category) => (
+                <li key={category}>{category}</li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => void confirmMigration()} disabled={loading}>
+              Confirm migration
+            </button>
+            <button type="button" onClick={() => setMigrationPreview(null)} disabled={loading}>
+              Cancel
+            </button>
+          </section>
         ) : null}
         {status?.restartRequired ? <p>Activation complete. Restart the application.</p> : null}
         {error ? <p role="alert">{error}</p> : null}

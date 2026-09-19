@@ -77,7 +77,11 @@ fn is_mobile_runtime() -> bool {
 fn is_bootstrap_invoke(command: &str) -> bool {
     matches!(
         command,
-        "get_bootstrap_status" | "activate_fresh_profile" | "recover_profile_activation"
+        "get_bootstrap_status"
+            | "activate_fresh_profile"
+            | "recover_profile_activation"
+            | "preview_legacy_migration"
+            | "confirm_legacy_migration"
     )
 }
 
@@ -269,6 +273,8 @@ pub fn run() {
                 bootstrap::get_bootstrap_status,
                 bootstrap::activate_fresh_profile,
                 bootstrap::recover_profile_activation,
+                bootstrap::preview_legacy_migration,
+                bootstrap::confirm_legacy_migration,
                 settings::get_app_settings,
                 settings::update_app_settings,
                 settings::get_codex_config_path,
@@ -446,6 +452,8 @@ mod startup_gate_tests {
     fn validating_process_only_allows_bootstrap_commands() {
         assert!(business_invoke_allowed("get_bootstrap_status", false));
         assert!(business_invoke_allowed("activate_fresh_profile", false));
+        assert!(business_invoke_allowed("preview_legacy_migration", false));
+        assert!(business_invoke_allowed("confirm_legacy_migration", false));
         assert!(business_invoke_allowed("recover_profile_activation", false));
         assert!(!business_invoke_allowed("list_workspaces", false));
         assert!(!business_invoke_allowed("resume_thread", false));

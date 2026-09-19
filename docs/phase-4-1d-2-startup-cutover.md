@@ -14,7 +14,7 @@ R02/R07 lagging-journal recovery reachability and R05 absolute-root authority;
 those defects remain part of this slice's historical record.
 
 This slice closed at `v0.7.68 · Build 4 · development`. Current software
-authority is `v0.7.68 · Build 6 · development`; later corrections do not
+authority is `v0.7.68 · Build 7 · development`; later corrections do not
 rewrite the d-2 acceptance history.
 
 ## Startup authority
@@ -36,9 +36,9 @@ The desktop App manages only bootstrap state until the gate reports `ready`.
 AppState, global sources, daemon autostart, WorkspaceSession creation, and
 Remote auto-connect therefore do not run while activation is pending. The
 minimal bootstrap surface can explicitly create a fresh profile and can resume
-only recovery steps that do not newly retire a legacy identity. A migration
-still before identity retirement remains blocked until separately controlled
-old-process stop evidence is available.
+only recovery steps that do not newly retire a legacy identity. P4.1d-4b adds
+the controlled preview and backend-native stop-evidence path for a migration
+still before identity retirement; user confirmation is not stop evidence.
 
 The daemon validates the profile and acquires the P4.1d-1 service-lifetime lock
 before constructing state or binding a listener. Daemon state uses strict

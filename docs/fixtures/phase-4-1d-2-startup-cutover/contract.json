@@ -7,12 +7,14 @@
   "iosIdentifier": "com.dimillian.codexmonitor.ios",
   "normalLoadRequires": [
     "activation_manifest",
-    "runtime_validated_activation_journal",
+    "committed_activation_journal",
+    "current_process_runtime_validation",
     "active_v2_remote_host_identity",
     "matching_transaction_binding",
     "valid_settings",
     "valid_workspaces"
   ],
+  "historicalContractCorrection": "P4.1d-3",
   "gatedBeforeReady": [
     "app_state",
     "global_sources",

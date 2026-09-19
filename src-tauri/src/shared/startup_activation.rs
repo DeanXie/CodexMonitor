@@ -17,6 +17,7 @@ const IDENTITY_SCHEMA_VERSION: u32 = 2;
 #[serde(rename_all = "snake_case")]
 pub(crate) enum StartupDisposition {
     Ready,
+    RuntimeValidationRequired,
     FreshActivationRequired,
     LegacyMigrationRequired,
     RecoveryRequired,
@@ -38,6 +39,13 @@ pub(crate) struct StartupInspection {
 pub(crate) struct ActivatedProfileMetadata {
     pub(crate) transaction_id: String,
     pub(crate) remote_host_identity: String,
+    pub(crate) persisted_state: PersistedActivationState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PersistedActivationState {
+    TargetCommitted,
+    RuntimeValidated,
 }
 
 #[derive(Deserialize)]
@@ -93,12 +101,12 @@ pub(crate) fn inspect_startup_roots(
             ));
         }
         if target_root.join("activation-manifest.json").exists() {
-            return match validate_activated_profile(&target_root) {
+            return match validate_committed_profile(&target_root) {
                 Ok(_) => Ok(inspection(
-                    StartupDisposition::Ready,
+                    StartupDisposition::RuntimeValidationRequired,
                     target_root,
                     legacy_root,
-                    "activated profile validated",
+                    "committed profile requires current-process runtime validation",
                 )),
                 Err(error) => Ok(inspection(
                     StartupDisposition::BlockedCorrupt,
@@ -180,6 +188,14 @@ pub(crate) fn inspect_startup_roots(
 }
 
 pub(crate) fn validate_activated_profile(root: &Path) -> Result<ActivatedProfileMetadata, String> {
+    let metadata = validate_committed_profile(root)?;
+    if metadata.persisted_state != PersistedActivationState::RuntimeValidated {
+        return Err("activation runtime validation is not complete".to_string());
+    }
+    Ok(metadata)
+}
+
+pub(crate) fn validate_committed_profile(root: &Path) -> Result<ActivatedProfileMetadata, String> {
     if !root.is_dir() {
         return Err("activated profile root is unavailable".to_string());
     }
@@ -207,8 +223,12 @@ pub(crate) fn validate_activated_profile(root: &Path) -> Result<ActivatedProfile
         read_json(&external_journal_path(root), "activation journal")?;
     let canonical_root = fs::canonicalize(root)
         .map_err(|error| format!("canonicalize activated profile root: {error}"))?;
+    let persisted_state = match journal.state.as_str() {
+        "target_committed" => PersistedActivationState::TargetCommitted,
+        "runtime_validated" => PersistedActivationState::RuntimeValidated,
+        _ => return Err("activation journal is not committed".to_string()),
+    };
     if journal.schema_version != ACTIVATION_SCHEMA_VERSION
-        || journal.state != "runtime_validated"
         || journal.transaction_id != manifest.transaction_id
         || journal.target_root != canonical_root
     {
@@ -231,6 +251,7 @@ pub(crate) fn validate_activated_profile(root: &Path) -> Result<ActivatedProfile
     Ok(ActivatedProfileMetadata {
         transaction_id: manifest.transaction_id,
         remote_host_identity: identity.remote_host_identity,
+        persisted_state,
     })
 }
 

@@ -211,12 +211,12 @@ struct WorkspaceFileResponse {
 }
 
 impl DaemonState {
-    fn load_activated(
+    fn load_for_runtime_validation(
         config: &DaemonConfig,
         events: broadcast::Sender<DaemonEvent>,
+        activated: &shared::startup_activation::ActivatedProfileMetadata,
     ) -> Result<Self, String> {
-        let activated = shared::startup_activation::validate_activated_profile(&config.data_dir)?;
-        Self::load_with_identity(config, events, activated.remote_host_identity)
+        Self::load_with_identity(config, events, activated.remote_host_identity.clone())
     }
 
     #[cfg(test)]
@@ -3233,11 +3233,20 @@ fn main() {
         .expect("failed to build tokio runtime");
 
     runtime.block_on(async move {
-        if let Err(error) = shared::startup_activation::validate_activated_profile(&config.data_dir)
-        {
-            eprintln!("daemon startup blocked by profile activation gate: {error}");
+        let runtime_gate = shared::activation_foundation::RuntimeProcessGate::new();
+        if let Err(error) = runtime_gate.begin_validation() {
+            eprintln!("daemon startup blocked by runtime validation gate: {error}");
             std::process::exit(2);
         }
+        let activated =
+            match shared::startup_activation::validate_committed_profile(&config.data_dir) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    let _ = runtime_gate.fail_validation();
+                    eprintln!("daemon startup blocked by profile activation gate: {error}");
+                    std::process::exit(2);
+                }
+            };
         let _service_lifetime_lock =
             match shared::activation_foundation::ServiceLifetimeLock::acquire(&config.data_dir) {
                 Ok(lock) => lock,
@@ -3247,9 +3256,14 @@ fn main() {
                 }
             };
         let (events_tx, _events_rx) = broadcast::channel::<DaemonEvent>(2048);
-        let state = match DaemonState::load_activated(&config, events_tx.clone()) {
+        let state = match DaemonState::load_for_runtime_validation(
+            &config,
+            events_tx.clone(),
+            &activated,
+        ) {
             Ok(state) => Arc::new(state),
             Err(error) => {
+                let _ = runtime_gate.fail_validation();
                 eprintln!("failed to initialize daemon identity: {error}");
                 std::process::exit(2);
             }
@@ -3259,10 +3273,26 @@ fn main() {
         let listener = match TcpListener::bind(config.listen).await {
             Ok(listener) => listener,
             Err(err) => {
+                let _ = runtime_gate.fail_validation();
                 eprintln!("failed to bind {}: {err}", config.listen);
                 std::process::exit(2);
             }
         };
+        if let Err(error) = shared::activation_foundation::complete_runtime_validation(
+            &config.data_dir,
+            &activated.transaction_id,
+            None,
+        ) {
+            let _ = runtime_gate.fail_validation();
+            drop(listener);
+            eprintln!("daemon startup failed to persist runtime validation: {error}");
+            std::process::exit(2);
+        }
+        if let Err(error) = runtime_gate.complete_validation() {
+            drop(listener);
+            eprintln!("daemon startup failed to publish readiness: {error}");
+            std::process::exit(2);
+        }
         eprintln!(
             "codex-monitor-daemon listening on {} (data dir: {})",
             config.listen,

@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use uuid::Uuid;
 
 pub(crate) const ACTIVATION_MANIFEST_FILE: &str = "activation-manifest.json";
@@ -16,6 +17,7 @@ const ACTIVATION_SCHEMA_VERSION: u32 = 1;
 pub(crate) enum BootstrapProfileClassification {
     FreshProfile,
     ActivatedValid,
+    CommittedValid,
     LegacyMigrationRequired,
     ActivationRecoveryRequired,
     TargetConflict,
@@ -81,6 +83,71 @@ pub(crate) enum ActivationFailPoint {
     AfterIdentityJournal,
     AfterTargetMoveBeforeJournal,
     AfterTargetJournal,
+    BeforeRuntimeValidatedJournal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RuntimeProcessState {
+    Blocked,
+    Validating,
+    Ready,
+    Failed,
+}
+
+pub(crate) struct RuntimeProcessGate {
+    state: Mutex<RuntimeProcessState>,
+}
+
+impl RuntimeProcessGate {
+    pub(crate) fn new() -> Self {
+        Self {
+            state: Mutex::new(RuntimeProcessState::Blocked),
+        }
+    }
+
+    pub(crate) fn state(&self) -> Result<RuntimeProcessState, String> {
+        self.state
+            .lock()
+            .map(|state| *state)
+            .map_err(|_| "runtime process gate is poisoned".to_string())
+    }
+
+    pub(crate) fn begin_validation(&self) -> Result<(), String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "runtime process gate is poisoned".to_string())?;
+        if *state != RuntimeProcessState::Blocked {
+            return Err("runtime validation was already attempted for this process".to_string());
+        }
+        *state = RuntimeProcessState::Validating;
+        Ok(())
+    }
+
+    pub(crate) fn complete_validation(&self) -> Result<(), String> {
+        self.transition_from_validating(RuntimeProcessState::Ready)
+    }
+
+    pub(crate) fn fail_validation(&self) -> Result<(), String> {
+        self.transition_from_validating(RuntimeProcessState::Failed)
+    }
+
+    pub(crate) fn business_access_allowed(&self) -> Result<bool, String> {
+        Ok(self.state()? == RuntimeProcessState::Ready)
+    }
+
+    fn transition_from_validating(&self, next: RuntimeProcessState) -> Result<(), String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "runtime process gate is poisoned".to_string())?;
+        if *state != RuntimeProcessState::Validating {
+            return Err("runtime validation is not in progress".to_string());
+        }
+        *state = next;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,10 +173,10 @@ pub(crate) fn inspect_bootstrap_profile(root: &Path) -> Result<BootstrapInspecti
     let workspaces = root.join("workspaces.json");
     let identity = root.join("remote-host-identity.json");
     if manifest.exists() {
-        if super::startup_activation::validate_activated_profile(root).is_ok() {
+        if super::startup_activation::validate_committed_profile(root).is_ok() {
             return Ok(BootstrapInspection {
-                classification: BootstrapProfileClassification::ActivatedValid,
-                load_permission: LoadPermission::Normal,
+                classification: BootstrapProfileClassification::CommittedValid,
+                load_permission: LoadPermission::ActivationOnly,
             });
         }
         return Ok(denied(BootstrapProfileClassification::CorruptProfile));
@@ -243,9 +310,7 @@ pub(crate) fn commit_fresh_activation(target_root: &Path) -> Result<(), String> 
     let mut committed = journal;
     committed.state = ActivationJournalState::TargetCommitted;
     write_json_atomic(&activation_journal_path(target_root), &committed)?;
-    validate_prepared_profile_for_transaction(target_root, &committed.transaction_id)?;
-    committed.state = ActivationJournalState::RuntimeValidated;
-    write_json_atomic(&activation_journal_path(target_root), &committed)
+    validate_prepared_profile_for_transaction(target_root, &committed.transaction_id)
 }
 
 pub(crate) fn write_activation_journal(
@@ -326,6 +391,10 @@ pub(crate) fn commit_migration_activation(
     if journal.state == ActivationJournalState::RuntimeValidated {
         return Err("activation already completed".to_string());
     }
+    if journal.state == ActivationJournalState::TargetCommitted {
+        validate_prepared_profile_for_transaction(target_root, &journal.transaction_id)?;
+        return Err("activation target is already committed for runtime validation".to_string());
+    }
     if journal.staging_root.is_dir() {
         validate_prepared_profile_for_transaction(&journal.staging_root, &journal.transaction_id)?;
     }
@@ -389,7 +458,39 @@ pub(crate) fn commit_migration_activation(
     journal.state = ActivationJournalState::TargetCommitted;
     write_activation_journal(target_root, &journal)?;
     maybe_fail(failpoint, ActivationFailPoint::AfterTargetJournal)?;
-    validate_prepared_profile_for_transaction(target_root, &journal.transaction_id)?;
+    validate_prepared_profile_for_transaction(target_root, &journal.transaction_id)
+}
+
+pub(crate) fn complete_runtime_validation(
+    target_root: &Path,
+    expected_transaction_id: &str,
+    failpoint: Option<ActivationFailPoint>,
+) -> Result<(), String> {
+    let _lock = ActivationCommitLock::acquire(target_root)?;
+    let metadata = super::startup_activation::validate_committed_profile(target_root)?;
+    if metadata.transaction_id != expected_transaction_id {
+        return Err("runtime validation transaction binding changed".to_string());
+    }
+    let mut journal = read_journal(target_root)?;
+    if journal.schema_version != ACTIVATION_SCHEMA_VERSION
+        || journal.target_root
+            != fs::canonicalize(target_root)
+                .map_err(|error| format!("canonicalize runtime target: {error}"))?
+        || journal.transaction_id != expected_transaction_id
+        || !matches!(
+            journal.state,
+            ActivationJournalState::TargetCommitted | ActivationJournalState::RuntimeValidated
+        )
+    {
+        return Err("runtime validation journal binding mismatch".to_string());
+    }
+    if journal.state == ActivationJournalState::RuntimeValidated {
+        return Ok(());
+    }
+    maybe_fail(
+        failpoint,
+        ActivationFailPoint::BeforeRuntimeValidatedJournal,
+    )?;
     journal.state = ActivationJournalState::RuntimeValidated;
     write_activation_journal(target_root, &journal)
 }

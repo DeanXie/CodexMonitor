@@ -4,6 +4,12 @@ Status: **PASS / COMPLETE / FROZEN** after the fresh closeout recorded in the
 evidence index. P4.1d production wiring is complete; no real user migration or
 HostIdentity retirement was executed. P4.1e is not started.
 
+Historical correction: P4.1d-3 later proved that this slice's file commit path
+wrote `runtime_validated` before a real runtime handshake. The d-2 acceptance
+record remains historical; current startup authority is the corrected
+`target_committed` plus current-process validation contract in
+`phase-4-1d-3-runtime-validation-handshake.md`.
+
 Canonical software authority is `v0.7.68 · Build 4 · development`.
 
 ## Startup authority
@@ -11,9 +17,10 @@ Canonical software authority is `v0.7.68 · Build 4 · development`.
 Desktop App, daemon, and daemonctl now resolve the approved target profile and
 use the same activated-profile validator. Normal business loading requires an
 activation manifest, an active v2 RemoteHostIdentity bound to the same
-transaction, an external activation journal at `runtime_validated` bound to the
-same transaction and canonical target root, parseable settings, and an
-array-shaped workspace store.
+transaction, an external committed activation journal bound to the same
+transaction and canonical target root, parseable settings, and an array-shaped
+workspace store. P4.1d-3 additionally requires each current App or daemon
+process to perform runtime validation before normal business access.
 
 Fresh, legacy, recovery, conflicting, and corrupt roots remain distinct.
 Inspection is read-only and never generates settings, workspaces, or an

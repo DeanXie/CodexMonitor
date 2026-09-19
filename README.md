@@ -240,8 +240,11 @@ bootstrap classification, transaction/root-bound recovery, v2 active/retired
 HostIdentity candidates, and Windows-native retirement/lifetime-lock tests.
 P4.1d-2 activates the DeanX desktop identity and wires the shared startup gate
 into the App, daemon, and daemonctl. Normal business initialization requires a
-valid activated target profile. Real user migration has not been executed, and
-the iOS identifier remains legacy pending a separate platform decision.
+valid committed target profile. P4.1d-3 corrects the runtime handshake: file
+commit stops at `target_committed`, each App/daemon process validates itself,
+and normal business IPC/RPC opens only after that process is `ready`. Real user
+migration has not been executed, and the iOS identifier remains legacy pending
+a separate platform decision.
 
 Build the production Tauri bundle:
 

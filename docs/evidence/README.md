@@ -162,3 +162,10 @@ P4.1d-2 startup-cutover fixtures are stored in
 daemonctl activation gate, target desktop identity, pending iOS boundary, and
 zero-real-cutover verification scope. The evidence index is
 `phase-4-1d-2/README.md`.
+
+P4.1d-3 runtime-validation-handshake fixtures are stored in
+`../fixtures/phase-4-1d-3-runtime-validation-handshake/`. They correct the d-2
+file-commit/runtime-readiness conflation and freeze `target_committed`, the
+current-process `blocked/validating/ready/failed` gate, authenticated daemonctl
+child readiness, and zero-real-cutover scope. The evidence index is
+`phase-4-1d-3/README.md`.

@@ -1,0 +1,30 @@
+{
+  "phase": "P4.1d-3",
+  "persistedStates": {
+    "fileCommit": "target_committed",
+    "runtimeHistory": "runtime_validated"
+  },
+  "processStates": ["blocked", "validating", "ready", "failed"],
+  "businessAccess": {
+    "targetCommitted": false,
+    "validating": false,
+    "failed": false,
+    "currentProcessReady": true
+  },
+  "historicalRuntimeValidatedBypassesCurrentValidation": false,
+  "daemonctl": {
+    "statusWritesActivation": false,
+    "commandPreviewWritesActivation": false,
+    "startWaitsForAuthenticatedChildReadiness": true
+  },
+  "forbiddenBeforeReady": [
+    "normal_business_ipc",
+    "normal_business_rpc",
+    "global_source_scan",
+    "workspace_session_creation",
+    "remote_auto_connect"
+  ],
+  "realUserMigrationCount": 0,
+  "realHostIdentityRetirementCount": 0,
+  "realDaemonOperationCount": 0
+}

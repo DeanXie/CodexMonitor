@@ -24,6 +24,7 @@ const status = (normalLoadAllowed: boolean): tauri.BootstrapStatus => ({
     reason: normalLoadAllowed ? "activated profile validated" : "migration required",
   },
   restartRequired: false,
+  runtimeState: normalLoadAllowed ? "ready" : "blocked",
 });
 
 describe("BootstrapBoundary", () => {

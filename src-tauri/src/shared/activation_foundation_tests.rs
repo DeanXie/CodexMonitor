@@ -1,9 +1,10 @@
 use super::activation_foundation::{
     activation_staging_path, commit_fresh_activation, commit_migration_activation,
-    inspect_bootstrap_profile, prepare_fresh_activation, prepare_migration_activation,
-    recover_activation, write_activation_journal, ActivationFailPoint, ActivationJournal,
-    ActivationJournalState, BootstrapProfileClassification, LegacyProcessStopEvidence,
-    LoadPermission, RecoveryDisposition, ServiceLifetimeLock,
+    complete_runtime_validation, inspect_bootstrap_profile, prepare_fresh_activation,
+    prepare_migration_activation, recover_activation, write_activation_journal,
+    ActivationFailPoint, ActivationJournal, ActivationJournalState, BootstrapProfileClassification,
+    LegacyProcessStopEvidence, LoadPermission, RecoveryDisposition, RuntimeProcessGate,
+    RuntimeProcessState, ServiceLifetimeLock,
 };
 use super::legacy_remote_host_identity_loader_fixture::load_v1;
 use super::remote_host_identity_activation::{
@@ -151,9 +152,135 @@ fn fresh_profile_is_complete_before_activation_commit() {
     let inspection = inspect_bootstrap_profile(&target).unwrap();
     assert_eq!(
         inspection.classification,
-        BootstrapProfileClassification::ActivatedValid
+        BootstrapProfileClassification::CommittedValid
     );
-    assert_eq!(inspection.load_permission, LoadPermission::Normal);
+    assert_eq!(inspection.load_permission, LoadPermission::ActivationOnly);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn target_commit_does_not_claim_business_runtime_validation() {
+    let root = temp_dir("runtime-validation-boundary");
+    fs::create_dir_all(&root).unwrap();
+    let target = root.join("target");
+    prepare_fresh_activation(&target, "6ba7b810-9dad-41d1-80b4-00c04fd430c8").unwrap();
+
+    commit_fresh_activation(&target).unwrap();
+
+    let journal: serde_json::Value = serde_json::from_slice(
+        &fs::read(super::activation_foundation::activation_journal_path(
+            &target,
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(journal["state"], "target_committed");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn runtime_process_gate_requires_internal_validation_completion() {
+    let gate = RuntimeProcessGate::new();
+    assert_eq!(gate.state().unwrap(), RuntimeProcessState::Blocked);
+    gate.begin_validation().unwrap();
+    assert_eq!(gate.state().unwrap(), RuntimeProcessState::Validating);
+    assert!(!gate.business_access_allowed().unwrap());
+    assert!(gate.begin_validation().is_err());
+    gate.complete_validation().unwrap();
+    assert_eq!(gate.state().unwrap(), RuntimeProcessState::Ready);
+    assert!(gate.business_access_allowed().unwrap());
+}
+
+#[test]
+fn runtime_validation_failure_keeps_business_access_closed() {
+    let gate = RuntimeProcessGate::new();
+    gate.begin_validation().unwrap();
+    gate.fail_validation().unwrap();
+    assert_eq!(gate.state().unwrap(), RuntimeProcessState::Failed);
+    assert!(!gate.business_access_allowed().unwrap());
+    assert!(gate.complete_validation().is_err());
+}
+
+#[test]
+fn runtime_completion_rechecks_transaction_binding_before_advancing_journal() {
+    let root = temp_dir("runtime-binding-recheck");
+    fs::create_dir_all(&root).unwrap();
+    let target = root.join("target");
+    prepare_fresh_activation(&target, "6ba7b810-9dad-41d1-80b4-00c04fd430c8").unwrap();
+    commit_fresh_activation(&target).unwrap();
+
+    assert!(complete_runtime_validation(&target, "different-transaction", None).is_err());
+    let journal: serde_json::Value = serde_json::from_slice(
+        &fs::read(super::activation_foundation::activation_journal_path(
+            &target,
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(journal["state"], "target_committed");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn runtime_journal_failure_does_not_publish_persistent_success() {
+    let root = temp_dir("runtime-journal-failure");
+    fs::create_dir_all(&root).unwrap();
+    let target = root.join("target");
+    let prepared =
+        prepare_fresh_activation(&target, "6ba7b810-9dad-41d1-80b4-00c04fd430c8").unwrap();
+    commit_fresh_activation(&target).unwrap();
+
+    assert!(complete_runtime_validation(
+        &target,
+        &prepared.transaction_id,
+        Some(ActivationFailPoint::BeforeRuntimeValidatedJournal)
+    )
+    .is_err());
+    let journal: serde_json::Value = serde_json::from_slice(
+        &fs::read(super::activation_foundation::activation_journal_path(
+            &target,
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(journal["state"], "target_committed");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn concurrent_runtime_validators_share_only_the_short_commit_section() {
+    let root = temp_dir("concurrent-runtime-validation");
+    fs::create_dir_all(&root).unwrap();
+    let target = root.join("target");
+    let prepared =
+        prepare_fresh_activation(&target, "6ba7b810-9dad-41d1-80b4-00c04fd430c8").unwrap();
+    commit_fresh_activation(&target).unwrap();
+
+    let first_target = target.clone();
+    let first_transaction = prepared.transaction_id.clone();
+    let first = std::thread::spawn(move || {
+        complete_runtime_validation(&first_target, &first_transaction, None)
+    });
+    let second_target = target.clone();
+    let second_transaction = prepared.transaction_id.clone();
+    let second = std::thread::spawn(move || {
+        complete_runtime_validation(&second_target, &second_transaction, None)
+    });
+
+    let outcomes = [first.join().unwrap(), second.join().unwrap()];
+    assert!(outcomes.iter().any(Result::is_ok));
+    for error in outcomes.iter().filter_map(|outcome| outcome.as_ref().err()) {
+        assert!(error.contains("activation commit already in progress"));
+    }
+    complete_runtime_validation(&target, &prepared.transaction_id, None).unwrap();
+    let journal: serde_json::Value = serde_json::from_slice(
+        &fs::read(super::activation_foundation::activation_journal_path(
+            &target,
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(journal["state"], "runtime_validated");
     let _ = fs::remove_dir_all(root);
 }
 
@@ -371,7 +498,7 @@ fn journal_lag_after_real_retirement_preserves_recovery_and_resumes_without_new_
     );
     assert_eq!(
         recover_activation(&target).unwrap(),
-        RecoveryDisposition::Complete
+        RecoveryDisposition::ValidateCommittedTarget
     );
     let _ = fs::remove_dir_all(root);
 }
@@ -402,7 +529,7 @@ fn target_move_before_journal_advance_is_recoverable() {
     commit_migration_activation(&target, None).unwrap();
     assert_eq!(
         recover_activation(&target).unwrap(),
-        RecoveryDisposition::Complete
+        RecoveryDisposition::ValidateCommittedTarget
     );
     let _ = fs::remove_dir_all(root);
 }
@@ -442,7 +569,7 @@ fn concurrent_migration_commit_has_one_successful_committer() {
     assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
     assert_eq!(
         recover_activation(&target).unwrap(),
-        RecoveryDisposition::Complete
+        RecoveryDisposition::ValidateCommittedTarget
     );
     let _ = fs::remove_dir_all(root);
 }

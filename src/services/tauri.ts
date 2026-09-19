@@ -971,6 +971,7 @@ export async function getAppSettings(): Promise<AppSettings> {
 
 export type BootstrapDisposition =
   | "ready"
+  | "runtime_validation_required"
   | "fresh_activation_required"
   | "legacy_migration_required"
   | "recovery_required"
@@ -986,6 +987,7 @@ export type BootstrapStatus = {
     reason: string | null;
   };
   restartRequired: boolean;
+  runtimeState: "blocked" | "validating" | "ready" | "failed";
 };
 
 export async function getBootstrapStatus(): Promise<BootstrapStatus> {

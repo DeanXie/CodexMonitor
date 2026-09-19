@@ -89,7 +89,7 @@ fn main() {
 async fn run() -> Result<(), String> {
     let args = parse_args()?;
     let data_dir = resolve_data_dir(args.data_dir)?;
-    startup_activation::validate_activated_profile(&data_dir)
+    startup_activation::validate_committed_profile(&data_dir)
         .map_err(|error| format!("daemonctl blocked by profile activation gate: {error}"))?;
     let settings = load_settings(&data_dir)?;
 
@@ -1078,17 +1078,51 @@ async fn daemon_start(
         command.arg("--token").arg(token);
     }
 
-    let child = command
+    let mut child = command
+        .into_std()
         .spawn()
         .map_err(|err| format!("Failed to start mobile access daemon: {err}"))?;
-
-    Ok(TcpDaemonStatus {
-        state: TcpDaemonState::Running,
-        pid: child.id(),
-        started_at_ms: Some(now_unix_ms()),
-        last_error: None,
-        listen_addr: Some(listen_addr.to_string()),
-    })
+    let expected_pid = child.id();
+    let started_at_ms = now_unix_ms();
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("inspect daemon startup process: {error}"))?
+        {
+            return Err(format!(
+                "Daemon exited before readiness with status {status}"
+            ));
+        }
+        if let DaemonProbe::Running {
+            auth_ok: true,
+            info: Some(info),
+            ..
+        } = probe_daemon(listen_addr, token).await
+        {
+            if info.name == EXPECTED_DAEMON_NAME
+                && info.mode == EXPECTED_DAEMON_MODE
+                && info.version == CURRENT_APP_VERSION
+                && info.pid == Some(expected_pid)
+            {
+                return Ok(TcpDaemonStatus {
+                    state: TcpDaemonState::Running,
+                    pid: Some(expected_pid),
+                    started_at_ms: Some(started_at_ms),
+                    last_error: None,
+                    listen_addr: Some(listen_addr.to_string()),
+                });
+            }
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(
+                "Daemon child did not reach authenticated readiness before timeout".to_string(),
+            );
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
 }
 
 async fn daemon_stop(listen_addr: &str, token: Option<&str>) -> TcpDaemonStatus {

@@ -73,6 +73,19 @@ fn is_mobile_runtime() -> bool {
     cfg!(any(target_os = "ios", target_os = "android"))
 }
 
+#[cfg(desktop)]
+fn is_bootstrap_invoke(command: &str) -> bool {
+    matches!(
+        command,
+        "get_bootstrap_status" | "activate_fresh_profile" | "recover_profile_activation"
+    )
+}
+
+#[cfg(desktop)]
+fn business_invoke_allowed(command: &str, runtime_ready: bool) -> bool {
+    runtime_ready || is_bootstrap_invoke(command)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -128,13 +141,38 @@ pub fn run() {
                 })?;
                 let bootstrap_state = bootstrap::BootstrapState::inspect(target_root.clone());
                 let bootstrap_status = bootstrap_state.initial_status();
-                let normal_load_allowed = bootstrap_status
+                let mut candidate_state = None;
+                if bootstrap_status
                     .as_ref()
-                    .map(|status| status.inspection.normal_load_allowed)
+                    .map(|status| {
+                        status.inspection.disposition
+                            == shared::startup_activation::StartupDisposition::RuntimeValidationRequired
+                    })
+                    .unwrap_or(false)
+                {
+                    if let Err(error) = bootstrap_state.begin_runtime_validation() {
+                        let _ = bootstrap_state.fail_runtime_validation(&error);
+                    } else {
+                        match state::AppState::load_for_runtime_validation(target_root) {
+                            Ok((state, metadata)) => {
+                                match bootstrap_state
+                                    .complete_runtime_validation(&metadata.transaction_id)
+                                {
+                                    Ok(()) => candidate_state = Some(state),
+                                    Err(_) => {}
+                                }
+                            }
+                            Err(error) => {
+                                let _ = bootstrap_state.fail_runtime_validation(&error);
+                            }
+                        }
+                    }
+                }
+                let normal_load_allowed = bootstrap_state
+                    .business_access_allowed()
                     .unwrap_or(false);
                 app.manage(bootstrap_state);
-                if normal_load_allowed {
-                    let state = state::AppState::load_activated(target_root)?;
+                if let Some(state) = candidate_state {
                     app.manage(state);
                     #[cfg(desktop)]
                     global_sources::start(&app.handle())?;
@@ -210,147 +248,166 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![
-            bootstrap::get_bootstrap_status,
-            bootstrap::activate_fresh_profile,
-            bootstrap::recover_profile_activation,
-            settings::get_app_settings,
-            settings::update_app_settings,
-            settings::get_codex_config_path,
-            remote_backend::get_remote_host_availability,
-            files::file_read,
-            files::file_write,
-            files::read_image_as_data_url,
-            files::write_text_file,
-            codex::get_config_model,
-            menu::menu_set_accelerators,
-            tray::set_tray_recent_threads,
-            tray::set_tray_session_usage,
-            codex::codex_doctor,
-            codex::codex_update,
-            workspaces::list_workspaces,
-            workspaces::is_workspace_path_dir,
-            workspaces::add_workspace,
-            workspaces::add_workspace_from_git_url,
-            workspaces::add_clone,
-            workspaces::add_worktree,
-            workspaces::worktree_setup_status,
-            workspaces::worktree_setup_mark_ran,
-            workspaces::remove_workspace,
-            workspaces::remove_worktree,
-            workspaces::rename_worktree,
-            workspaces::rename_worktree_upstream,
-            workspaces::apply_worktree_changes,
-            workspaces::update_workspace_settings,
-            workspaces::set_workspace_runtime_codex_args,
-            codex::start_thread,
-            codex::get_creation_context,
-            codex::get_creation_intent_status,
-            codex::get_first_turn_intent_status,
-            codex::send_user_message,
-            codex::turn_steer,
-            codex::turn_interrupt,
-            codex::start_review,
-            codex::respond_to_server_request,
-            codex::remember_approval_rule,
-            codex::generate_commit_message,
-            codex::generate_run_metadata,
-            codex::generate_agent_description,
-            codex::resume_thread,
-            codex::get_writer_admission_observation,
-            codex::get_authoritative_observation_snapshot,
-            codex::get_projection_freshness,
-            codex::read_thread,
-            codex::thread_live_subscribe,
-            codex::thread_live_unsubscribe,
-            codex::thread_upstream_unsubscribe,
-            codex::fork_thread,
-            codex::list_threads,
-            codex::list_mcp_server_status,
-            codex::archive_thread,
-            codex::delete_thread,
-            codex::compact_thread,
-            codex::set_thread_name,
-            codex::collaboration_mode_list,
-            workspaces::connect_workspace,
-            git::get_git_status,
-            git::init_git_repo,
-            git::create_github_repo,
-            git::list_git_roots,
-            git::get_git_diffs,
-            git::get_git_log,
-            git::get_git_commit_diff,
-            git::get_git_remote,
-            git::stage_git_file,
-            git::stage_git_all,
-            git::unstage_git_file,
-            git::revert_git_file,
-            git::revert_git_all,
-            git::commit_git,
-            git::push_git,
-            git::pull_git,
-            git::fetch_git,
-            git::sync_git,
-            git::get_github_issues,
-            git::get_github_pull_requests,
-            git::get_github_pull_request_diff,
-            git::get_github_pull_request_comments,
-            git::checkout_github_pull_request,
-            workspaces::list_workspace_files,
-            workspaces::read_workspace_file,
-            workspaces::open_workspace_in,
-            workspaces::get_open_app_icon,
-            git::list_git_branches,
-            git::checkout_git_branch,
-            git::create_git_branch,
-            codex::model_list,
-            codex::experimental_feature_list,
-            codex::set_codex_feature_flag,
-            codex::get_agents_settings,
-            codex::set_agents_core_settings,
-            codex::create_agent,
-            codex::update_agent,
-            codex::delete_agent,
-            codex::read_agent_config_toml,
-            codex::write_agent_config_toml,
-            codex::account_rate_limits,
-            codex::account_read,
-            codex::codex_login,
-            codex::codex_login_cancel,
-            codex::skills_list,
-            codex::apps_list,
-            prompts::prompts_list,
-            prompts::prompts_create,
-            prompts::prompts_update,
-            prompts::prompts_delete,
-            prompts::prompts_move,
-            prompts::prompts_workspace_dir,
-            prompts::prompts_global_dir,
-            terminal::terminal_open,
-            terminal::terminal_write,
-            terminal::terminal_resize,
-            terminal::terminal_close,
-            dictation::dictation_model_status,
-            dictation::dictation_download_model,
-            dictation::dictation_cancel_download,
-            dictation::dictation_remove_model,
-            dictation::dictation_start,
-            dictation::dictation_request_permission,
-            dictation::dictation_stop,
-            dictation::dictation_cancel,
-            local_usage::local_usage_snapshot,
+        .invoke_handler(|invoke: tauri::ipc::Invoke<tauri::Wry>| {
             #[cfg(desktop)]
-            global_sources::snapshot::global_source_snapshot,
-            notifications::is_macos_debug_build,
-            notifications::app_build_type,
-            notifications::send_notification_fallback,
-            tailscale::tailscale_status,
-            tailscale::tailscale_daemon_command_preview,
-            tailscale::tailscale_daemon_start,
-            tailscale::tailscale_daemon_stop,
-            tailscale::tailscale_daemon_status,
-            is_mobile_runtime
-        ])
+            {
+                let command = invoke.message.command();
+                let ready = invoke
+                    .message
+                    .webview_ref()
+                    .try_state::<bootstrap::BootstrapState>()
+                    .and_then(|state| state.business_access_allowed().ok())
+                    .unwrap_or(false);
+                if !business_invoke_allowed(command, ready) {
+                    invoke.resolver.reject(
+                        "normal business IPC is unavailable until runtime validation succeeds",
+                    );
+                    return true;
+                }
+            }
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
+                bootstrap::get_bootstrap_status,
+                bootstrap::activate_fresh_profile,
+                bootstrap::recover_profile_activation,
+                settings::get_app_settings,
+                settings::update_app_settings,
+                settings::get_codex_config_path,
+                remote_backend::get_remote_host_availability,
+                files::file_read,
+                files::file_write,
+                files::read_image_as_data_url,
+                files::write_text_file,
+                codex::get_config_model,
+                menu::menu_set_accelerators,
+                tray::set_tray_recent_threads,
+                tray::set_tray_session_usage,
+                codex::codex_doctor,
+                codex::codex_update,
+                workspaces::list_workspaces,
+                workspaces::is_workspace_path_dir,
+                workspaces::add_workspace,
+                workspaces::add_workspace_from_git_url,
+                workspaces::add_clone,
+                workspaces::add_worktree,
+                workspaces::worktree_setup_status,
+                workspaces::worktree_setup_mark_ran,
+                workspaces::remove_workspace,
+                workspaces::remove_worktree,
+                workspaces::rename_worktree,
+                workspaces::rename_worktree_upstream,
+                workspaces::apply_worktree_changes,
+                workspaces::update_workspace_settings,
+                workspaces::set_workspace_runtime_codex_args,
+                codex::start_thread,
+                codex::get_creation_context,
+                codex::get_creation_intent_status,
+                codex::get_first_turn_intent_status,
+                codex::send_user_message,
+                codex::turn_steer,
+                codex::turn_interrupt,
+                codex::start_review,
+                codex::respond_to_server_request,
+                codex::remember_approval_rule,
+                codex::generate_commit_message,
+                codex::generate_run_metadata,
+                codex::generate_agent_description,
+                codex::resume_thread,
+                codex::get_writer_admission_observation,
+                codex::get_authoritative_observation_snapshot,
+                codex::get_projection_freshness,
+                codex::read_thread,
+                codex::thread_live_subscribe,
+                codex::thread_live_unsubscribe,
+                codex::thread_upstream_unsubscribe,
+                codex::fork_thread,
+                codex::list_threads,
+                codex::list_mcp_server_status,
+                codex::archive_thread,
+                codex::delete_thread,
+                codex::compact_thread,
+                codex::set_thread_name,
+                codex::collaboration_mode_list,
+                workspaces::connect_workspace,
+                git::get_git_status,
+                git::init_git_repo,
+                git::create_github_repo,
+                git::list_git_roots,
+                git::get_git_diffs,
+                git::get_git_log,
+                git::get_git_commit_diff,
+                git::get_git_remote,
+                git::stage_git_file,
+                git::stage_git_all,
+                git::unstage_git_file,
+                git::revert_git_file,
+                git::revert_git_all,
+                git::commit_git,
+                git::push_git,
+                git::pull_git,
+                git::fetch_git,
+                git::sync_git,
+                git::get_github_issues,
+                git::get_github_pull_requests,
+                git::get_github_pull_request_diff,
+                git::get_github_pull_request_comments,
+                git::checkout_github_pull_request,
+                workspaces::list_workspace_files,
+                workspaces::read_workspace_file,
+                workspaces::open_workspace_in,
+                workspaces::get_open_app_icon,
+                git::list_git_branches,
+                git::checkout_git_branch,
+                git::create_git_branch,
+                codex::model_list,
+                codex::experimental_feature_list,
+                codex::set_codex_feature_flag,
+                codex::get_agents_settings,
+                codex::set_agents_core_settings,
+                codex::create_agent,
+                codex::update_agent,
+                codex::delete_agent,
+                codex::read_agent_config_toml,
+                codex::write_agent_config_toml,
+                codex::account_rate_limits,
+                codex::account_read,
+                codex::codex_login,
+                codex::codex_login_cancel,
+                codex::skills_list,
+                codex::apps_list,
+                prompts::prompts_list,
+                prompts::prompts_create,
+                prompts::prompts_update,
+                prompts::prompts_delete,
+                prompts::prompts_move,
+                prompts::prompts_workspace_dir,
+                prompts::prompts_global_dir,
+                terminal::terminal_open,
+                terminal::terminal_write,
+                terminal::terminal_resize,
+                terminal::terminal_close,
+                dictation::dictation_model_status,
+                dictation::dictation_download_model,
+                dictation::dictation_cancel_download,
+                dictation::dictation_remove_model,
+                dictation::dictation_start,
+                dictation::dictation_request_permission,
+                dictation::dictation_stop,
+                dictation::dictation_cancel,
+                local_usage::local_usage_snapshot,
+                #[cfg(desktop)]
+                global_sources::snapshot::global_source_snapshot,
+                notifications::is_macos_debug_build,
+                notifications::app_build_type,
+                notifications::send_notification_fallback,
+                tailscale::tailscale_status,
+                tailscale::tailscale_daemon_command_preview,
+                tailscale::tailscale_daemon_start,
+                tailscale::tailscale_daemon_stop,
+                tailscale::tailscale_daemon_status,
+                is_mobile_runtime
+            ];
+            handler(invoke)
+        })
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
 
@@ -379,4 +436,25 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(all(test, desktop))]
+mod startup_gate_tests {
+    use super::business_invoke_allowed;
+
+    #[test]
+    fn validating_process_only_allows_bootstrap_commands() {
+        assert!(business_invoke_allowed("get_bootstrap_status", false));
+        assert!(business_invoke_allowed("activate_fresh_profile", false));
+        assert!(business_invoke_allowed("recover_profile_activation", false));
+        assert!(!business_invoke_allowed("list_workspaces", false));
+        assert!(!business_invoke_allowed("resume_thread", false));
+        assert!(!business_invoke_allowed("file_write", false));
+    }
+
+    #[test]
+    fn ready_process_allows_registered_business_commands() {
+        assert!(business_invoke_allowed("list_workspaces", true));
+        assert!(business_invoke_allowed("resume_thread", true));
+    }
 }

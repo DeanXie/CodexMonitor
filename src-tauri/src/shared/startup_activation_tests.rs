@@ -1,6 +1,7 @@
 use super::startup_activation::{
-    inspect_startup_roots, validate_activated_profile, StartupDisposition,
-    LEGACY_DESKTOP_IDENTIFIER, TARGET_DESKTOP_IDENTIFIER,
+    inspect_startup_roots, validate_activated_profile, validate_committed_profile,
+    PersistedActivationState, StartupDisposition, LEGACY_DESKTOP_IDENTIFIER,
+    TARGET_DESKTOP_IDENTIFIER,
 };
 use serde_json::json;
 use std::fs;
@@ -20,6 +21,14 @@ fn write_json(path: &Path, value: serde_json::Value) {
 }
 
 fn write_activated(root: &Path, transaction: &str) {
+    write_profile(root, transaction, "runtime_validated");
+}
+
+fn write_committed(root: &Path, transaction: &str) {
+    write_profile(root, transaction, "target_committed");
+}
+
+fn write_profile(root: &Path, transaction: &str, state: &str) {
     fs::create_dir_all(root).unwrap();
     write_json(&root.join("settings.json"), json!({}));
     write_json(&root.join("workspaces.json"), json!([]));
@@ -53,7 +62,7 @@ fn write_activated(root: &Path, transaction: &str) {
             "sourceRoot": "",
             "targetRoot": canonical_root,
             "stagingRoot": root.parent().unwrap().join("prepared-no-longer-present"),
-            "state": "runtime_validated"
+            "state": state
         }),
     );
 }
@@ -84,8 +93,52 @@ fn only_complete_bound_v2_profile_can_load_normally() {
     write_activated(&target, "tx-active");
 
     let inspection = inspect_startup_roots(&target, &legacy).unwrap();
-    assert_eq!(inspection.disposition, StartupDisposition::Ready);
+    assert_eq!(
+        inspection.disposition,
+        StartupDisposition::RuntimeValidationRequired
+    );
+    assert!(!inspection.normal_load_allowed);
     validate_activated_profile(&target).unwrap();
+}
+
+#[test]
+fn target_committed_profile_enters_restricted_runtime_validation() {
+    let base = temp_root("committed");
+    let target = base.join(TARGET_DESKTOP_IDENTIFIER);
+    let legacy = base.join(LEGACY_DESKTOP_IDENTIFIER);
+    write_committed(&target, "tx-committed");
+
+    let inspection = inspect_startup_roots(&target, &legacy).unwrap();
+    assert_eq!(
+        inspection.disposition,
+        StartupDisposition::RuntimeValidationRequired
+    );
+    assert!(!inspection.normal_load_allowed);
+    let metadata = validate_committed_profile(&target).unwrap();
+    assert_eq!(
+        metadata.persisted_state,
+        PersistedActivationState::TargetCommitted
+    );
+    assert!(validate_activated_profile(&target).is_err());
+}
+
+#[test]
+fn old_runtime_validated_history_still_requires_current_process_validation() {
+    let base = temp_root("historical-runtime");
+    let target = base.join(TARGET_DESKTOP_IDENTIFIER);
+    let legacy = base.join(LEGACY_DESKTOP_IDENTIFIER);
+    write_activated(&target, "tx-historical-runtime");
+
+    let inspection = inspect_startup_roots(&target, &legacy).unwrap();
+    assert_eq!(
+        inspection.disposition,
+        StartupDisposition::RuntimeValidationRequired
+    );
+    assert!(!inspection.normal_load_allowed);
+    assert_eq!(
+        validate_committed_profile(&target).unwrap().persisted_state,
+        PersistedActivationState::RuntimeValidated
+    );
 }
 
 #[test]

@@ -2,6 +2,11 @@
 
 Status: **PASS / COMPLETE / FROZEN** after fresh verification.
 
+Historical correction: P4.1d-3 later proved that the d-2 file commit advanced
+the journal to `runtime_validated` before an actual runtime handshake. The
+counts below remain the original d-2 closeout record; they are not current
+authority for process readiness. See `../phase-4-1d-3/README.md`.
+
 Evidence authority includes shared startup classification, P4.1d-1
 activation/recovery, Windows retirement, App bootstrap-boundary, daemon,
 daemonctl, migration, version, release-identity, updater, and Sentry tests plus

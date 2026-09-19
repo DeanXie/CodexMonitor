@@ -81,8 +81,8 @@ use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
 use shared::prompts_core::{self, CustomPromptEntry};
 use shared::remote_host_identity::{
-    load_or_initialize_remote_host_identity, DaemonProcessGeneration, RemoteDaemonCapabilities,
-    RemoteDaemonInfo, RemoteHostIdentity, REMOTE_DAEMON_PROTOCOL_VERSION,
+    DaemonProcessGeneration, RemoteDaemonCapabilities, RemoteDaemonInfo, RemoteHostIdentity,
+    REMOTE_DAEMON_PROTOCOL_VERSION,
 };
 use shared::remote_request_provenance::{
     RemoteRequestDispatchContext, RemoteRequestKey, RemoteRequestProvenanceRuntime,
@@ -211,15 +211,37 @@ struct WorkspaceFileResponse {
 }
 
 impl DaemonState {
+    fn load_activated(
+        config: &DaemonConfig,
+        events: broadcast::Sender<DaemonEvent>,
+    ) -> Result<Self, String> {
+        let activated = shared::startup_activation::validate_activated_profile(&config.data_dir)?;
+        Self::load_with_identity(config, events, activated.remote_host_identity)
+    }
+
+    #[cfg(test)]
     fn load(config: &DaemonConfig, events: broadcast::Sender<DaemonEvent>) -> Result<Self, String> {
+        let identity = shared::remote_host_identity::load_or_initialize_remote_host_identity(
+            &config.data_dir,
+        )?;
+        Self::load_with_identity(config, events, identity.as_str().to_string())
+    }
+
+    fn load_with_identity(
+        config: &DaemonConfig,
+        events: broadcast::Sender<DaemonEvent>,
+        identity: String,
+    ) -> Result<Self, String> {
         let storage_path = config.data_dir.join("workspaces.json");
         let settings_path = config.data_dir.join("settings.json");
-        let workspaces = read_workspaces(&storage_path).unwrap_or_default();
-        let app_settings = read_settings(&settings_path).unwrap_or_default();
+        let workspaces = read_workspaces(&storage_path)
+            .map_err(|error| format!("read activated workspaces: {error}"))?;
+        let app_settings = read_settings(&settings_path)
+            .map_err(|error| format!("read activated settings: {error}"))?;
         let daemon_binary_path = std::env::current_exe()
             .ok()
             .and_then(|path| path.to_str().map(str::to_string));
-        let remote_host_identity = load_or_initialize_remote_host_identity(&config.data_dir)?;
+        let remote_host_identity = RemoteHostIdentity::parse(identity)?;
         let daemon_process_generation = DaemonProcessGeneration::generate();
         let projection_freshness = Arc::new(
             shared::projection_freshness::ProjectionFreshnessRuntime::new(
@@ -1778,20 +1800,6 @@ fn read_workspace_file_inner(
     Ok(WorkspaceFileResponse { content, truncated })
 }
 
-fn default_data_dir() -> PathBuf {
-    if let Ok(xdg) = env::var("XDG_DATA_HOME") {
-        let trimmed = xdg.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed).join("codex-monitor-daemon");
-        }
-    }
-    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home)
-        .join(".local")
-        .join("share")
-        .join("codex-monitor-daemon")
-}
-
 fn usage() -> String {
     format!(
         "\
@@ -1856,7 +1864,10 @@ fn parse_args() -> Result<DaemonConfig, String> {
     Ok(DaemonConfig {
         listen,
         token,
-        data_dir: data_dir.unwrap_or_else(default_data_dir),
+        data_dir: match data_dir {
+            Some(path) => path,
+            None => shared::startup_activation::default_target_root()?,
+        },
     })
 }
 
@@ -3222,8 +3233,21 @@ fn main() {
         .expect("failed to build tokio runtime");
 
     runtime.block_on(async move {
+        if let Err(error) = shared::startup_activation::validate_activated_profile(&config.data_dir)
+        {
+            eprintln!("daemon startup blocked by profile activation gate: {error}");
+            std::process::exit(2);
+        }
+        let _service_lifetime_lock =
+            match shared::activation_foundation::ServiceLifetimeLock::acquire(&config.data_dir) {
+                Ok(lock) => lock,
+                Err(error) => {
+                    eprintln!("daemon startup blocked by service lifetime gate: {error}");
+                    std::process::exit(2);
+                }
+            };
         let (events_tx, _events_rx) = broadcast::channel::<DaemonEvent>(2048);
-        let state = match DaemonState::load(&config, events_tx.clone()) {
+        let state = match DaemonState::load_activated(&config, events_tx.clone()) {
             Ok(state) => Arc::new(state),
             Err(error) => {
                 eprintln!("failed to initialize daemon identity: {error}");

@@ -969,6 +969,41 @@ export async function getAppSettings(): Promise<AppSettings> {
   return invoke<AppSettings>("get_app_settings");
 }
 
+export type BootstrapDisposition =
+  | "ready"
+  | "fresh_activation_required"
+  | "legacy_migration_required"
+  | "recovery_required"
+  | "blocked_conflict"
+  | "blocked_corrupt";
+
+export type BootstrapStatus = {
+  inspection: {
+    disposition: BootstrapDisposition;
+    normalLoadAllowed: boolean;
+    targetRoot: string;
+    legacyRoot: string;
+    reason: string | null;
+  };
+  restartRequired: boolean;
+};
+
+export async function getBootstrapStatus(): Promise<BootstrapStatus> {
+  return invoke<BootstrapStatus>("get_bootstrap_status");
+}
+
+export async function activateFreshProfile(): Promise<BootstrapStatus> {
+  return invoke<BootstrapStatus>("activate_fresh_profile", {
+    intent: "create_fresh_profile",
+  });
+}
+
+export async function recoverProfileActivation(): Promise<BootstrapStatus> {
+  return invoke<BootstrapStatus>("recover_profile_activation", {
+    intent: "recover_activation",
+  });
+}
+
 export async function isMobileRuntime(): Promise<boolean> {
   return invoke<boolean>("is_mobile_runtime");
 }

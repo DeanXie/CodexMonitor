@@ -42,6 +42,7 @@ import "./styles/compact-phone.css";
 import "./styles/compact-tablet.css";
 import { useWindowLabel } from "@/features/layout/hooks/useWindowLabel";
 import MainApp from "@app/components/MainApp";
+import { BootstrapBoundary } from "@app/bootstrap/BootstrapBoundary";
 
 const AboutView = lazy(() =>
   import("@/features/about/components/AboutView").then((module) => ({
@@ -60,5 +61,9 @@ export default function App() {
     );
   }
 
-  return <MainApp />;
+  return (
+    <BootstrapBoundary>
+      <MainApp />
+    </BootstrapBoundary>
+  );
 }

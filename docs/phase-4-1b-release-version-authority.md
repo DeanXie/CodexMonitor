@@ -1,7 +1,8 @@
 # P4.1b — Release Identity Contract / Version Authority
 
-Status: **PASS / COMPLETE / FROZEN**. P4.1c is complete and frozen; P4.1d is
-not started.
+Status: **PASS / COMPLETE / FROZEN**. P4.1c and P4.1d-1 are complete and
+frozen; P4.1d-2 activates the approved desktop identity while preserving this
+version contract.
 
 ## Software version authority
 
@@ -23,7 +24,8 @@ precedence. `status` remains `development` until explicit release authorization.
 
 P4.1c closeout advanced the current authority to Build 2 without changing
 SemVer or development status.
-P4.1d-1 closeout advances it to Build 3 under the same rule.
+P4.1d-1 closeout advanced it to Build 3 under the same rule. P4.1d-2 advances
+the current authority to Build 4 at its closeout.
 
 `scripts/version-authority.mjs` provides separate `check`, `sync`, `bump`, and
 `trace` operations. Bump changes only `VERSION.json`; sync is explicit. Check is
@@ -41,17 +43,19 @@ CodexMonitor package entries in `src-tauri/Cargo.toml` and `Cargo.lock`, Tauri
 
 - product name: `CodexMonitor DeanX`;
 - desktop identifier: `io.github.deanxie.codexmonitor`;
-- iOS identifier: `io.github.deanxie.codexmonitor.ios`;
+- target iOS identifier: `io.github.deanxie.codexmonitor.ios`;
 - publisher/repository: `DeanXie/CodexMonitor`;
 - migration required: true;
-- Windows installer product identity is stable across Builds and inactive until
-  P4.1d.
+- Windows installer product identity is stable across Builds and activated by
+  P4.1d-2.
 
-The current Tauri product name and desktop/iOS identifiers remain `Codex
-Monitor`, `com.dimillian.codexmonitor`, and
-`com.dimillian.codexmonitor.ios`. Target identity is metadata, not runtime
-cutover. No data directory, daemonctl lookup, user setting, credential,
-RemoteHostIdentity, or installed product is read or migrated in P4.1b.
+The current desktop Tauri product name and identifier are `CodexMonitor DeanX`
+and `io.github.deanxie.codexmonitor`. iOS remains
+`com.dimillian.codexmonitor.ios` until a separately authorized platform
+migration. P4.1b itself read or migrated no data directory, daemonctl state,
+user setting, credential, RemoteHostIdentity, or installed product; P4.1d-2
+changes desktop configuration and startup authority without executing a real
+user migration.
 
 The identity manifest's `configSchemaVersion` is the P4.1c migration/config
 schema authority and is independent of software version and Build. Build

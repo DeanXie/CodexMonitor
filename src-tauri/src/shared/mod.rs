@@ -27,6 +27,7 @@ pub(crate) mod remote_host_identity;
 pub(crate) mod remote_host_identity_activation;
 pub(crate) mod remote_request_provenance;
 pub(crate) mod settings_core;
+pub(crate) mod startup_activation;
 pub(crate) mod surface_projection_core;
 pub(crate) mod surface_projection_engine;
 pub(crate) mod workspace_interop_core;
@@ -92,6 +93,10 @@ mod legacy_remote_host_identity_loader_fixture;
 #[cfg(test)]
 #[path = "activation_foundation_tests.rs"]
 mod activation_foundation_tests;
+
+#[cfg(test)]
+#[path = "startup_activation_tests.rs"]
+mod startup_activation_tests;
 
 #[cfg(all(test, desktop))]
 #[path = "desktop_projection_handling_tests.rs"]

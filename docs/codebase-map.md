@@ -14,11 +14,15 @@ Related docs:
 - Controlled whitelist migration preparation: `src-tauri/src/shared/migration_core.rs`,
   `src-tauri/src/shared/migration_core_tests.rs`,
   `docs/phase-4-1c-whitelist-migration.md`
-- Inactive migration/activation safety foundation:
+- Migration/activation safety foundation:
   `src-tauri/src/shared/activation_foundation.rs`,
   `src-tauri/src/shared/remote_host_identity_activation.rs`,
   `src-tauri/src/shared/activation_foundation_tests.rs`,
   `docs/phase-4-1d-1-migration-activation-foundation.md`
+- Desktop startup/cutover authority:
+  `src-tauri/src/shared/startup_activation.rs`, `src-tauri/src/bootstrap.rs`,
+  `src/features/app/bootstrap/BootstrapBoundary.tsx`,
+  `docs/phase-4-1d-2-startup-cutover.md`
 - Creation-intent / first-Turn coordination: `docs/phase-3-3-2-creation-coordination.md`
 - iOS remote over Tailscale (TCP): `docs/mobile-ios-tailscale-blueprint.md`
 

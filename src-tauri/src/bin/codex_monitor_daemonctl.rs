@@ -1,5 +1,7 @@
 #[path = "../daemon_binary.rs"]
 mod daemon_binary;
+#[path = "../shared/startup_activation.rs"]
+mod startup_activation;
 #[allow(dead_code)]
 #[path = "../storage.rs"]
 mod storage;
@@ -27,7 +29,6 @@ const EXPECTED_DAEMON_MODE: &str = "tcp";
 const CURRENT_APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_LISTEN_ADDR: &str = "0.0.0.0:4732";
 const REMOTE_TOKEN_PLACEHOLDER: &str = "<remote-backend-token>";
-const APP_IDENTIFIER: &str = "com.dimillian.codexmonitor";
 const DAEMON_RPC_TIMEOUT: Duration = Duration::from_millis(700);
 
 #[derive(Debug, Clone)]
@@ -87,14 +88,16 @@ fn main() {
 
 async fn run() -> Result<(), String> {
     let args = parse_args()?;
-    let data_dir = resolve_data_dir(args.data_dir);
-    let settings = load_settings(&data_dir);
+    let data_dir = resolve_data_dir(args.data_dir)?;
+    startup_activation::validate_activated_profile(&data_dir)
+        .map_err(|error| format!("daemonctl blocked by profile activation gate: {error}"))?;
+    let settings = load_settings(&data_dir)?;
 
-    let listen_addr = resolve_listen_addr(args.listen.as_deref(), settings.as_ref())?;
+    let listen_addr = resolve_listen_addr(args.listen.as_deref(), Some(&settings))?;
     let token = if args.insecure_no_auth {
         None
     } else {
-        resolve_token(args.token.as_deref(), settings.as_ref())
+        resolve_token(args.token.as_deref(), Some(&settings))
     };
 
     match args.command {
@@ -243,54 +246,17 @@ NOTES:\n  - Defaults read token/host from <data-dir>/settings.json\n  - If no --
     )
 }
 
-fn resolve_data_dir(data_dir: Option<PathBuf>) -> PathBuf {
-    data_dir.unwrap_or_else(default_app_data_dir)
-}
-
-fn default_app_data_dir() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        return PathBuf::from(home)
-            .join("Library")
-            .join("Application Support")
-            .join(APP_IDENTIFIER);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(appdata) = env::var("APPDATA") {
-            let trimmed = appdata.trim();
-            if !trimmed.is_empty() {
-                return PathBuf::from(trimmed).join(APP_IDENTIFIER);
-            }
-        }
-        let user = env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string());
-        return PathBuf::from(user)
-            .join("AppData")
-            .join("Roaming")
-            .join(APP_IDENTIFIER);
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        if let Ok(xdg) = env::var("XDG_DATA_HOME") {
-            let trimmed = xdg.trim();
-            if !trimmed.is_empty() {
-                return PathBuf::from(trimmed).join(APP_IDENTIFIER);
-            }
-        }
-        let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home)
-            .join(".local")
-            .join("share")
-            .join(APP_IDENTIFIER)
+fn resolve_data_dir(data_dir: Option<PathBuf>) -> Result<PathBuf, String> {
+    match data_dir {
+        Some(path) => Ok(path),
+        None => startup_activation::default_target_root(),
     }
 }
 
-fn load_settings(data_dir: &Path) -> Option<AppSettings> {
+fn load_settings(data_dir: &Path) -> Result<AppSettings, String> {
     let settings_path = data_dir.join("settings.json");
-    storage::read_settings(&settings_path).ok()
+    storage::read_settings(&settings_path)
+        .map_err(|error| format!("read activated settings: {error}"))
 }
 
 fn resolve_listen_addr(

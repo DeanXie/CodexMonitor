@@ -7,6 +7,7 @@ use tauri::RunEvent;
 use tauri::WindowEvent;
 
 mod backend;
+mod bootstrap;
 mod codex;
 mod daemon_binary;
 mod dictation;
@@ -47,7 +48,9 @@ static EXIT_CLEANUP_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 #[cfg(desktop)]
 fn keep_daemon_running_after_close(app_handle: &tauri::AppHandle) -> bool {
-    let state = app_handle.state::<state::AppState>();
+    let Some(state) = app_handle.try_state::<state::AppState>() else {
+        return false;
+    };
     tauri::async_runtime::block_on(async {
         state
             .app_settings
@@ -59,9 +62,10 @@ fn keep_daemon_running_after_close(app_handle: &tauri::AppHandle) -> bool {
 
 #[cfg(desktop)]
 async fn stop_managed_daemons_for_exit(app_handle: tauri::AppHandle) {
-    global_sources::shutdown(&app_handle).await;
-    let state = app_handle.state::<state::AppState>();
-    let _ = tailscale::tailscale_daemon_stop(state).await;
+    if let Some(state) = app_handle.try_state::<state::AppState>() {
+        global_sources::shutdown(&app_handle).await;
+        let _ = tailscale::tailscale_daemon_stop(state).await;
+    }
 }
 
 #[tauri::command]
@@ -117,12 +121,32 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let state = state::AppState::load(&app.handle());
-            app.manage(state);
             #[cfg(desktop)]
-            {
-                global_sources::start(&app.handle())?;
-            }
+            let normal_load_allowed = {
+                let target_root = app.path().app_data_dir().map_err(|error| {
+                    format!("failed to resolve activated app data root: {error}")
+                })?;
+                let bootstrap_state = bootstrap::BootstrapState::inspect(target_root.clone());
+                let bootstrap_status = bootstrap_state.initial_status();
+                let normal_load_allowed = bootstrap_status
+                    .as_ref()
+                    .map(|status| status.inspection.normal_load_allowed)
+                    .unwrap_or(false);
+                app.manage(bootstrap_state);
+                if normal_load_allowed {
+                    let state = state::AppState::load_activated(target_root)?;
+                    app.manage(state);
+                    #[cfg(desktop)]
+                    global_sources::start(&app.handle())?;
+                }
+                normal_load_allowed
+            };
+
+            #[cfg(not(desktop))]
+            let normal_load_allowed = {
+                app.manage(state::AppState::load_mobile(&app.handle())?);
+                true
+            };
             #[cfg(target_os = "macos")]
             {
                 let tray_state = app.state::<tray::TrayState>();
@@ -138,30 +162,36 @@ pub fn run() {
             }
             #[cfg(desktop)]
             {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let state = app_handle.state::<state::AppState>();
-                    let settings = state.app_settings.lock().await.clone();
-                    if matches!(
-                        settings.remote_backend_provider,
-                        crate::types::RemoteBackendProvider::Tcp
-                    ) {
-                        if matches!(settings.backend_mode, crate::types::BackendMode::Remote) {
-                            // Remote mode: ensure daemon is up and version-current.
-                            let state = app_handle.state::<state::AppState>();
-                            let _ = tailscale::tailscale_daemon_start(state).await;
-                        } else {
-                            // Local mode: only enforce version if daemon is already running.
-                            let state = app_handle.state::<state::AppState>();
-                            if let Ok(status) = tailscale::tailscale_daemon_status(state).await {
-                                if matches!(status.state, crate::types::TcpDaemonState::Running) {
-                                    let state = app_handle.state::<state::AppState>();
-                                    let _ = tailscale::tailscale_daemon_start(state).await;
+                if normal_load_allowed {
+                    let app_handle = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        let Some(state) = app_handle.try_state::<state::AppState>() else {
+                            return;
+                        };
+                        let settings = state.app_settings.lock().await.clone();
+                        if matches!(
+                            settings.remote_backend_provider,
+                            crate::types::RemoteBackendProvider::Tcp
+                        ) {
+                            if matches!(settings.backend_mode, crate::types::BackendMode::Remote) {
+                                // Remote mode: ensure daemon is up and version-current.
+                                let state = app_handle.state::<state::AppState>();
+                                let _ = tailscale::tailscale_daemon_start(state).await;
+                            } else {
+                                // Local mode: only enforce version if daemon is already running.
+                                let state = app_handle.state::<state::AppState>();
+                                if let Ok(status) = tailscale::tailscale_daemon_status(state).await
+                                {
+                                    if matches!(status.state, crate::types::TcpDaemonState::Running)
+                                    {
+                                        let state = app_handle.state::<state::AppState>();
+                                        let _ = tailscale::tailscale_daemon_start(state).await;
+                                    }
                                 }
                             }
                         }
-                    }
-                });
+                    });
+                }
             }
             #[cfg(target_os = "ios")]
             {
@@ -181,6 +211,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
+            bootstrap::get_bootstrap_status,
+            bootstrap::activate_fresh_profile,
+            bootstrap::recover_profile_activation,
             settings::get_app_settings,
             settings::update_app_settings,
             settings::get_codex_config_path,

@@ -2,8 +2,10 @@
 
 Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS**. P4.1a Release
 Safety Switches and P4.1b Release Identity Contract / Version Authority are
-complete. P4.1c whitelist migration preparation is complete and frozen; P4.1d
-runtime activation has not started.
+complete. P4.1c whitelist migration preparation and P4.1d-1 safety foundation
+are complete and frozen. P4.1d-2 has activated the approved desktop identity
+and fail-closed bootstrap gate; real-user migration and installed acceptance
+remain unexecuted.
 
 The root `CodexMonitor_四阶段开发路线图.md` remains the sole current-state
 authority. This document is the Phase 4 product/release contract, not a second
@@ -77,14 +79,14 @@ These decisions are approved requirements, not open design questions.
     and aggregates using canonical identity/evidence deduplication. Blindly
     summing Workspace counters is prohibited.
 
-## Release truth frozen at P4.0
+## Current release truth under the P4.0 contract
 
-The current repository still contains upstream distribution settings. These are
-facts to migrate in P4.1, not approved DeanX release settings:
-
-- Tauri/package/Cargo version: `0.7.68`;
-- Tauri identifier: `com.dimillian.codexmonitor`;
-- iOS identifier family: `com.dimillian.codexmonitor`;
+- Tauri/package/Cargo version remains `0.7.68`; the monotonic Build is governed
+  by root `VERSION.json`;
+- desktop product/identifier are `CodexMonitor DeanX` and
+  `io.github.deanxie.codexmonitor`;
+- iOS remains `com.dimillian.codexmonitor.ios` pending its separate platform
+  migration decision and acceptance;
 - the original upstream updater endpoint, public key, SDK, plugin, permissions,
   UI/menu entry points, updater artifacts, and manifest workflow are disabled
   by P4.1a;
@@ -92,16 +94,19 @@ facts to migrate in P4.1, not approved DeanX release settings:
 - P4.5 still owns local logging, diagnostics export, and crash recovery.
 
 P4.1b establishes root `VERSION.json` as the single software version authority;
-P4.1d-1 advances the current authority to `v0.7.68 · Build 3 · development`.
+P4.1d-1 advanced the authority to `v0.7.68 · Build 3 · development`; P4.1d-2
+advances it to `v0.7.68 · Build 4 · development` without changing SemVer or
+status.
 Build 1 remains the first formal unified
 version-authority baseline. Package/Cargo/Tauri/Apple projections,
 drift checks, deterministic bump/sync tooling, and commit trace output all flow
 from it. Build remains monotonic and never substitutes for SemVer ordering.
-The DeanX target identity is frozen in `release-identity.json`, while the active
-runtime identifiers and data locations remain legacy pending P4.1d. P4.1c
-prepares only sanitized, allowlisted staging data from explicit roots and does
-not migrate credentials or RemoteHostIdentity. P4.1d-1 adds an inactive safety
-foundation only; runtime cutover is still not wired.
+The DeanX desktop identity frozen in `release-identity.json` is now active in
+desktop configuration. P4.1c prepares only sanitized, allowlisted staging data
+from explicit roots and does not migrate credentials or RemoteHostIdentity.
+P4.1d-2 wires the P4.1d-1 foundation into startup, but no real user migration,
+HostIdentity retirement, installed application cutover, or iOS migration has
+been executed.
 
 The main checkout's local `.gitignore` addition, metadata-only `main.rs` state,
 and two development BAT files are not production build or installed-runtime

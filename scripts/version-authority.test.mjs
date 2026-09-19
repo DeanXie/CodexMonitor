@@ -76,7 +76,7 @@ test("canonical_version_manifest_exists", async () => {
   const authority = await readJson(path.join(repoRoot, "VERSION.json"));
   assert.deepEqual(authority, {
     version: "0.7.68",
-    build: 3,
+    build: 4,
     status: "development",
   });
 });
@@ -220,27 +220,30 @@ test("target_identifier_is_distinct_from_legacy_identifier", async () => {
   assert.notEqual(identity.target.iosIdentifier, identity.legacy.iosIdentifier);
 });
 
-test("target_identity_does_not_activate_runtime_identifier", async () => {
+test("target_desktop_identity_is_activated_while_ios_migration_remains_pending", async () => {
   const identity = await readJson(path.join(repoRoot, "release-identity.json"));
   const desktop = await readJson(path.join(repoRoot, "src-tauri", "tauri.conf.json"));
   const ios = await readJson(path.join(repoRoot, "src-tauri", "tauri.ios.conf.json"));
-  assert.equal(desktop.productName, identity.legacy.productName);
-  assert.equal(desktop.identifier, identity.legacy.desktopIdentifier);
+  const windows = await readJson(path.join(repoRoot, "src-tauri", "tauri.windows.conf.json"));
+  assert.equal(desktop.productName, identity.target.productName);
+  assert.equal(desktop.identifier, identity.target.desktopIdentifier);
+  assert.equal(desktop.app.windows[0].title, identity.target.productName);
+  assert.equal(windows.app.windows[0].title, identity.target.productName);
   assert.equal(ios.identifier, identity.legacy.iosIdentifier);
 });
 
-test("legacy_runtime_identifier_remains_active", async () => {
+test("legacy_runtime_identifier_is_no_longer_the_desktop_authority", async () => {
   const fixture = await readJson(path.join(fixturesRoot, "legacy-runtime-identity.json"));
   const desktop = await readJson(path.join(repoRoot, "src-tauri", "tauri.conf.json"));
-  assert.equal(desktop.identifier, fixture.desktopIdentifier);
-  assert.equal(desktop.productName, fixture.productName);
+  assert.notEqual(desktop.identifier, fixture.desktopIdentifier);
+  assert.notEqual(desktop.productName, fixture.productName);
 });
 
 test("installer_target_identity_is_stable", async () => {
   const identity = await readJson(path.join(repoRoot, "release-identity.json"));
   const fixture = await readJson(path.join(fixturesRoot, "installer-identity-stability.json"));
   assert.deepEqual(identity.windowsInstaller, fixture.windowsInstaller);
-  assert.equal(identity.windowsInstaller.activated, false);
+  assert.equal(identity.windowsInstaller.activated, true);
 });
 
 test("build_number_does_not_define_semver_precedence", async () => {
@@ -264,10 +267,10 @@ test("sentry_remains_disabled", async () => {
   assert.doesNotMatch(main, /Sentry\.init|VITE_SENTRY_DSN/);
 });
 
-test("migration_is_not_executed", async () => {
+test("desktop_identity_is_active_but_real_data_migration_is_not_executed", async () => {
   const identity = await readJson(path.join(repoRoot, "release-identity.json"));
   assert.equal(identity.migrationRequired, true);
-  assert.equal(identity.activation.runtimeIdentity, false);
+  assert.equal(identity.activation.runtimeIdentity, true);
   assert.equal(identity.activation.dataMigration, false);
 });
 

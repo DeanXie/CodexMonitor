@@ -690,8 +690,8 @@ Project
 
 ## 当前状态
 
-**IN PROGRESS**。P4.0、P4.1a、P4.1b、P4.1c 与 P4.1d-1 已完成并冻结；
-P4.1d runtime cutover 尚未接入，父阶段仍为 IN PROGRESS。完整且唯一的 Phase 4 产品/发行合同见
+**IN PROGRESS**。P4.0、P4.1a、P4.1b、P4.1c、P4.1d-1 与 P4.1d-2 已完成并冻结；
+P4.1d 的生产启动门禁与桌面身份切换已完成，真实用户迁移和安装版验收仍未执行。完整且唯一的 Phase 4 产品/发行合同见
 [`docs/phase-4-0-truth-release-boundary.md`](docs/phase-4-0-truth-release-boundary.md)。
 
 ## 目标与平台顺序
@@ -968,7 +968,8 @@ IN PROGRESS
    ├─ P4.1b Release Identity Contract / Version Authority PASS / COMPLETE / FROZEN
    ├─ P4.1c Controlled Whitelist Migration Engine PASS / COMPLETE / FROZEN
    ├─ P4.1d-1 Migration / Activation Safety Foundation PASS / COMPLETE / FROZEN
-   └─ next implementation slice: P4.1d-2 Startup Cutover
+   ├─ P4.1d-2 Startup Cutover PASS / COMPLETE / FROZEN
+   └─ next implementation slice: P4.1e (NOT STARTED)
 
 Advanced — Adaptive Model Router
 RESERVED
@@ -980,17 +981,17 @@ RESERVED
 
 下一任务：
 
-**P4.1d-2 — Startup Cutover / Runtime Identity Activation**
+**P4.1e — NOT STARTED / requires explicit authorization**
 
 Phase 1、Phase 2、Phase 3（through Phase 3.5）均已完成；Phase 3.5 为
 PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项产品决策、
 平台顺序、P4.0-P4.7 路线图与 Windows Daily-use Milestone。P4.1a 已停用继承
 的 updater 与第三方 Sentry 自动上报链路；P4.1b 已冻结 DeanX target identity、
-`VERSION.json`、Build 规则与 drift gate，且未激活 runtime identifier。P4.1c
-只准备显式 root、白名单化、无凭据的 staging 数据。P4.1d-1 已冻结未接入
-startup 的 bootstrap classifier、activation/recovery protocol、v2 HostIdentity
-候选格式与 Windows retirement/lifetime 原语；真实 identifier/data-dir/
-RemoteHostIdentity cutover 仍属于 P4.1d-2，且当前未开始。
+`VERSION.json`、Build 规则与 drift gate。P4.1c 只准备显式 root、白名单化、
+无凭据的 staging 数据。P4.1d-1 冻结 bootstrap classifier、activation/recovery
+protocol、v2 HostIdentity 候选格式与 Windows retirement/lifetime 原语；
+P4.1d-2 已将门禁接入 App/daemon/daemonctl 并切换获批桌面身份。真实用户数据
+迁移、真实 HostIdentity 退休与安装版验收均未执行，P4.1e 未获准启动。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 

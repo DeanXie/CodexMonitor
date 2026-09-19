@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager};
 use tokio::process::Child;
 use tokio::sync::Mutex;
 
@@ -57,19 +56,19 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
-    pub(crate) fn load(app: &AppHandle) -> Self {
-        let data_dir = app
-            .path()
-            .app_data_dir()
-            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| ".".into()));
+    pub(crate) fn load_activated(data_dir: PathBuf) -> Result<Self, String> {
+        let metadata = crate::shared::startup_activation::validate_activated_profile(&data_dir)?;
         let storage_path = data_dir.join("workspaces.json");
         let settings_path = data_dir.join("settings.json");
-        let workspaces = read_workspaces(&storage_path).unwrap_or_default();
-        let app_settings = read_settings(&settings_path).unwrap_or_default();
+        let workspaces = read_workspaces(&storage_path)
+            .map_err(|error| format!("read activated workspaces: {error}"))?;
+        let app_settings = read_settings(&settings_path)
+            .map_err(|error| format!("read activated settings: {error}"))?;
         #[cfg(desktop)]
-        let remote_host_identity =
-            crate::shared::remote_host_identity::load_or_initialize_remote_host_identity(&data_dir);
-        Self {
+        let remote_host_identity = crate::shared::remote_host_identity::RemoteHostIdentity::parse(
+            &metadata.remote_host_identity,
+        );
+        Ok(Self {
             creation_coordinator: Default::default(),
             execution_settings_evidence: Default::default(),
             projection_freshness: Default::default(),
@@ -88,6 +87,35 @@ impl AppState {
             remote_host_identity,
             #[cfg(desktop)]
             global_rollout_runtime: crate::global_sources::runtime::GlobalRolloutRuntime::default(),
-        }
+        })
+    }
+
+    #[cfg(not(desktop))]
+    pub(crate) fn load_mobile(app: &tauri::AppHandle) -> Result<Self, String> {
+        use tauri::Manager;
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|error| format!("failed to resolve mobile app data root: {error}"))?;
+        let storage_path = data_dir.join("workspaces.json");
+        let settings_path = data_dir.join("settings.json");
+        let workspaces = read_workspaces(&storage_path).unwrap_or_default();
+        let app_settings = read_settings(&settings_path).unwrap_or_default();
+        Ok(Self {
+            creation_coordinator: Default::default(),
+            execution_settings_evidence: Default::default(),
+            projection_freshness: Default::default(),
+            workspaces: Mutex::new(workspaces),
+            sessions: Mutex::new(HashMap::new()),
+            terminal_sessions: Mutex::new(HashMap::new()),
+            remote_backend: Default::default(),
+            remote_host_availability: Arc::new(Default::default()),
+            storage_path,
+            settings_path,
+            app_settings: Mutex::new(app_settings),
+            dictation: Mutex::new(DictationState::default()),
+            codex_login_cancels: Mutex::new(HashMap::new()),
+            tcp_daemon: Mutex::new(TcpDaemonRuntime::default()),
+        })
     }
 }

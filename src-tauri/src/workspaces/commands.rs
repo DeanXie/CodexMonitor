@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use super::files::{list_workspace_files_inner, read_workspace_file_inner, WorkspaceFileResponse};
 use super::git::{
@@ -274,10 +274,11 @@ pub(crate) async fn add_worktree(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|err| format!("Failed to resolve app data dir: {err}"))?;
+    let data_dir = state
+        .storage_path
+        .parent()
+        .ok_or("Activated app data root is unavailable")?
+        .to_path_buf();
 
     workspaces_core::add_worktree_core(
         parent_id,
@@ -327,10 +328,11 @@ pub(crate) async fn worktree_setup_status(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|err| format!("Failed to resolve app data dir: {err}"))?;
+    let data_dir = state
+        .storage_path
+        .parent()
+        .ok_or("Activated app data root is unavailable")?
+        .to_path_buf();
     workspaces_core::worktree_setup_status_core(&state.workspaces, &workspace_id, &data_dir).await
 }
 
@@ -352,10 +354,11 @@ pub(crate) async fn worktree_setup_mark_ran(
         return Ok(());
     }
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|err| format!("Failed to resolve app data dir: {err}"))?;
+    let data_dir = state
+        .storage_path
+        .parent()
+        .ok_or("Activated app data root is unavailable")?
+        .to_path_buf();
     workspaces_core::worktree_setup_mark_ran_core(&state.workspaces, &workspace_id, &data_dir).await
 }
 
@@ -454,10 +457,11 @@ pub(crate) async fn rename_worktree(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|err| format!("Failed to resolve app data dir: {err}"))?;
+    let data_dir = state
+        .storage_path
+        .parent()
+        .ok_or("Activated app data root is unavailable")?
+        .to_path_buf();
 
     workspaces_core::rename_worktree_core(
         id,

@@ -1,8 +1,9 @@
 # P4.1d-1 — Migration / Activation Safety Foundation
 
-Status: **PASS / COMPLETE / FROZEN**. P4.1d remains **IN PROGRESS** and P4.1d-2
-is not started. This foundation is not registered with the App, daemon,
-daemonctl, Tauri commands, RPC, or the current startup path.
+Status: **PASS / COMPLETE / FROZEN**. P4.1d remains **IN PROGRESS**. P4.1d-2
+now consumes this foundation from the App, daemon, daemonctl, and desktop
+bootstrap path. The statements below describe the verified d-1 foundation and
+its limits; they are not a second current-state ledger.
 
 ## Bootstrap and schema authority
 
@@ -74,6 +75,7 @@ not writer/client ownership or a distributed lease. They cannot constrain an
 old binary that ignores them, nor prevent manually copied identity material in
 another root. Unknown/running old-process state blocks preparation.
 
-Current legacy identifiers, product name, data directory, daemon lookup, and
-startup behavior remain unchanged. Real user data reads, migrations, identity
-retirements, and startup cutovers: **0**.
+P4.1d-1 itself did not change identifiers, product name, data directory,
+daemon lookup, or startup behavior. P4.1d-2 subsequently activated the approved
+desktop identity and startup gate. Across both slices, real user data reads,
+migrations, identity retirements, and user cutovers remain **0**.

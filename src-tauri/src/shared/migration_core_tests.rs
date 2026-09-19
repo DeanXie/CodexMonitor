@@ -723,16 +723,16 @@ fn ready_staging_is_deterministically_rebuilt() {
 }
 
 #[test]
-fn active_runtime_identifier_remains_legacy() {
+fn active_runtime_identifier_is_the_approved_target() {
     let config: Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
-    assert_eq!(config["identifier"], "com.dimillian.codexmonitor");
+    assert_eq!(config["identifier"], "io.github.deanxie.codexmonitor");
 }
 
 #[test]
-fn daemonctl_lookup_remains_legacy() {
+fn daemonctl_uses_shared_target_root_authority() {
     let daemonctl = include_str!("../bin/codex_monitor_daemonctl.rs");
-    assert!(daemonctl.contains("com.dimillian.codexmonitor"));
-    assert!(!daemonctl.contains("io.github.deanxie.codexmonitor"));
+    assert!(daemonctl.contains("startup_activation::default_target_root"));
+    assert!(!daemonctl.contains("const APP_IDENTIFIER"));
 }
 
 #[test]

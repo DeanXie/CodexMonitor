@@ -156,3 +156,9 @@ inactive bootstrap classifier, transaction/root binding, v1/v2 identity
 compatibility target, Windows protected replacement, interruption recovery,
 and local service-lifetime mutex limits. The evidence index is
 `phase-4-1d-1/README.md`.
+
+P4.1d-2 startup-cutover fixtures are stored in
+`../fixtures/phase-4-1d-2-startup-cutover/`. They freeze the shared App/daemon/
+daemonctl activation gate, target desktop identity, pending iOS boundary, and
+zero-real-cutover verification scope. The evidence index is
+`phase-4-1d-2/README.md`.

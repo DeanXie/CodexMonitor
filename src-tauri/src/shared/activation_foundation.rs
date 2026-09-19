@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use super::remote_host_identity_activation::load_v2_identity;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
@@ -107,15 +106,7 @@ pub(crate) fn inspect_bootstrap_profile(root: &Path) -> Result<BootstrapInspecti
     let workspaces = root.join("workspaces.json");
     let identity = root.join("remote-host-identity.json");
     if manifest.exists() {
-        let bound_activation = read_activation_manifest(&manifest)
-            .ok()
-            .and_then(|manifest| {
-                load_v2_identity(&identity).ok().map(|identity| {
-                    identity.transaction_id.as_deref() == Some(&manifest.transaction_id)
-                })
-            })
-            .unwrap_or(false);
-        if bound_activation && valid_json(&settings) && valid_json(&workspaces) {
+        if super::startup_activation::validate_activated_profile(root).is_ok() {
             return Ok(BootstrapInspection {
                 classification: BootstrapProfileClassification::ActivatedValid,
                 load_permission: LoadPermission::Normal,
@@ -251,6 +242,9 @@ pub(crate) fn commit_fresh_activation(target_root: &Path) -> Result<(), String> 
         .map_err(|error| format!("commit prepared profile: {error}"))?;
     let mut committed = journal;
     committed.state = ActivationJournalState::TargetCommitted;
+    write_json_atomic(&activation_journal_path(target_root), &committed)?;
+    validate_prepared_profile_for_transaction(target_root, &committed.transaction_id)?;
+    committed.state = ActivationJournalState::RuntimeValidated;
     write_json_atomic(&activation_journal_path(target_root), &committed)
 }
 
@@ -451,6 +445,13 @@ pub(crate) fn recover_activation(target_root: &Path) -> Result<RecoveryDispositi
     })
 }
 
+pub(crate) fn activation_recovery_is_migration(target_root: &Path) -> Result<bool, String> {
+    Ok(!read_journal(target_root)?
+        .source_root
+        .as_os_str()
+        .is_empty())
+}
+
 fn retired_identity_matches_transaction(path: &Path, transaction_id: &str) -> bool {
     let Ok(bytes) = fs::read(path) else {
         return false;
@@ -504,7 +505,9 @@ fn validate_prepared_profile_inner(
             return Err("prepared profile transaction binding mismatch".to_string());
         }
     }
-    let identity = load_v2_identity(&root.join("remote-host-identity.json"))?;
+    let identity = super::remote_host_identity_activation::load_v2_identity(
+        &root.join("remote-host-identity.json"),
+    )?;
     if let Some(expected) = expected_transaction_id {
         if identity.transaction_id.as_deref() != Some(expected) {
             return Err("prepared identity transaction binding mismatch".to_string());

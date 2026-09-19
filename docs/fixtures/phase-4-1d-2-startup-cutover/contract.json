@@ -1,0 +1,27 @@
+{
+  "phase": "P4.1d-2",
+  "desktop": {
+    "productName": "CodexMonitor DeanX",
+    "identifier": "io.github.deanxie.codexmonitor"
+  },
+  "iosIdentifier": "com.dimillian.codexmonitor.ios",
+  "normalLoadRequires": [
+    "activation_manifest",
+    "runtime_validated_activation_journal",
+    "active_v2_remote_host_identity",
+    "matching_transaction_binding",
+    "valid_settings",
+    "valid_workspaces"
+  ],
+  "gatedBeforeReady": [
+    "app_state",
+    "global_sources",
+    "daemon_listener",
+    "workspace_sessions",
+    "remote_auto_connect"
+  ],
+  "realUserMigrationCount": 0,
+  "realHostIdentityRetirementCount": 0,
+  "realDaemonStopCount": 0,
+  "installedPackageAcceptance": "NOT_EXECUTED"
+}

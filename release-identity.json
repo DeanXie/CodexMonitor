@@ -19,12 +19,12 @@
     "productIdentity": "io.github.deanxie.codexmonitor",
     "productName": "CodexMonitor DeanX",
     "stableAcrossBuilds": true,
-    "activated": false,
+    "activated": true,
     "activationPhase": "P4.1d"
   },
   "migrationRequired": true,
   "activation": {
-    "runtimeIdentity": false,
+    "runtimeIdentity": true,
     "dataMigration": false,
     "phase": "P4.1d"
   }

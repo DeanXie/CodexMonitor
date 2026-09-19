@@ -232,15 +232,16 @@ npm run version:trace
 `version:bump` changes only `VERSION.json`. Run `version:sync` explicitly to
 project the version into package/Cargo/Tauri/Apple files. Production build and
 release entry points fail closed on drift; they never repair it automatically.
-The future DeanX distribution identity is frozen in `release-identity.json`.
+The DeanX distribution identity is frozen in `release-identity.json`.
 P4.1c provides an internal explicit-root, whitelist-only migration preparation
-engine, but the active runtime identity and data directory remain legacy until
-P4.1d cutover. P4.1c never runs automatically and never migrates credentials.
-P4.1d-1 adds the inactive migration/activation safety foundation: read-only
+engine. It never runs automatically and never migrates credentials.
+P4.1d-1 adds the migration/activation safety foundation: read-only
 bootstrap classification, transaction/root-bound recovery, v2 active/retired
 HostIdentity candidates, and Windows-native retirement/lifetime-lock tests.
-It is not wired into current startup; identifiers, data roots, and runtime
-behavior remain legacy until a separately authorized P4.1d-2 cutover.
+P4.1d-2 activates the DeanX desktop identity and wires the shared startup gate
+into the App, daemon, and daemonctl. Normal business initialization requires a
+valid activated target profile. Real user migration has not been executed, and
+the iOS identifier remains legacy pending a separate platform decision.
 
 Build the production Tauri bundle:
 
@@ -303,8 +304,10 @@ current-state authority.
 The P4.1c migration allowlist, staging state machine, security boundary, and
 rollback contract are documented in
 `docs/phase-4-1c-whitelist-migration.md`.
-The inactive P4.1d-1 safety foundation and its verified limits are documented
+The P4.1d-1 safety foundation and its verified limits are documented
 in `docs/phase-4-1d-1-migration-activation-foundation.md`.
+The desktop startup cutover and no-real-migration boundary are documented in
+`docs/phase-4-1d-2-startup-cutover.md`.
 
 ## Codebase Navigation
 

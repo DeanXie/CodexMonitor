@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import * as notification from "@tauri-apps/plugin-notification";
 import {
+  activateFreshProfile,
   exportMarkdownFile,
   addWorkspace,
   compactThread,
@@ -10,6 +11,7 @@ import {
   fetchGit,
   forkThread,
   getAppsList,
+  getBootstrapStatus,
   getAgentsSettings,
   getExperimentalFeatureList,
   getGitHubIssues,
@@ -24,6 +26,7 @@ import {
   listThreads,
   listMcpServerStatus,
   readThread,
+  recoverProfileActivation,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
   listWorkspaces,
@@ -95,6 +98,19 @@ describe("tauri invoke wrappers", () => {
         return false;
       }
       return undefined;
+    });
+  });
+
+  it("uses dedicated bootstrap status and explicit fresh activation commands", async () => {
+    await getBootstrapStatus();
+    await activateFreshProfile();
+    await recoverProfileActivation();
+    expect(invoke).toHaveBeenNthCalledWith(1, "get_bootstrap_status");
+    expect(invoke).toHaveBeenNthCalledWith(2, "activate_fresh_profile", {
+      intent: "create_fresh_profile",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, "recover_profile_activation", {
+      intent: "recover_activation",
     });
   });
 

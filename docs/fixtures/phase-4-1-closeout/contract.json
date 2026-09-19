@@ -1,5 +1,11 @@
 {
-  "closeoutStatus": "IN_PROGRESS",
+  "closeoutStatus": "PASS_COMPLETE_FROZEN",
+  "phaseStatus": {
+    "p4_1d": "PASS_COMPLETE_FROZEN",
+    "p4_1e": "PASS_COMPLETE_FROZEN",
+    "p4_1": "PASS_COMPLETE_FROZEN",
+    "p4_2": "NOT_STARTED"
+  },
   "resolvedCompliance": ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11", "R12"],
   "remainingCompliance": [],
   "versionAuthority": { "version": "0.7.68", "build": 8, "status": "development" },
@@ -16,25 +22,28 @@
     "forbidden": ["automatic_connect", "silent_tofu_pin", "automatic_pin_replacement", "insecure_no_auth_fallback"]
   },
   "failureMatrix": [
-    { "case": "fresh_profile", "allowedAction": "explicit fresh-profile activation", "forbiddenActions": ["normal runtime load before activation"], "resultingState": "fresh_activation_required", "recoveryPath": "prepare, commit, validate runtime inputs, then activate" },
-    { "case": "valid_activated_profile", "allowedAction": "perform current-process runtime validation", "forbiddenActions": ["treat persisted runtime history as current-process readiness", "legacy fallback"], "resultingState": "runtime_validation_required", "recoveryPath": "strict current-process initialization then ready" },
-    { "case": "legacy_migration", "allowedAction": "explicit preview and confirmed migration", "forbiddenActions": ["implicit migration", "credential migration"], "resultingState": "legacy_migration_required", "recoveryPath": "controlled P4.1c/P4.1d activation flow" },
-    { "case": "corrupt_profile", "allowedAction": "report blocked profile", "forbiddenActions": ["normal load", "automatic repair"], "resultingState": "blocked_corrupt", "recoveryPath": "operator inspection and explicit recovery" },
-    { "case": "unknown_or_future_schema", "allowedAction": "fail closed", "forbiddenActions": ["schema downgrade", "best-effort load"], "resultingState": "blocked_corrupt", "recoveryPath": "use a compatible application version" },
-    { "case": "target_conflict", "allowedAction": "preserve target and report conflict", "forbiddenActions": ["overwrite target", "delete target"], "resultingState": "blocked_conflict", "recoveryPath": "operator resolves ownership conflict" },
-    { "case": "path_alias_junction_reparse", "allowedAction": "reject unsafe path", "forbiddenActions": ["follow alias", "cross-root write"], "resultingState": "blocked_conflict", "recoveryPath": "use canonical non-reparse roots" },
-    { "case": "staging_tamper", "allowedAction": "reject staged profile", "forbiddenActions": ["commit tampered staging"], "resultingState": "blocked_inconsistent", "recoveryPath": "discard only through explicit safe recovery and restage" },
-    { "case": "preview_or_source_change", "allowedAction": "invalidate preview", "forbiddenActions": ["commit stale preview"], "resultingState": "preview_required", "recoveryPath": "run a new preview" },
-    { "case": "interruption_before_identity_retirement", "allowedAction": "resume pre-retirement activation", "forbiddenActions": ["claim activation complete"], "resultingState": "continue_before_retirement", "recoveryPath": "explicit recovery with required stop evidence" },
-    { "case": "interruption_after_identity_retirement", "allowedAction": "resume from protected recovery evidence", "forbiddenActions": ["rollback retired identity", "create a new identity"], "resultingState": "continue_after_retirement", "recoveryPath": "complete the same transaction" },
-    { "case": "interruption_after_target_commit", "allowedAction": "classify a consistent lagging journal as recovery required and converge only the journal", "forbiddenActions": ["claim runtime_validated without evidence", "repeat migration or identity retirement"], "resultingState": "recovery_required_then_runtime_validation_required", "recoveryPath": "revalidate bindings and recovery material, converge to target_committed, then perform current-process runtime validation" },
-    { "case": "concurrent_activation", "allowedAction": "one lock owner commits", "forbiddenActions": ["multiple successful committers"], "resultingState": "single_committer", "recoveryPath": "loser re-inspects authoritative journal" },
-    { "case": "duplicate_daemon", "allowedAction": "one service lifetime lock owner", "forbiddenActions": ["second active daemon"], "resultingState": "second_start_rejected", "recoveryPath": "stop the existing daemon before retry" },
-    { "case": "missing_token_or_pin", "allowedAction": "remain disconnected and untrusted", "forbiddenActions": ["automatic connect", "silent trust"], "resultingState": "confirmation_required", "recoveryPath": "explicit credential and host confirmation" },
-    { "case": "legacy_loader_reentry", "allowedAction": "reject retired or v2 identity in legacy loader", "forbiddenActions": ["reinterpret retired identity as v1"], "resultingState": "load_rejected", "recoveryPath": "use activated-profile loader" },
-    { "case": "runtime_init_failure", "allowedAction": "keep target_committed", "forbiddenActions": ["write runtime_validated"], "resultingState": "validate_committed_target", "recoveryPath": "correct runtime inputs and retry explicit recovery" },
-    { "case": "activated_profile_missing_identity", "allowedAction": "block normal load", "forbiddenActions": ["generate replacement identity implicitly"], "resultingState": "blocked_corrupt", "recoveryPath": "operator-guided recovery" },
-    { "case": "daemonctl_explicit_data_dir", "allowedAction": "accept only a supported absolute explicit root", "forbiddenActions": ["fallback to ambient data root", "fallback to cwd"], "resultingState": "absolute_root_or_failure", "recoveryPath": "provide a valid absolute activated profile root" }
+    { "case": "fresh_profile", "allowedAction": "explicit fresh-profile activation", "forbiddenActions": ["normal runtime load before activation"], "resultingState": "fresh_activation_required", "recoveryPath": "prepare, commit, validate runtime inputs, then activate", "evidenceType": "production_entry_test" },
+    { "case": "valid_activated_profile", "allowedAction": "perform current-process runtime validation", "forbiddenActions": ["treat persisted runtime history as current-process readiness", "legacy fallback"], "resultingState": "runtime_validation_required", "recoveryPath": "strict current-process initialization then ready", "evidenceType": "production_entry_test" },
+    { "case": "legacy_migration", "allowedAction": "explicit preview and confirmed migration", "forbiddenActions": ["implicit migration", "credential migration"], "resultingState": "legacy_migration_required", "recoveryPath": "controlled P4.1c/P4.1d activation flow", "evidenceType": "production_entry_test" },
+    { "case": "corrupt_profile", "allowedAction": "report blocked profile", "forbiddenActions": ["normal load", "automatic repair"], "resultingState": "blocked_corrupt", "recoveryPath": "operator inspection and explicit recovery", "evidenceType": "deterministic_fixture" },
+    { "case": "unknown_or_future_schema", "allowedAction": "fail closed", "forbiddenActions": ["schema downgrade", "best-effort load"], "resultingState": "blocked_corrupt", "recoveryPath": "use a compatible application version", "evidenceType": "deterministic_fixture" },
+    { "case": "target_conflict", "allowedAction": "preserve target and report conflict", "forbiddenActions": ["overwrite target", "delete target"], "resultingState": "blocked_conflict", "recoveryPath": "operator resolves ownership conflict", "evidenceType": "deterministic_fixture" },
+    { "case": "path_alias_junction_reparse", "allowedAction": "reject unsafe path", "forbiddenActions": ["follow alias", "cross-root write"], "resultingState": "blocked_conflict", "recoveryPath": "use canonical non-reparse roots", "evidenceType": "native_temp_process" },
+    { "case": "staging_tamper", "allowedAction": "reject staged profile", "forbiddenActions": ["commit tampered staging"], "resultingState": "blocked_inconsistent", "recoveryPath": "discard only through explicit safe recovery and restage", "evidenceType": "deterministic_fixture" },
+    { "case": "preview_or_source_change", "allowedAction": "invalidate preview", "forbiddenActions": ["commit stale preview"], "resultingState": "preview_required", "recoveryPath": "run a new preview", "evidenceType": "deterministic_fixture" },
+    { "case": "interruption_before_identity_retirement", "allowedAction": "resume pre-retirement activation", "forbiddenActions": ["claim activation complete"], "resultingState": "continue_before_retirement", "recoveryPath": "explicit recovery with required stop evidence", "evidenceType": "deterministic_fixture" },
+    { "case": "interruption_after_identity_retirement", "allowedAction": "resume from protected recovery evidence", "forbiddenActions": ["rollback retired identity", "create a new identity"], "resultingState": "continue_after_retirement", "recoveryPath": "complete the same transaction", "evidenceType": "native_temp_process" },
+    { "case": "interruption_after_target_commit", "allowedAction": "classify a consistent lagging journal as recovery required and converge only the journal", "forbiddenActions": ["claim runtime_validated without evidence", "repeat migration or identity retirement"], "resultingState": "recovery_required_then_runtime_validation_required", "recoveryPath": "revalidate bindings and recovery material, converge to target_committed, then perform current-process runtime validation", "evidenceType": "production_entry_test" },
+    { "case": "concurrent_activation", "allowedAction": "one lock owner commits", "forbiddenActions": ["multiple successful committers"], "resultingState": "single_committer", "recoveryPath": "loser re-inspects authoritative journal", "evidenceType": "native_temp_process" },
+    { "case": "duplicate_daemon", "allowedAction": "one service lifetime lock owner", "forbiddenActions": ["second active daemon"], "resultingState": "second_start_rejected", "recoveryPath": "stop the existing daemon before retry", "evidenceType": "native_temp_process" },
+    { "case": "missing_token_or_pin", "allowedAction": "remain disconnected and untrusted", "forbiddenActions": ["automatic connect", "silent trust"], "resultingState": "confirmation_required", "recoveryPath": "explicit credential and host confirmation", "evidenceType": "deterministic_fixture" },
+    { "case": "legacy_loader_reentry", "allowedAction": "reject retired or v2 identity in legacy loader", "forbiddenActions": ["reinterpret retired identity as v1"], "resultingState": "load_rejected", "recoveryPath": "use activated-profile loader", "evidenceType": "native_temp_process" },
+    { "case": "runtime_init_failure", "allowedAction": "keep target_committed", "forbiddenActions": ["write runtime_validated"], "resultingState": "validate_committed_target", "recoveryPath": "correct inputs and retry explicit recovery", "evidenceType": "production_entry_test" },
+    { "case": "activated_profile_missing_identity", "allowedAction": "block normal load", "forbiddenActions": ["generate replacement identity implicitly"], "resultingState": "blocked_corrupt", "recoveryPath": "operator-guided recovery", "evidenceType": "production_entry_test" },
+    { "case": "daemonctl_explicit_data_dir", "allowedAction": "accept only a supported absolute explicit root", "forbiddenActions": ["fallback to ambient data root", "fallback to cwd"], "resultingState": "absolute_root_or_failure", "recoveryPath": "provide a valid absolute activated profile root", "evidenceType": "production_entry_test" },
+    { "case": "native_non_ready_entry_gate", "allowedAction": "show recovery-only native surface", "forbiddenActions": ["open normal business IPC, menus, tray actions, or background business work"], "resultingState": "native_recovery_surface_only", "recoveryPath": "complete or recover activation, restart, and pass current-process validation", "evidenceType": "production_entry_test" },
+    { "case": "restart_required_activation_boundary", "allowedAction": "persist target_committed and request restart", "forbiddenActions": ["publish current process ready after activation commit"], "resultingState": "restart_required", "recoveryPath": "restart into strict current-process runtime validation", "evidenceType": "production_entry_test" },
+    { "case": "isolated_child_process_environment", "allowedAction": "inherit only the bounded test environment", "forbiddenActions": ["read real AppData, CODEX_HOME, credentials, or user services"], "resultingState": "isolated_test_process", "recoveryPath": "destroy the temporary test root and process", "evidenceType": "native_temp_process" }
   ],
   "realUserOperations": {
     "settingsRead": 0,
@@ -45,5 +54,7 @@
     "profileCutover": 0
   },
   "installedPackageAcceptance": "NOT_EXECUTED",
-  "realUserCutover": "NOT_EXECUTED"
+  "realUserCutover": "NOT_EXECUTED",
+  "macOsInstalledAcceptance": "NOT_EXECUTED",
+  "iosMigrationBuildDeviceAcceptance": "NOT_EXECUTED"
 }

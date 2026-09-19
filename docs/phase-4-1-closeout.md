@@ -1,14 +1,13 @@
 # P4.1 — Release Identity / Version / Migration / Update Safety Closeout
 
-Status: **CLOSEOUT IN PROGRESS**. P4.1e is **PAUSED / RESUME PENDING** and
-P4.2 is not started.
+Status: **PASS / COMPLETE / FROZEN** at `v0.7.68 · Build 8 · development`.
+P4.1d and P4.1e are **PASS / COMPLETE / FROZEN**; P4.2 is **NOT STARTED**.
 
-This document is the P4.1 closeout candidate for the first Windows daily-use
-release safety boundary; it is not a final P4.1 completion record. P4.1d-4a
-resolved R02, R05, and R07; P4.1d-4b resolves R01 and R03 for its supported
-Windows process scope. P4.1d-4c resolves R04, R06, and R11. The R01–R12
-compliance inventory is now resolved, while P4.1 remains open because the
-separately scoped P4.1e closeout is still paused. Its
+This document is the final P4.1 closeout record for the first Windows daily-use
+release safety boundary. P4.1d-4a resolved R02, R05, and R07; P4.1d-4b
+resolved R01 and R03 for its supported Windows process scope; P4.1d-4c resolved
+R04, R06, and R11. The R01–R12 compliance inventory and the P4.1e aggregate
+compatibility gate are frozen. Its
 machine-readable authority is
 `docs/fixtures/phase-4-1-closeout/contract.json`; the required failure behavior
 is summarized in `docs/phase-4-1-failure-matrix.md`.
@@ -55,9 +54,10 @@ until the current process is ready.
 All migration and activation verification uses synthetic roots, fake identities,
 fake settings, and controlled test processes. The aggregate compatibility suite
 freezes the accepted slice contracts and the current failure-case inventory.
-The Build 5 P4.1e run in `docs/evidence/phase-4-1e/README.md` is historical
-closeout-attempt evidence, not proof that P4.1e is complete. P4.1d-4a, d-4b, and
-d-4c evidence is recorded separately under `docs/evidence/phase-4-1d-4a/`,
+The Build 5 run in `docs/evidence/phase-4-1e/README.md` remains historical
+closeout-attempt evidence; the fresh Build 8 section in the same authority is
+the final aggregate evidence. P4.1d-4a, d-4b, and d-4c evidence is recorded
+separately under `docs/evidence/phase-4-1d-4a/`,
 `docs/evidence/phase-4-1d-4b/`, and `docs/evidence/phase-4-1d-4c/`.
 
 Real user settings reads, workspace migration, HostIdentity reads or retirement,

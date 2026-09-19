@@ -95,8 +95,8 @@ These decisions are approved requirements, not open design questions.
 P4.1b establishes root `VERSION.json` as the single software version authority;
 P4.1d-1 advanced the authority to `v0.7.68 · Build 3 · development`, P4.1d-2
 advanced it to Build 4, P4.1d-3 advanced it to Build 5, P4.1d-4a advanced it
-to Build 6, and P4.1d-4b advances it to `v0.7.68 · Build 7 · development`
-without changing SemVer or status.
+to Build 6, P4.1d-4b advanced it to Build 7, and P4.1d-4c advanced it to
+`v0.7.68 · Build 8 · development` without changing SemVer or status.
 Build 1 remains the first formal unified
 version-authority baseline. Package/Cargo/Tauri/Apple projections,
 drift checks, deterministic bump/sync tooling, and commit trace output all flow
@@ -124,10 +124,10 @@ platform order, and this roadmap are frozen; no product behavior changes.
 
 DeanX identity contract; one version authority and drift gate; controlled
 migration with backup/rollback tests; first-Windows-release updater safely
-disabled; `RemoteHostIdentity` migration safety. **CLOSEOUT IN PROGRESS**:
-P4.1d-4a resolved R02/R05/R07 and P4.1d-4b resolves R01/R03 for its supported
-Windows scope, while R04/R06/R11 remain open and P4.1e is paused. See
-`docs/phase-4-1-closeout.md`.
+disabled; `RemoteHostIdentity` migration safety. P4.1 is **PASS / COMPLETE / FROZEN**:
+P4.1d-4a resolved R02/R05/R07, P4.1d-4b resolved R01/R03 for its supported
+Windows scope, P4.1d-4c resolved R04/R06/R11, and P4.1e froze the aggregate
+compatibility contract. See `docs/phase-4-1-closeout.md`.
 
 ### P4.2 — Windows Installable Daily-use Baseline
 

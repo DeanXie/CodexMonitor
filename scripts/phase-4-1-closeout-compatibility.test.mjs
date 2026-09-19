@@ -37,10 +37,16 @@ async function loadCloseoutContract() {
   return readJson("docs/fixtures/phase-4-1-closeout/contract.json");
 }
 
-test("compliance_inventory_is_closed_while_p4_1e_remains_pending", async () => {
+test("p4_1_final_status_and_compliance_inventory_are_frozen", async () => {
   const contract = await loadCloseoutContract();
 
-  assert.equal(contract.closeoutStatus, "IN_PROGRESS");
+  assert.equal(contract.closeoutStatus, "PASS_COMPLETE_FROZEN");
+  assert.deepEqual(contract.phaseStatus, {
+    p4_1d: "PASS_COMPLETE_FROZEN",
+    p4_1e: "PASS_COMPLETE_FROZEN",
+    p4_1: "PASS_COMPLETE_FROZEN",
+    p4_2: "NOT_STARTED",
+  });
   assert.deepEqual(contract.resolvedCompliance, [
     "R01", "R02", "R03", "R04", "R05", "R06",
     "R07", "R08", "R09", "R10", "R11", "R12",
@@ -210,6 +216,9 @@ test("failure_matrix_freezes_every_required_case", async () => {
     "runtime_init_failure",
     "activated_profile_missing_identity",
     "daemonctl_explicit_data_dir",
+    "native_non_ready_entry_gate",
+    "restart_required_activation_boundary",
+    "isolated_child_process_environment",
   ];
   assert.equal(contract.failureMatrix.length, required.length);
   assert.deepEqual([...actual].sort(), required.sort());
@@ -218,6 +227,7 @@ test("failure_matrix_freezes_every_required_case", async () => {
     assert.ok(entry.forbiddenActions.length > 0);
     assert.equal(typeof entry.resultingState, "string");
     assert.equal(typeof entry.recoveryPath, "string");
+    assert.match(entry.evidenceType, /^(production_entry_test|native_temp_process|deterministic_fixture)$/);
   }
   const validActivatedProfile = contract.failureMatrix.find(
     (entry) => entry.case === "valid_activated_profile",
@@ -231,6 +241,7 @@ test("failure_matrix_freezes_every_required_case", async () => {
     ],
     resultingState: "runtime_validation_required",
     recoveryPath: "strict current-process initialization then ready",
+    evidenceType: "production_entry_test",
   });
   assert.deepEqual(
     contract.failureMatrix.find((entry) => entry.case === "interruption_after_target_commit"),
@@ -245,6 +256,7 @@ test("failure_matrix_freezes_every_required_case", async () => {
       resultingState: "recovery_required_then_runtime_validation_required",
       recoveryPath:
         "revalidate bindings and recovery material, converge to target_committed, then perform current-process runtime validation",
+      evidenceType: "production_entry_test",
     },
   );
   assert.deepEqual(
@@ -255,6 +267,7 @@ test("failure_matrix_freezes_every_required_case", async () => {
       forbiddenActions: ["fallback to ambient data root", "fallback to cwd"],
       resultingState: "absolute_root_or_failure",
       recoveryPath: "provide a valid absolute activated profile root",
+      evidenceType: "production_entry_test",
     },
   );
 });
@@ -271,4 +284,30 @@ test("real_user_cutover_not_executed", async () => {
   });
   assert.equal(contract.installedPackageAcceptance, "NOT_EXECUTED");
   assert.equal(contract.realUserCutover, "NOT_EXECUTED");
+  assert.equal(contract.macOsInstalledAcceptance, "NOT_EXECUTED");
+  assert.equal(contract.iosMigrationBuildDeviceAcceptance, "NOT_EXECUTED");
+  assert.equal(contract.hostIdentity.suddenPowerLossDurability, "NOT_PROVEN");
+});
+
+test("final_current_state_authorities_are_consistent", async () => {
+  const [roadmap, phase40, phase41, evidenceIndex, phase41e, readme] = await Promise.all([
+    readText("CodexMonitor_四阶段开发路线图.md"),
+    readText("docs/phase-4-0-truth-release-boundary.md"),
+    readText("docs/phase-4-1-closeout.md"),
+    readText("docs/evidence/README.md"),
+    readText("docs/evidence/phase-4-1e/README.md"),
+    readText("README.md"),
+  ]);
+  const authorities = [roadmap, phase40, phase41, evidenceIndex, phase41e, readme];
+  for (const authority of authorities) {
+    assert.match(authority, /Build 8/);
+    assert.doesNotMatch(authority, /R01\/R03\/R04\/R06\/R11 (?:remain open|仍未收口)/);
+    assert.doesNotMatch(authority, /P4\.1e (?:is )?(?:PAUSED|RESUME PENDING)/);
+  }
+  assert.match(roadmap, /P4\.1e[^\n]*PASS \/ COMPLETE \/ FROZEN/);
+  assert.match(roadmap, /P4\.2[^\n]*NOT STARTED/);
+  assert.match(phase40, /P4\.1 is \*\*PASS \/ COMPLETE \/ FROZEN\*\*/);
+  assert.match(phase41, /Status: \*\*PASS \/ COMPLETE \/ FROZEN\*\*/);
+  assert.match(phase41e, /Status: \*\*PASS \/ COMPLETE \/ FROZEN\*\*/);
+  assert.match(readme, /P4\.1 is complete and frozen/);
 });

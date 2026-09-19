@@ -248,11 +248,13 @@ recovery reachable without repeating migration or opening business access, and
 requires App, daemon, and daemonctl data roots to be absolute rather than
 current-directory-derived. P4.1d-4b adds the sanitized local migration
 preview/confirmation entry and guarded Windows-native process-stop evidence.
+P4.1d-4c freezes the native non-READY entry gate, restart-required activation
+boundary, and fully isolated child-process validation environment. P4.1e closes
+the aggregate compatibility matrix at `v0.7.68 · Build 8 · development`.
 The iOS identifier remains legacy pending a
 separate platform decision.
-`docs/phase-4-1-closeout.md` remains the P4.1 closeout candidate, not final
-acceptance authority: P4.1 is still in progress while R04/R06/R11 remain open
-and P4.1e is paused.
+P4.1 is complete and frozen; `docs/phase-4-1-closeout.md` is its final
+acceptance authority. P4.2 is not started.
 
 Build the production Tauri bundle:
 

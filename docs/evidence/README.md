@@ -176,9 +176,13 @@ journal-lag recovery reachability defect and the R05 current-directory-derived
 explicit-root defect while preserving the d-3 process-local readiness gate.
 The evidence index is `phase-4-1d-4a/README.md`.
 
-The Build 5 P4.1e aggregate closeout attempt remains at
-`phase-4-1e/README.md`; it is historical evidence, not current final closeout
-authority. The current machine-readable closeout candidate is
-`../fixtures/phase-4-1-closeout/contract.json` and must remain in progress until
-R04/R06/R11 are resolved and fresh P4.1e acceptance is rerun. R01/R03 are
-closed by `phase-4-1d-4b/README.md` for the supported Windows scope.
+P4.1d-4b controlled migration-entry and stop-evidence fixtures are indexed at
+`phase-4-1d-4b/README.md`; they close R01/R03 for the supported Windows scope.
+P4.1d-4c native-gate, restart-boundary, and isolated-process fixtures are
+indexed at `phase-4-1d-4c/README.md`; they close R04/R06/R11.
+
+The Build 5 P4.1e aggregate closeout attempt remains historical evidence in
+`phase-4-1e/README.md`. The fresh `v0.7.68 · Build 8 · development` section in
+that authority and `../fixtures/phase-4-1-closeout/contract.json` freeze the
+final P4.1 compatibility result. P4.1 is PASS / COMPLETE / FROZEN; P4.2 is
+NOT STARTED.

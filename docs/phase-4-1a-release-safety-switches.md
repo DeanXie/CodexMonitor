@@ -1,6 +1,7 @@
 # P4.1a — Release Safety Switches
 
-Status: **PASS / COMPLETE / FROZEN** under the completed P4.1 authority.
+Status: **PASS / COMPLETE / FROZEN** for this slice. Parent P4.1 remains
+**CLOSEOUT IN PROGRESS**.
 
 P4.1a establishes the safety boundary for the first DeanX daily-use
 distribution. It does not select the future release identifier, migrate user

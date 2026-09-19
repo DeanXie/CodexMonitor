@@ -37,6 +37,14 @@ async function loadCloseoutContract() {
   return readJson("docs/fixtures/phase-4-1-closeout/contract.json");
 }
 
+test("closeout_remains_open_until_compliance_gaps_are_closed", async () => {
+  const contract = await loadCloseoutContract();
+
+  assert.equal(contract.closeoutStatus, "IN_PROGRESS");
+  assert.deepEqual(contract.resolvedCompliance, ["R02", "R05", "R07"]);
+  assert.deepEqual(contract.remainingCompliance, ["R01", "R03", "R04", "R06", "R11"]);
+});
+
 test("updater_sentry_remain_disabled", async () => {
   const packageJson = await readJson("package.json");
   const base = await readJson("src-tauri/tauri.conf.json");
@@ -114,6 +122,9 @@ test("bootstrap_and_host_identity_contract_remain_fail_closed", async () => {
   const runtimeHandshake = await readJson(
     "docs/fixtures/phase-4-1d-3-runtime-validation-handshake/contract.json",
   );
+  const recoveryRoot = await readJson(
+    "docs/fixtures/phase-4-1d-4a-recovery-root-authority/contract.json",
+  );
   const contract = await loadCloseoutContract();
 
   assert.deepEqual(foundation.identity.oldLoaderRejects, [
@@ -137,6 +148,10 @@ test("bootstrap_and_host_identity_contract_remain_fail_closed", async () => {
   assert.equal(runtimeHandshake.businessAccess.targetCommitted, false);
   assert.equal(runtimeHandshake.businessAccess.currentProcessReady, true);
   assert.equal(runtimeHandshake.historicalRuntimeValidatedBypassesCurrentValidation, false);
+  assert.equal(recoveryRoot.status, "pass_complete_frozen");
+  assert.equal(recoveryRoot.recovery.businessReadyAfterRecovery, false);
+  assert.equal(recoveryRoot.dataRoot.explicitMustBeAbsolute, true);
+  assert.equal(recoveryRoot.dataRoot.relativeCwdFallback, false);
 });
 
 test("remote_targets_remain_untrusted_without_credentials", async () => {
@@ -196,6 +211,31 @@ test("failure_matrix_freezes_every_required_case", async () => {
     resultingState: "runtime_validation_required",
     recoveryPath: "strict current-process initialization then ready",
   });
+  assert.deepEqual(
+    contract.failureMatrix.find((entry) => entry.case === "interruption_after_target_commit"),
+    {
+      case: "interruption_after_target_commit",
+      allowedAction:
+        "classify a consistent lagging journal as recovery required and converge only the journal",
+      forbiddenActions: [
+        "claim runtime_validated without evidence",
+        "repeat migration or identity retirement",
+      ],
+      resultingState: "recovery_required_then_runtime_validation_required",
+      recoveryPath:
+        "revalidate bindings and recovery material, converge to target_committed, then perform current-process runtime validation",
+    },
+  );
+  assert.deepEqual(
+    contract.failureMatrix.find((entry) => entry.case === "daemonctl_explicit_data_dir"),
+    {
+      case: "daemonctl_explicit_data_dir",
+      allowedAction: "accept only a supported absolute explicit root",
+      forbiddenActions: ["fallback to ambient data root", "fallback to cwd"],
+      resultingState: "absolute_root_or_failure",
+      recoveryPath: "provide a valid absolute activated profile root",
+    },
+  );
 });
 
 test("real_user_cutover_not_executed", async () => {

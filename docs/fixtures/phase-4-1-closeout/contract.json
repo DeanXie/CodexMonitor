@@ -1,5 +1,8 @@
 {
-  "versionAuthority": { "version": "0.7.68", "build": 5, "status": "development" },
+  "closeoutStatus": "IN_PROGRESS",
+  "resolvedCompliance": ["R02", "R05", "R07"],
+  "remainingCompliance": ["R01", "R03", "R04", "R06", "R11"],
+  "versionAuthority": { "version": "0.7.68", "build": 6, "status": "development" },
   "configSchemaVersion": 1,
   "migration": {
     "forbiddenInputs": ["token", "auth.json", "CODEX_HOME", "canonical_thread_or_rollout", "runtime_generation_or_pending_mutation"],
@@ -24,14 +27,14 @@
     { "case": "preview_or_source_change", "allowedAction": "invalidate preview", "forbiddenActions": ["commit stale preview"], "resultingState": "preview_required", "recoveryPath": "run a new preview" },
     { "case": "interruption_before_identity_retirement", "allowedAction": "resume pre-retirement activation", "forbiddenActions": ["claim activation complete"], "resultingState": "continue_before_retirement", "recoveryPath": "explicit recovery with required stop evidence" },
     { "case": "interruption_after_identity_retirement", "allowedAction": "resume from protected recovery evidence", "forbiddenActions": ["rollback retired identity", "create a new identity"], "resultingState": "continue_after_retirement", "recoveryPath": "complete the same transaction" },
-    { "case": "interruption_after_target_commit", "allowedAction": "validate committed runtime inputs", "forbiddenActions": ["claim runtime_validated without evidence"], "resultingState": "validate_committed_target", "recoveryPath": "typed runtime validation then journal advancement" },
+    { "case": "interruption_after_target_commit", "allowedAction": "classify a consistent lagging journal as recovery required and converge only the journal", "forbiddenActions": ["claim runtime_validated without evidence", "repeat migration or identity retirement"], "resultingState": "recovery_required_then_runtime_validation_required", "recoveryPath": "revalidate bindings and recovery material, converge to target_committed, then perform current-process runtime validation" },
     { "case": "concurrent_activation", "allowedAction": "one lock owner commits", "forbiddenActions": ["multiple successful committers"], "resultingState": "single_committer", "recoveryPath": "loser re-inspects authoritative journal" },
     { "case": "duplicate_daemon", "allowedAction": "one service lifetime lock owner", "forbiddenActions": ["second active daemon"], "resultingState": "second_start_rejected", "recoveryPath": "stop the existing daemon before retry" },
     { "case": "missing_token_or_pin", "allowedAction": "remain disconnected and untrusted", "forbiddenActions": ["automatic connect", "silent trust"], "resultingState": "confirmation_required", "recoveryPath": "explicit credential and host confirmation" },
     { "case": "legacy_loader_reentry", "allowedAction": "reject retired or v2 identity in legacy loader", "forbiddenActions": ["reinterpret retired identity as v1"], "resultingState": "load_rejected", "recoveryPath": "use activated-profile loader" },
     { "case": "runtime_init_failure", "allowedAction": "keep target_committed", "forbiddenActions": ["write runtime_validated"], "resultingState": "validate_committed_target", "recoveryPath": "correct runtime inputs and retry explicit recovery" },
     { "case": "activated_profile_missing_identity", "allowedAction": "block normal load", "forbiddenActions": ["generate replacement identity implicitly"], "resultingState": "blocked_corrupt", "recoveryPath": "operator-guided recovery" },
-    { "case": "daemonctl_explicit_data_dir", "allowedAction": "validate the exact explicit root", "forbiddenActions": ["fallback to ambient data root"], "resultingState": "exact_root_or_failure", "recoveryPath": "provide a valid activated profile root" }
+    { "case": "daemonctl_explicit_data_dir", "allowedAction": "accept only a supported absolute explicit root", "forbiddenActions": ["fallback to ambient data root", "fallback to cwd"], "resultingState": "absolute_root_or_failure", "recoveryPath": "provide a valid absolute activated profile root" }
   ],
   "realUserOperations": {
     "settingsRead": 0,

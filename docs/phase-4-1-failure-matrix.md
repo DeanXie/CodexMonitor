@@ -1,7 +1,8 @@
 # P4.1 Failure Matrix
 
-Status: **FROZEN** by `docs/fixtures/phase-4-1-closeout/contract.json` and
-`npm run test:phase-4-1-closeout`.
+Status: **CURRENT CLOSEOUT CANDIDATE / NOT FINAL**. It is checked by
+`docs/fixtures/phase-4-1-closeout/contract.json` and
+`npm run test:phase-4-1-closeout` while P4.1 remains in progress.
 
 | Case | Allowed result | Fail-closed boundary | Recovery |
 |---|---|---|---|
@@ -16,14 +17,14 @@ Status: **FROZEN** by `docs/fixtures/phase-4-1-closeout/contract.json` and
 | Preview/source change | Preview invalidated | No stale-preview commit | New preview |
 | Interruption before identity retirement | Continue before retirement | No completion claim | Recover with stop evidence |
 | Interruption after identity retirement | Continue same transaction | No rollback or new UUID | Protected recovery evidence |
-| Interruption after target commit | Validate committed target | No runtime-valid claim from file commit | Typed runtime validation |
+| Interruption after target commit | Classify a consistent lagging journal as recovery-required and converge only the journal | No runtime-valid claim, repeated migration, or repeated identity retirement | Revalidate bindings/material, converge to `target_committed`, then perform current-process runtime validation |
 | Concurrent activation | One committer | No second successful commit | Re-inspect journal |
 | Duplicate daemon | Second start rejected | No second service owner | Stop existing daemon |
 | Missing token or pin | Confirmation required | No auto-connect or silent trust | Explicit credential/confirmation |
 | Legacy loader re-entry | Load rejected | No v2/retired reinterpretation as v1 | Activated-profile loader |
 | Runtime initialization failure | Remain target committed | No `runtime_validated` journal advance | Correct inputs and recover |
 | Activated profile missing identity | Blocked corrupt | No implicit identity generation | Operator-guided recovery |
-| daemonctl explicit data dir | Exact root or failure | No ambient-root fallback | Valid activated explicit root |
+| daemonctl explicit data dir | Supported absolute root or failure | No ambient-root or cwd fallback | Valid absolute activated explicit root |
 
 The JSON fixture is authoritative for exact case names and machine assertions;
 this table is the human navigation view.

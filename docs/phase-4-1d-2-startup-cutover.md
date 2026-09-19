@@ -1,8 +1,9 @@
 # P4.1d-2 — Startup Cutover / RemoteHostIdentity Safe Migration
 
-Status: **PASS / COMPLETE / FROZEN** under the completed P4.1 authority. P4.1d
-production wiring is complete; no real user migration or HostIdentity
-retirement was executed.
+Status: **PASS / COMPLETE / FROZEN** for this historical slice. Parent P4.1d
+and P4.1 remain **IN PROGRESS** because later compliance auditing found
+additional gaps. No real user migration or HostIdentity retirement was
+executed.
 
 Historical correction: P4.1d-3 later proved that this slice's file commit path
 wrote `runtime_validated` before a real runtime handshake. The d-2 acceptance
@@ -12,7 +13,9 @@ record remains historical; current startup authority is the corrected
 R02/R07 lagging-journal recovery reachability and R05 absolute-root authority;
 those defects remain part of this slice's historical record.
 
-Canonical software authority is `v0.7.68 · Build 5 · development`.
+This slice closed at `v0.7.68 · Build 4 · development`. Current software
+authority is `v0.7.68 · Build 6 · development`; later corrections do not
+rewrite the d-2 acceptance history.
 
 ## Startup authority
 

@@ -1,9 +1,10 @@
 # P4.1d-1 — Migration / Activation Safety Foundation
 
-Status: **PASS / COMPLETE / FROZEN** under the completed P4.1 authority. P4.1d-2
-consumes this foundation from the App, daemon, daemonctl, and desktop bootstrap
-path. The statements below describe the verified d-1 foundation and its limits;
-they are not a second current-state ledger.
+Status: **PASS / COMPLETE / FROZEN** for this slice. Parent P4.1 remains
+**CLOSEOUT IN PROGRESS**. P4.1d-2 consumes this foundation from the App,
+daemon, daemonctl, and desktop bootstrap path. The statements below describe
+the verified d-1 foundation and its limits; they are not a second current-state
+ledger.
 
 ## Bootstrap and schema authority
 

@@ -123,8 +123,9 @@ platform order, and this roadmap are frozen; no product behavior changes.
 
 DeanX identity contract; one version authority and drift gate; controlled
 migration with backup/rollback tests; first-Windows-release updater safely
-disabled; `RemoteHostIdentity` migration safety. **PASS / COMPLETE / FROZEN**;
-see `docs/phase-4-1-closeout.md`.
+disabled; `RemoteHostIdentity` migration safety. **CLOSEOUT IN PROGRESS**:
+P4.1d-4a resolved R02/R05/R07, while R01/R03/R04/R06/R11 remain open and
+P4.1e is paused. See `docs/phase-4-1-closeout.md`.
 
 ### P4.2 — Windows Installable Daily-use Baseline
 

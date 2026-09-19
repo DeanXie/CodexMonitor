@@ -23,6 +23,7 @@ precedence. `status` remains `development` until explicit release authorization.
 
 P4.1c closeout advanced the current authority to Build 2 without changing
 SemVer or development status.
+P4.1d-1 closeout advances it to Build 3 under the same rule.
 
 `scripts/version-authority.mjs` provides separate `check`, `sync`, `bump`, and
 `trace` operations. Bump changes only `VERSION.json`; sync is explicit. Check is

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "phase": "P4.1d-1",
+  "status": "foundation_only",
+  "startupWiring": false,
+  "sourceSchemas": {
+    "legacyV0": 0,
+    "supportedExplicit": [0],
+    "futureVersions": "reject"
+  },
+  "bootstrap": {
+    "fresh": "activation_only",
+    "legacy": "activation_only",
+    "activatedValid": "normal",
+    "recoveryRequired": "deny_normal_load",
+    "targetConflict": "deny",
+    "corrupt": "deny"
+  },
+  "identity": {
+    "legacySchema": 1,
+    "candidateSchema": 2,
+    "candidateStates": ["active", "retired"],
+    "oldLoaderAccepts": ["v1"],
+    "oldLoaderRejects": ["v2_active", "v2_retired", "corrupt", "read_blocked"]
+  },
+  "activationOrder": [
+    "prepare_complete_profile_and_recovery_material",
+    "validate_transaction_and_root_bindings",
+    "retire_legacy_identity_with_protected_replace",
+    "commit_prepared_target",
+    "validate_runtime_profile"
+  ],
+  "locks": {
+    "migrationCommit": "same_target_local_coordination_only",
+    "serviceLifetime": "same_controlled_profile_new_service_only"
+  },
+  "forbiddenClaims": [
+    "old_binary_exclusion",
+    "cross_profile_identity_exclusion",
+    "distributed_lease",
+    "power_loss_atomicity"
+  ],
+  "realUserDataAccessCount": 0,
+  "realMigrationCount": 0
+}

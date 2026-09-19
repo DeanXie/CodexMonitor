@@ -236,6 +236,11 @@ The future DeanX distribution identity is frozen in `release-identity.json`.
 P4.1c provides an internal explicit-root, whitelist-only migration preparation
 engine, but the active runtime identity and data directory remain legacy until
 P4.1d cutover. P4.1c never runs automatically and never migrates credentials.
+P4.1d-1 adds the inactive migration/activation safety foundation: read-only
+bootstrap classification, transaction/root-bound recovery, v2 active/retired
+HostIdentity candidates, and Windows-native retirement/lifetime-lock tests.
+It is not wired into current startup; identifiers, data roots, and runtime
+behavior remain legacy until a separately authorized P4.1d-2 cutover.
 
 Build the production Tauri bundle:
 
@@ -298,6 +303,8 @@ current-state authority.
 The P4.1c migration allowlist, staging state machine, security boundary, and
 rollback contract are documented in
 `docs/phase-4-1c-whitelist-migration.md`.
+The inactive P4.1d-1 safety foundation and its verified limits are documented
+in `docs/phase-4-1d-1-migration-activation-foundation.md`.
 
 ## Codebase Navigation
 

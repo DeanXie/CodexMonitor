@@ -1,4 +1,5 @@
 pub(crate) mod account;
+pub(crate) mod activation_foundation;
 pub(crate) mod agents_config_core;
 pub(crate) mod codex_aux_core;
 pub(crate) mod codex_core;
@@ -23,6 +24,7 @@ pub(crate) mod projection_freshness;
 pub(crate) mod prompts_core;
 pub(crate) mod remote_host_availability;
 pub(crate) mod remote_host_identity;
+pub(crate) mod remote_host_identity_activation;
 pub(crate) mod remote_request_provenance;
 pub(crate) mod settings_core;
 pub(crate) mod surface_projection_core;
@@ -83,6 +85,13 @@ mod phase_3_5_final_acceptance_tests;
 #[cfg(test)]
 #[path = "migration_core_tests.rs"]
 mod migration_core_tests;
+
+#[cfg(test)]
+mod legacy_remote_host_identity_loader_fixture;
+
+#[cfg(test)]
+#[path = "activation_foundation_tests.rs"]
+mod activation_foundation_tests;
 
 #[cfg(all(test, desktop))]
 #[path = "desktop_projection_handling_tests.rs"]

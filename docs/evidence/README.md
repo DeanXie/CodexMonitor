@@ -149,3 +149,10 @@ source-read-only discovery, field allowlisting, credential and canonical-data
 exclusion, workspace identity preservation, deferred RemoteHostIdentity,
 staging ownership, validation, interruption recovery, and rollback without
 activation. The evidence index is `phase-4-1c/README.md`.
+
+P4.1d-1 activation-safety fixtures are stored in
+`../fixtures/phase-4-1d-1-migration-activation-foundation/`. They freeze the
+inactive bootstrap classifier, transaction/root binding, v1/v2 identity
+compatibility target, Windows protected replacement, interruption recovery,
+and local service-lifetime mutex limits. The evidence index is
+`phase-4-1d-1/README.md`.

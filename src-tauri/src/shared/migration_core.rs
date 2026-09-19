@@ -2,7 +2,8 @@
 
 use crate::types::{AppSettings, WorkspaceEntry};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fmt;
 use std::fs;
@@ -15,7 +16,11 @@ const MARKER_FILE: &str = ".codexmonitor-migration-owned.json";
 const STATE_FILE: &str = "migration-state.json";
 const MANIFEST_FILE: &str = "migration-manifest.json";
 const REPORT_FILE: &str = "migration-report.json";
+const SOURCE_MANIFEST_FILE: &str = "profile-manifest.json";
 const ENGINE_ID: &str = "codex-monitor-p4-1c";
+const LEGACY_V0_SCHEMA: u32 = 0;
+const CLEANUP_ORDINARY: &str = "ordinary_staging";
+const CLEANUP_PROTECTED: &str = "activation_recovery_material";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -113,7 +118,10 @@ struct ReleaseTargetIdentity {
 struct StagingMarker {
     engine: String,
     target_root: PathBuf,
+    source_root: PathBuf,
+    source_fingerprint: String,
     config_schema_version: u32,
+    cleanup_policy: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -131,6 +139,7 @@ struct MigrationManifest {
     activation_phase: String,
     credentials_migrated: bool,
     remote_host_identity_migrated: bool,
+    prepared_content_sha256: String,
 }
 
 struct PreparedInput {
@@ -160,12 +169,7 @@ pub(crate) fn inspect_migration(
     source_root: &Path,
     target_root: &Path,
 ) -> Result<MigrationPreview, MigrationError> {
-    if source_root == target_root {
-        return Err(MigrationError::new(
-            "PRECHECK_BLOCKED",
-            "sourceRoot and targetRoot must differ",
-        ));
-    }
+    validate_root_relationships(source_root, target_root)?;
     if !source_root.is_dir() {
         return Err(MigrationError::new(
             "PRECHECK_BLOCKED",
@@ -187,7 +191,7 @@ pub(crate) fn inspect_migration(
     for name in root_entries {
         let lower = name.to_ascii_lowercase();
         match lower.as_str() {
-            SETTINGS_FILE | WORKSPACES_FILE => {}
+            SETTINGS_FILE | WORKSPACES_FILE | SOURCE_MANIFEST_FILE => {}
             "remote-host-identity.json" | "remote-host-identity.lock" => {
                 push_unique(&mut deferred_categories, "remote_host_identity")
             }
@@ -230,13 +234,14 @@ pub(crate) fn inspect_migration(
         warnings.push("unknown_data_excluded".to_string());
     }
 
+    let source_schema = detect_source_schema(source_root)?;
     let schema = config_schema_version()?;
     Ok(MigrationPreview {
         state: MigrationState::Preflighted,
         source_root: source_root.to_path_buf(),
         target_root: target_root.to_path_buf(),
         source_detected: true,
-        source_schema_version: schema,
+        source_schema_version: source_schema,
         target_schema_version: schema,
         migratable_categories,
         excluded_categories,
@@ -298,12 +303,18 @@ fn stage_migration_impl(
     fs::create_dir_all(staging.join("backup"))
         .map_err(|error| MigrationError::io("create staging", error))?;
     let schema = config_schema_version()?;
+    let source_root_binding = canonical_binding(source_root)?;
+    let target_root_binding = canonical_binding(target_root)?;
+    let source_fingerprint = source_fingerprint(source_root)?;
     write_json(
         &staging.join(MARKER_FILE),
         &StagingMarker {
             engine: ENGINE_ID.to_string(),
-            target_root: target_root.to_path_buf(),
+            target_root: target_root_binding,
+            source_root: source_root_binding,
+            source_fingerprint,
             config_schema_version: schema,
+            cleanup_policy: CLEANUP_ORDINARY.to_string(),
         },
     )?;
     write_state(&staging, MigrationState::Staging)?;
@@ -320,6 +331,8 @@ fn stage_migration_impl(
         &prepared.workspaces,
     )?;
     let authority = release_identity_authority()?;
+    let prepared_content_sha256 =
+        prepared_content_fingerprint(&staging.join(SETTINGS_FILE), &staging.join(WORKSPACES_FILE))?;
     write_json(
         &staging.join(MANIFEST_FILE),
         &MigrationManifest {
@@ -329,6 +342,7 @@ fn stage_migration_impl(
             activation_phase: "P4.1d".to_string(),
             credentials_migrated: false,
             remote_host_identity_migrated: false,
+            prepared_content_sha256,
         },
     )?;
     write_json(&staging.join(REPORT_FILE), &preview)?;
@@ -370,6 +384,13 @@ fn validate_staging_inner(target_root: &Path) -> Result<MigrationResult, Migrati
             "staging ownership marker mismatch",
         ));
     }
+    let marker: StagingMarker = read_json(&staging.join(MARKER_FILE), "staging marker")?;
+    if marker.source_fingerprint != source_fingerprint(&marker.source_root)? {
+        return Err(MigrationError::new(
+            "VALIDATION_FAILED",
+            "source changed after migration preview",
+        ));
+    }
     let settings_value = read_json_value(&staging.join(SETTINGS_FILE), "staged settings")?;
     let _: AppSettings = serde_json::from_value(settings_value.clone()).map_err(|_| {
         MigrationError::new("VALIDATION_FAILED", "staged settings schema is invalid")
@@ -392,6 +413,11 @@ fn validate_staging_inner(target_root: &Path) -> Result<MigrationResult, Migrati
         || manifest.activation_phase != "P4.1d"
         || manifest.credentials_migrated
         || manifest.remote_host_identity_migrated
+        || manifest.prepared_content_sha256
+            != prepared_content_fingerprint(
+                &staging.join(SETTINGS_FILE),
+                &staging.join(WORKSPACES_FILE),
+            )?
     {
         return Err(MigrationError::new(
             "VALIDATION_FAILED",
@@ -418,12 +444,35 @@ pub(crate) fn rollback_staging(target_root: &Path) -> Result<bool, MigrationErro
             "staging is not owned by this migration target",
         ));
     }
+    let marker: StagingMarker = read_json(&staging.join(MARKER_FILE), "staging marker")?;
+    if marker.source_fingerprint != source_fingerprint(&marker.source_root)? {
+        return Err(MigrationError::new(
+            "VALIDATION_FAILED",
+            "source changed after migration preview",
+        ));
+    }
+    if marker.cleanup_policy == CLEANUP_PROTECTED {
+        return Err(MigrationError::new(
+            "ROLLBACK_REFUSED",
+            "staging contains protected activation recovery material",
+        ));
+    }
     fs::remove_dir_all(&staging)
         .map_err(|error| MigrationError::io("remove owned staging", error))?;
     Ok(true)
 }
 
+pub(crate) fn protect_staging_for_activation(target_root: &Path) -> Result<(), MigrationError> {
+    validate_staging_inner(target_root)?;
+    let staging = staging_path(target_root);
+    let marker_path = staging.join(MARKER_FILE);
+    let mut marker: StagingMarker = read_json(&marker_path, "staging marker")?;
+    marker.cleanup_policy = CLEANUP_PROTECTED.to_string();
+    write_json(&marker_path, &marker)
+}
+
 fn prepare_input(source_root: &Path) -> Result<PreparedInput, MigrationError> {
+    detect_source_schema(source_root)?;
     let raw_settings = read_json_value(&source_root.join(SETTINGS_FILE), "legacy settings")?;
     let required = raw_settings
         .get("requiredMigrationFields")
@@ -436,47 +485,13 @@ fn prepare_input(source_root: &Path) -> Result<PreparedInput, MigrationError> {
         })
         .flatten()
         .unwrap_or_default();
-    let mut settings_for_parse = raw_settings.clone();
-    if let Some(object) = settings_for_parse.as_object_mut() {
-        object.remove("requiredMigrationFields");
-    }
-    let mut settings: AppSettings = serde_json::from_value(settings_for_parse).map_err(|_| {
-        MigrationError::new("PRECHECK_BLOCKED", "legacy settings schema is invalid")
-    })?;
-    settings.remote_backend_token = None;
-    for target in &mut settings.remote_backends {
-        target.token = None;
-        target.remote_host_identity = None;
-    }
-    let mut settings_value = serde_json::to_value(settings).map_err(|_| {
-        MigrationError::new(
-            "PRECHECK_BLOCKED",
-            "allowlisted settings serialization failed",
-        )
-    })?;
-    remove_object_key(&mut settings_value, "remoteBackendToken");
-    if let Some(targets) = settings_value
-        .get_mut("remoteBackends")
-        .and_then(Value::as_array_mut)
-    {
-        for target in targets {
-            remove_object_key(target, "token");
-            remove_object_key(target, "remoteHostIdentity");
-        }
-    }
+    let settings_value = project_settings(&raw_settings)?;
 
     let raw_workspaces = read_json_value(&source_root.join(WORKSPACES_FILE), "legacy workspaces")?;
-    let workspaces: Vec<WorkspaceEntry> =
-        serde_json::from_value(raw_workspaces.clone()).map_err(|_| {
-            MigrationError::new("PRECHECK_BLOCKED", "legacy workspaces schema is invalid")
-        })?;
+    let workspaces_value = project_workspaces(&raw_workspaces)?;
+    let workspaces: Vec<WorkspaceEntry> = serde_json::from_value(workspaces_value.clone())
+        .map_err(|_| MigrationError::new("PRECHECK_BLOCKED", "workspace projection invalid"))?;
     validate_workspaces(&workspaces)?;
-    let workspaces_value = serde_json::to_value(workspaces).map_err(|_| {
-        MigrationError::new(
-            "PRECHECK_BLOCKED",
-            "allowlisted workspaces serialization failed",
-        )
-    })?;
 
     let mut excluded = Vec::new();
     collect_unknown_paths(&raw_settings, &settings_value, "settings", &mut excluded);
@@ -516,6 +531,180 @@ fn prepare_input(source_root: &Path) -> Result<PreparedInput, MigrationError> {
         excluded_field_paths: excluded,
         credential_fields_excluded: count_credential_fields(&raw_settings),
     })
+}
+
+fn detect_source_schema(source_root: &Path) -> Result<u32, MigrationError> {
+    let manifest_path = source_root.join(SOURCE_MANIFEST_FILE);
+    if !manifest_path.exists() {
+        return Ok(LEGACY_V0_SCHEMA);
+    }
+    let manifest = read_json_value(&manifest_path, "source profile manifest")?;
+    let version = manifest
+        .get("configSchemaVersion")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| {
+            MigrationError::new("PRECHECK_BLOCKED", "source schema version is missing")
+        })?;
+    if version != LEGACY_V0_SCHEMA {
+        return Err(MigrationError::new(
+            "PRECHECK_BLOCKED",
+            format!("unsupported source schema version: {version}"),
+        ));
+    }
+    Ok(version)
+}
+
+fn project_settings(raw: &Value) -> Result<Value, MigrationError> {
+    let raw_object = raw.as_object().ok_or_else(|| {
+        MigrationError::new("PRECHECK_BLOCKED", "legacy settings must be an object")
+    })?;
+    let mut projected = Map::new();
+    const SAFE_FIELDS: &[&str] = &[
+        "defaultAccessMode",
+        "reviewDeliveryMode",
+        "composerModelShortcut",
+        "composerAccessShortcut",
+        "composerReasoningShortcut",
+        "interruptShortcut",
+        "composerCollaborationShortcut",
+        "newAgentShortcut",
+        "newWorktreeAgentShortcut",
+        "newCloneAgentShortcut",
+        "archiveThreadShortcut",
+        "toggleProjectsSidebarShortcut",
+        "toggleGitSidebarShortcut",
+        "toggleDebugPanelShortcut",
+        "toggleTerminalShortcut",
+        "cycleAgentNextShortcut",
+        "cycleAgentPrevShortcut",
+        "cycleWorkspaceNextShortcut",
+        "cycleWorkspacePrevShortcut",
+        "lastComposerModelId",
+        "lastComposerReasoningEffort",
+        "uiScale",
+        "theme",
+        "usageShowRemaining",
+        "showMessageFilePath",
+        "chatHistoryScrollbackItems",
+        "threadTitleAutogenerationEnabled",
+        "uiFontFamily",
+        "codeFontFamily",
+        "codeFontSize",
+        "notificationSoundsEnabled",
+        "splitChatDiffView",
+        "preloadGitDiffs",
+        "gitDiffIgnoreWhitespaceChanges",
+        "commitMessageModelId",
+        "systemNotificationsEnabled",
+        "subagentSystemNotificationsEnabled",
+        "collaborationModesEnabled",
+        "steerEnabled",
+        "followUpMessageBehavior",
+        "composerFollowUpHintEnabled",
+        "pauseQueuedMessagesWhenResponseRequired",
+        "unifiedExecEnabled",
+        "experimentalAppsEnabled",
+        "personality",
+        "dictationEnabled",
+        "dictationModelId",
+        "dictationPreferredLanguage",
+        "dictationHoldKey",
+        "composerEditorPreset",
+        "composerFenceExpandOnSpace",
+        "composerFenceExpandOnEnter",
+        "composerFenceLanguageTags",
+        "composerFenceWrapSelection",
+        "composerFenceAutoWrapPasteMultiline",
+        "composerFenceAutoWrapPasteCodeLike",
+        "composerListContinuation",
+        "composerCodeBlockCopyUseModifier",
+        "workspaceGroups",
+        "globalWorktreesFolder",
+    ];
+    for field in SAFE_FIELDS {
+        if let Some(value) = raw_object.get(*field) {
+            projected.insert((*field).to_string(), value.clone());
+        }
+    }
+
+    let remote_backends = raw_object
+        .get("remoteBackends")
+        .and_then(Value::as_array)
+        .map(|targets| {
+            targets
+                .iter()
+                .filter_map(Value::as_object)
+                .map(|target| {
+                    let mut safe = Map::new();
+                    for field in ["id", "name", "provider", "host"] {
+                        if let Some(value) = target.get(field) {
+                            safe.insert(field.to_string(), value.clone());
+                        }
+                    }
+                    safe.insert("lastConnectedAtMs".to_string(), Value::Null);
+                    Value::Object(safe)
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    projected.insert("remoteBackends".to_string(), Value::Array(remote_backends));
+    projected.insert(
+        "backendMode".to_string(),
+        Value::String("local".to_string()),
+    );
+    projected.insert("activeRemoteBackendId".to_string(), Value::Null);
+    projected.insert(
+        "automaticAppUpdateChecksEnabled".to_string(),
+        Value::Bool(false),
+    );
+    projected.insert(
+        "keepDaemonRunningAfterAppClose".to_string(),
+        Value::Bool(false),
+    );
+    let value = Value::Object(projected);
+    let _: AppSettings = serde_json::from_value(value.clone()).map_err(|_| {
+        MigrationError::new("PRECHECK_BLOCKED", "allowlisted settings schema is invalid")
+    })?;
+    Ok(value)
+}
+
+fn project_workspaces(raw: &Value) -> Result<Value, MigrationError> {
+    let workspaces = raw.as_array().ok_or_else(|| {
+        MigrationError::new("PRECHECK_BLOCKED", "legacy workspaces must be an array")
+    })?;
+    let projected = workspaces
+        .iter()
+        .map(|workspace| {
+            let raw = workspace.as_object().ok_or_else(|| {
+                MigrationError::new("PRECHECK_BLOCKED", "workspace must be an object")
+            })?;
+            let mut output = Map::new();
+            for field in ["id", "name", "path", "kind", "parentId", "worktree"] {
+                if let Some(value) = raw.get(field) {
+                    output.insert(field.to_string(), value.clone());
+                }
+            }
+            let mut settings = Map::new();
+            if let Some(raw_settings) = raw.get("settings").and_then(Value::as_object) {
+                for field in [
+                    "sidebarCollapsed",
+                    "sortOrder",
+                    "groupId",
+                    "cloneSourceWorkspaceId",
+                    "gitRoot",
+                    "worktreesFolder",
+                ] {
+                    if let Some(value) = raw_settings.get(field) {
+                        settings.insert(field.to_string(), value.clone());
+                    }
+                }
+            }
+            output.insert("settings".to_string(), Value::Object(settings));
+            Ok(Value::Object(output))
+        })
+        .collect::<Result<Vec<_>, MigrationError>>()?;
+    Ok(Value::Array(projected))
 }
 
 fn validate_workspaces(workspaces: &[WorkspaceEntry]) -> Result<(), MigrationError> {
@@ -593,8 +782,131 @@ fn owned_staging_matches(staging: &Path, target_root: &Path) -> Result<bool, Mig
     }
     let marker: StagingMarker = read_json(&marker_path, "staging marker")?;
     Ok(marker.engine == ENGINE_ID
-        && marker.target_root == target_root
+        && marker.target_root == canonical_binding(target_root)?
         && marker.config_schema_version == config_schema_version()?)
+}
+
+fn validate_root_relationships(
+    source_root: &Path,
+    target_root: &Path,
+) -> Result<(), MigrationError> {
+    if !source_root.is_dir() {
+        return Err(MigrationError::new(
+            "PRECHECK_BLOCKED",
+            "explicit sourceRoot is not a directory",
+        ));
+    }
+    reject_reparse_components(source_root)?;
+    reject_reparse_components(target_root)?;
+    let source = canonical_binding(source_root)?;
+    let target = canonical_binding(target_root)?;
+    let staging = canonical_binding(&staging_path(target_root))?;
+    if source == target
+        || source.starts_with(&target)
+        || target.starts_with(&source)
+        || source == staging
+        || staging.starts_with(&source)
+    {
+        return Err(MigrationError::new(
+            "PRECHECK_BLOCKED",
+            "source, target, and staging roots must be distinct and non-nested",
+        ));
+    }
+    Ok(())
+}
+
+fn canonical_binding(path: &Path) -> Result<PathBuf, MigrationError> {
+    if path.exists() {
+        return fs::canonicalize(path)
+            .map_err(|error| MigrationError::io("resolve path identity", error));
+    }
+    let mut missing = Vec::new();
+    let mut cursor = path;
+    while !cursor.exists() {
+        let name = cursor.file_name().ok_or_else(|| {
+            MigrationError::new("PRECHECK_BLOCKED", "path has no resolvable parent")
+        })?;
+        missing.push(name.to_os_string());
+        cursor = cursor.parent().ok_or_else(|| {
+            MigrationError::new("PRECHECK_BLOCKED", "path has no resolvable parent")
+        })?;
+    }
+    let mut resolved = fs::canonicalize(cursor)
+        .map_err(|error| MigrationError::io("resolve path parent identity", error))?;
+    for name in missing.into_iter().rev() {
+        resolved.push(name);
+    }
+    Ok(resolved)
+}
+
+#[cfg(windows)]
+fn reject_reparse_components(path: &Path) -> Result<(), MigrationError> {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    let mut cursor = Some(path);
+    while let Some(component) = cursor {
+        if component.exists() {
+            let attributes = fs::symlink_metadata(component)
+                .map_err(|error| MigrationError::io("inspect path attributes", error))?
+                .file_attributes();
+            if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                return Err(MigrationError::new(
+                    "PRECHECK_BLOCKED",
+                    "reparse-point path components are not accepted",
+                ));
+            }
+        }
+        cursor = component.parent();
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn reject_reparse_components(path: &Path) -> Result<(), MigrationError> {
+    let mut cursor = Some(path);
+    while let Some(component) = cursor {
+        if component.exists()
+            && fs::symlink_metadata(component)
+                .map_err(|error| MigrationError::io("inspect path attributes", error))?
+                .file_type()
+                .is_symlink()
+        {
+            return Err(MigrationError::new(
+                "PRECHECK_BLOCKED",
+                "symbolic-link path components are not accepted",
+            ));
+        }
+        cursor = component.parent();
+    }
+    Ok(())
+}
+
+fn source_fingerprint(source_root: &Path) -> Result<String, MigrationError> {
+    let mut hasher = Sha256::new();
+    for name in [SOURCE_MANIFEST_FILE, SETTINGS_FILE, WORKSPACES_FILE] {
+        let path = source_root.join(name);
+        if path.exists() {
+            hasher.update(name.as_bytes());
+            hasher.update(
+                fs::read(path).map_err(|error| MigrationError::io("fingerprint source", error))?,
+            );
+        }
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn prepared_content_fingerprint(
+    settings_path: &Path,
+    workspaces_path: &Path,
+) -> Result<String, MigrationError> {
+    let mut hasher = Sha256::new();
+    for path in [settings_path, workspaces_path] {
+        hasher.update(
+            fs::read(path)
+                .map_err(|error| MigrationError::io("fingerprint prepared content", error))?,
+        );
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn directory_has_entries(path: &Path) -> Result<bool, MigrationError> {

@@ -91,15 +91,17 @@ facts to migrate in P4.1, not approved DeanX release settings:
 - third-party Sentry initialization and event calls are disabled by P4.1a;
 - P4.5 still owns local logging, diagnostics export, and crash recovery.
 
-P4.1b establishes root `VERSION.json` as the single software version authority
-at `v0.7.68 · Build 2 · development`. Build 1 remains the first formal unified
+P4.1b establishes root `VERSION.json` as the single software version authority;
+P4.1d-1 advances the current authority to `v0.7.68 · Build 3 · development`.
+Build 1 remains the first formal unified
 version-authority baseline. Package/Cargo/Tauri/Apple projections,
 drift checks, deterministic bump/sync tooling, and commit trace output all flow
 from it. Build remains monotonic and never substitutes for SemVer ordering.
 The DeanX target identity is frozen in `release-identity.json`, while the active
 runtime identifiers and data locations remain legacy pending P4.1d. P4.1c
 prepares only sanitized, allowlisted staging data from explicit roots and does
-not migrate credentials or RemoteHostIdentity.
+not migrate credentials or RemoteHostIdentity. P4.1d-1 adds an inactive safety
+foundation only; runtime cutover is still not wired.
 
 The main checkout's local `.gitignore` addition, metadata-only `main.rs` state,
 and two development BAT files are not production build or installed-runtime

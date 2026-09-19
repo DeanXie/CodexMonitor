@@ -1,7 +1,7 @@
 use super::migration_core::{
-    config_schema_version, inspect_migration, rollback_staging, stage_migration,
-    stage_migration_with_failpoint, staging_path, validate_staging, MigrationFailPoint,
-    MigrationState,
+    config_schema_version, inspect_migration, protect_staging_for_activation, rollback_staging,
+    stage_migration, stage_migration_with_failpoint, staging_path, validate_staging,
+    MigrationFailPoint, MigrationState,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -147,6 +147,151 @@ fn migration_preview_is_read_only() {
 }
 
 #[test]
+fn activation_owned_recovery_material_is_not_removed_by_generic_rollback() {
+    let roots = roots();
+    stage_migration(&roots.source, &roots.target).unwrap();
+    protect_staging_for_activation(&roots.target).unwrap();
+    assert!(rollback_staging(&roots.target).is_err());
+    assert!(staging_path(&roots.target).exists());
+}
+
+#[test]
+fn source_change_after_prepare_invalidates_staging() {
+    let roots = roots();
+    stage_migration(&roots.source, &roots.target).unwrap();
+    let mut settings: Value =
+        serde_json::from_slice(&fs::read(roots.source.join("settings.json")).unwrap()).unwrap();
+    settings["theme"] = json!("light");
+    fs::write(
+        roots.source.join("settings.json"),
+        serde_json::to_vec_pretty(&settings).unwrap(),
+    )
+    .unwrap();
+    assert!(super::migration_core::validate_staging(&roots.target).is_err());
+}
+
+#[test]
+fn staging_content_replacement_invalidates_prepared_manifest() {
+    let roots = roots();
+    stage_migration(&roots.source, &roots.target).unwrap();
+    let settings_path = staging_path(&roots.target).join("settings.json");
+    let mut settings: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+    settings["theme"] = json!("light");
+    fs::write(
+        &settings_path,
+        serde_json::to_vec_pretty(&settings).unwrap(),
+    )
+    .unwrap();
+    assert!(super::migration_core::validate_staging(&roots.target).is_err());
+}
+
+#[test]
+fn nested_target_is_blocked() {
+    let roots = roots();
+    let target = roots.source.join("nested-target");
+    assert!(inspect_migration(&roots.source, &target).is_err());
+}
+
+#[cfg(windows)]
+#[test]
+fn junction_alias_is_blocked() {
+    let roots = roots();
+    let alias = roots.base.join("source-alias");
+    let status = std::process::Command::new("cmd.exe")
+        .args(["/c", "mklink", "/J"])
+        .arg(&alias)
+        .arg(&roots.source)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert!(inspect_migration(&alias, &roots.target).is_err());
+    fs::remove_dir(&alias).unwrap();
+}
+
+#[test]
+fn legacy_v0_source_schema_is_distinct_from_target_schema() {
+    let roots = roots();
+    let preview = inspect_migration(&roots.source, &roots.target).unwrap();
+    assert_eq!(preview.source_schema_version, 0);
+    assert_eq!(preview.target_schema_version, 1);
+}
+
+#[test]
+fn future_source_schema_is_rejected() {
+    let roots = roots();
+    fs::write(
+        roots.source.join("profile-manifest.json"),
+        serde_json::to_vec_pretty(&json!({"configSchemaVersion": 999})).unwrap(),
+    )
+    .unwrap();
+    assert!(inspect_migration(&roots.source, &roots.target).is_err());
+}
+
+#[test]
+fn explicit_legacy_v0_manifest_is_supported() {
+    let roots = roots();
+    fs::write(
+        roots.source.join("profile-manifest.json"),
+        serde_json::to_vec_pretty(&json!({"configSchemaVersion": 0})).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        inspect_migration(&roots.source, &roots.target)
+            .unwrap()
+            .source_schema_version,
+        0
+    );
+}
+
+#[test]
+fn corrupt_source_schema_manifest_is_rejected() {
+    let roots = roots();
+    fs::write(roots.source.join("profile-manifest.json"), b"not-json").unwrap();
+    assert!(inspect_migration(&roots.source, &roots.target).is_err());
+}
+
+#[test]
+fn execution_bearing_fields_are_not_migrated() {
+    let roots = roots();
+    let mut settings: Value =
+        serde_json::from_slice(&fs::read(roots.source.join("settings.json")).unwrap()).unwrap();
+    settings["codexBin"] = json!("C:\\secret\\wrapper.exe");
+    settings["codexArgs"] = json!("--token pretend-secret");
+    settings["openAppTargets"] = json!([{
+        "id":"unsafe", "label":"unsafe", "kind":"command",
+        "command":"powershell.exe", "args":["-Command", "secret"]
+    }]);
+    fs::write(
+        roots.source.join("settings.json"),
+        serde_json::to_vec_pretty(&settings).unwrap(),
+    )
+    .unwrap();
+    stage_migration(&roots.source, &roots.target).unwrap();
+    let staged = staged_json(&roots, "settings.json");
+    assert!(staged["codexBin"].is_null());
+    assert!(staged["codexArgs"].is_null());
+    assert!(staged.get("openAppTargets").is_none());
+}
+
+#[test]
+fn workspace_scripts_are_not_migrated() {
+    let roots = roots();
+    let mut workspaces: Value =
+        serde_json::from_slice(&fs::read(roots.source.join("workspaces.json")).unwrap()).unwrap();
+    workspaces[0]["settings"]["launchScript"] = json!("secret-command");
+    workspaces[0]["settings"]["worktreeSetupScript"] = json!("secret-setup");
+    fs::write(
+        roots.source.join("workspaces.json"),
+        serde_json::to_vec_pretty(&workspaces).unwrap(),
+    )
+    .unwrap();
+    stage_migration(&roots.source, &roots.target).unwrap();
+    let staged = staged_json(&roots, "workspaces.json");
+    assert!(staged[0]["settings"]["launchScript"].is_null());
+    assert!(staged[0]["settings"]["worktreeSetupScript"].is_null());
+}
+
+#[test]
 fn legacy_source_is_never_modified() {
     let roots = roots();
     let before = snapshot_source(&roots.source);
@@ -164,6 +309,29 @@ fn settings_are_rebuilt_from_field_allowlist() {
     assert!(settings["remoteBackends"][0]
         .get("futureNestedField")
         .is_none());
+}
+
+#[test]
+fn fixed_output_dto_does_not_serialize_unlisted_appsettings_defaults() {
+    let roots = roots();
+    stage_migration(&roots.source, &roots.target).unwrap();
+    let settings = staged_json(&roots, "settings.json");
+    for field in [
+        "codexBin",
+        "codexArgs",
+        "openAppTargets",
+        "selectedOpenAppId",
+        "commitMessagePrompt",
+        "remoteBackendProvider",
+        "remoteBackendHost",
+    ] {
+        assert!(
+            settings.get(field).is_none(),
+            "unexpected output field: {field}"
+        );
+    }
+    assert_eq!(settings["backendMode"], "local");
+    assert_eq!(settings["automaticAppUpdateChecksEnabled"], false);
 }
 
 #[test]

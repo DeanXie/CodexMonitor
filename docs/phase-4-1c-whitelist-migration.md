@@ -19,10 +19,10 @@ Build changes never imply a configuration-schema change.
 
 | Data | Disposition | Contract |
 | --- | --- | --- |
-| Typed `AppSettings` fields | MIGRATE | Rebuilt from the current typed schema; raw file copying is prohibited. |
+| Allowlisted settings fields | MIGRATE | Rebuilt from a fixed raw-input DTO; later typed-schema growth never expands eligibility automatically. |
 | Remote endpoint/provider/target metadata | MIGRATE | Safe metadata remains; authentication must be repeated. |
 | `remoteBackendToken`, target token, auth/secret/API-key fields | EXCLUDE | Removed before serialization; never enters staging, backup, report, or errors. |
-| Typed `WorkspaceEntry` and settings | MIGRATE | IDs and explicit metadata preserved; absolute paths and unique IDs validated. |
+| Allowlisted workspace fields and settings | MIGRATE | IDs and explicit metadata preserved; absolute paths and unique IDs validated. |
 | Unknown settings/workspace fields | EXCLUDE | Path-only preview evidence; values never copied or reported. |
 | Declared unknown required fields | PRECHECK_BLOCKED | `requiredMigrationFields` names outside the allowlist fail closed. |
 | `auth.json`, CODEX_HOME credentials | EXCLUDE | Classified by path/name and never opened as migration input. |

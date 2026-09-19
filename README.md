@@ -245,6 +245,9 @@ commit stops at `target_committed`, each App/daemon process validates itself,
 and normal business IPC/RPC opens only after that process is `ready`. Real user
 migration has not been executed, and the iOS identifier remains legacy pending
 a separate platform decision.
+P4.1 is complete and frozen by `docs/phase-4-1-closeout.md`; its aggregate
+contract distinguishes target commitment, persisted runtime history, and
+current-process readiness while preserving the explicit no-real-cutover limits.
 
 Build the production Tauri bundle:
 
@@ -311,6 +314,8 @@ The P4.1d-1 safety foundation and its verified limits are documented
 in `docs/phase-4-1d-1-migration-activation-foundation.md`.
 The desktop startup cutover and no-real-migration boundary are documented in
 `docs/phase-4-1d-2-startup-cutover.md`.
+The aggregate P4.1 authority and failure matrix are documented in
+`docs/phase-4-1-closeout.md` and `docs/phase-4-1-failure-matrix.md`.
 
 ## Codebase Navigation
 

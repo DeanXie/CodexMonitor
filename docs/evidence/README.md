@@ -169,3 +169,8 @@ file-commit/runtime-readiness conflation and freeze `target_committed`, the
 current-process `blocked/validating/ready/failed` gate, authenticated daemonctl
 child readiness, and zero-real-cutover scope. The evidence index is
 `phase-4-1d-3/README.md`.
+
+P4.1e aggregate closeout evidence is stored in `phase-4-1e/README.md`. The
+machine-readable authority is `../fixtures/phase-4-1-closeout/contract.json`;
+it freezes the P4.1a-d compatibility and failure matrix without claiming real
+user cutover, installed-package acceptance, or sudden power-loss durability.

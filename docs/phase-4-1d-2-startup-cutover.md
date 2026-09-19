@@ -1,8 +1,8 @@
 # P4.1d-2 — Startup Cutover / RemoteHostIdentity Safe Migration
 
-Status: **PASS / COMPLETE / FROZEN** after the fresh closeout recorded in the
-evidence index. P4.1d production wiring is complete; no real user migration or
-HostIdentity retirement was executed. P4.1e is not started.
+Status: **PASS / COMPLETE / FROZEN** under the completed P4.1 authority. P4.1d
+production wiring is complete; no real user migration or HostIdentity
+retirement was executed.
 
 Historical correction: P4.1d-3 later proved that this slice's file commit path
 wrote `runtime_validated` before a real runtime handshake. The d-2 acceptance
@@ -10,7 +10,7 @@ record remains historical; current startup authority is the corrected
 `target_committed` plus current-process validation contract in
 `phase-4-1d-3-runtime-validation-handshake.md`.
 
-Canonical software authority is `v0.7.68 · Build 4 · development`.
+Canonical software authority is `v0.7.68 · Build 5 · development`.
 
 ## Startup authority
 

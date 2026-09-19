@@ -23,6 +23,10 @@ Related docs:
   `src-tauri/src/shared/startup_activation.rs`, `src-tauri/src/bootstrap.rs`,
   `src/features/app/bootstrap/BootstrapBoundary.tsx`,
   `docs/phase-4-1d-2-startup-cutover.md`
+- Aggregate P4.1 closeout and failure authority:
+  `docs/phase-4-1-closeout.md`, `docs/phase-4-1-failure-matrix.md`,
+  `docs/fixtures/phase-4-1-closeout/contract.json`,
+  `scripts/phase-4-1-closeout-compatibility.test.mjs`
 - Creation-intent / first-Turn coordination: `docs/phase-3-3-2-creation-coordination.md`
 - iOS remote over Tailscale (TCP): `docs/mobile-ios-tailscale-blueprint.md`
 

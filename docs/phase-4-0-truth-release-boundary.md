@@ -1,11 +1,10 @@
 # Phase 4.0 — Truth / Release Boundary Freeze
 
-Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS**. P4.1a Release
-Safety Switches and P4.1b Release Identity Contract / Version Authority are
-complete. P4.1c whitelist migration preparation and P4.1d-1 safety foundation
-are complete and frozen. P4.1d-2 has activated the approved desktop identity
-and fail-closed bootstrap gate; real-user migration and installed acceptance
-remain unexecuted.
+Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS**. P4.1 is
+**PASS / COMPLETE / FROZEN**; P4.2 is not started. The approved desktop identity,
+version authority, migration preparation, activation protocol, and fail-closed
+startup gate are complete. Real-user migration and installed acceptance remain
+unexecuted.
 
 The root `CodexMonitor_四阶段开发路线图.md` remains the sole current-state
 authority. This document is the Phase 4 product/release contract, not a second
@@ -95,8 +94,8 @@ These decisions are approved requirements, not open design questions.
 
 P4.1b establishes root `VERSION.json` as the single software version authority;
 P4.1d-1 advanced the authority to `v0.7.68 · Build 3 · development`; P4.1d-2
-advances it to `v0.7.68 · Build 4 · development` without changing SemVer or
-status.
+advanced it to Build 4, and the P4.1d-3 runtime-handshake correction advances
+it to `v0.7.68 · Build 5 · development` without changing SemVer or status.
 Build 1 remains the first formal unified
 version-authority baseline. Package/Cargo/Tauri/Apple projections,
 drift checks, deterministic bump/sync tooling, and commit trace output all flow
@@ -124,7 +123,8 @@ platform order, and this roadmap are frozen; no product behavior changes.
 
 DeanX identity contract; one version authority and drift gate; controlled
 migration with backup/rollback tests; first-Windows-release updater safely
-disabled; `RemoteHostIdentity` migration safety.
+disabled; `RemoteHostIdentity` migration safety. **PASS / COMPLETE / FROZEN**;
+see `docs/phase-4-1-closeout.md`.
 
 ### P4.2 — Windows Installable Daily-use Baseline
 

@@ -1,7 +1,8 @@
 # P4.1c — Controlled Whitelist Migration Engine
 
-Status: **PASS / COMPLETE / FROZEN**. The deterministic preparation engine is
-complete; activation remains exclusively P4.1d and has not started.
+Status: **PASS / COMPLETE / FROZEN** under the completed P4.1 authority. The
+deterministic preparation engine remains separate from the P4.1d activation
+protocol.
 
 ## Authority and boundary
 

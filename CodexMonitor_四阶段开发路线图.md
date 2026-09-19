@@ -690,8 +690,9 @@ Project
 
 ## 当前状态
 
-**IN PROGRESS**。P4.0、P4.1a、P4.1b、P4.1c、P4.1d-1、P4.1d-2 与 P4.1d-3 已完成并冻结；
-P4.1d-3 已纠正 runtime-validation 启动契约缺陷。P4.1e 已恢复收口前置条件，但本轮未开始。真实用户迁移和安装版验收仍未执行。完整且唯一的 Phase 4 产品/发行合同见
+**IN PROGRESS**。P4.0 与 P4.1 已完成并冻结；P4.1d-3 已纠正
+runtime-validation 启动契约缺陷，P4.1e 已冻结聚合兼容性与失败矩阵并完成收口。
+P4.2 尚未开始，真实用户迁移和安装版验收仍未执行。完整且唯一的 Phase 4 产品/发行合同见
 [`docs/phase-4-0-truth-release-boundary.md`](docs/phase-4-0-truth-release-boundary.md)。
 
 ## 目标与平台顺序
@@ -963,14 +964,14 @@ PASS / COMPLETE through Phase 3.5 ✅
 Phase 4 — Productization
 IN PROGRESS
 ├─ P4.0 Truth / Release Boundary Freeze PASS / COMPLETE / FROZEN
-└─ P4.1 — Release Identity / Version / Migration / Update Safety IN PROGRESS
+└─ P4.1 — Release Identity / Version / Migration / Update Safety PASS / COMPLETE / FROZEN
    ├─ P4.1a Release Safety Switches PASS / COMPLETE / FROZEN
    ├─ P4.1b Release Identity Contract / Version Authority PASS / COMPLETE / FROZEN
    ├─ P4.1c Controlled Whitelist Migration Engine PASS / COMPLETE / FROZEN
    ├─ P4.1d-1 Migration / Activation Safety Foundation PASS / COMPLETE / FROZEN
    ├─ P4.1d-2 Startup Cutover PASS / COMPLETE / FROZEN
    ├─ P4.1d-3 Runtime Validation Handshake / Startup Gate Correction PASS / COMPLETE / FROZEN
-   └─ P4.1e NOT STARTED; closeout preconditions restored
+   └─ P4.1e Compatibility / Migration Safety / Docs Closeout PASS / COMPLETE / FROZEN
 
 Advanced — Adaptive Model Router
 RESERVED
@@ -982,7 +983,7 @@ RESERVED
 
 下一任务：
 
-**P4.1d-3 — PASS / COMPLETE / FROZEN; P4.1e NOT STARTED**
+**P4.1e — PASS / COMPLETE / FROZEN; P4.2 NOT STARTED**
 
 Phase 1、Phase 2、Phase 3（through Phase 3.5）均已完成；Phase 3.5 为
 PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项产品决策、
@@ -993,8 +994,9 @@ PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项
 protocol、v2 HostIdentity 候选格式与 Windows retirement/lifetime 原语；
 P4.1d-2 已将门禁接入 App/daemon/daemonctl 并切换获批桌面身份；P4.1d-3
 保留该历史记录并纠正“文件提交即 runtime validated”的缺陷，要求 App/daemon
-各自完成当前进程验证后才开放业务。真实用户数据迁移、真实 HostIdentity 退休
-与安装版验收均未执行；P4.1d-3 fresh closeout 已通过，P4.1e 已恢复收口条件但未开始。
+各自完成当前进程验证后才开放业务。P4.1e 已冻结聚合兼容性、失败矩阵与文档
+权威并完成收口。真实用户数据迁移、真实 HostIdentity 退休与安装版验收均未执行；
+P4.2 尚未开始。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 

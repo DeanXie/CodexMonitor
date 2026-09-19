@@ -1,8 +1,8 @@
 # P4.1b — Release Identity Contract / Version Authority
 
-Status: **PASS / COMPLETE / FROZEN**. P4.1c and P4.1d-1 are complete and
-frozen; P4.1d-2 activates the approved desktop identity while preserving this
-version contract.
+Status: **PASS / COMPLETE / FROZEN** under the completed P4.1 authority. P4.1c
+and P4.1d preserve this version contract while preparing migration and
+activating the approved desktop identity.
 
 ## Software version authority
 
@@ -11,7 +11,7 @@ Root `VERSION.json` is the only current version authority:
 ```json
 {
   "version": "0.7.68",
-  "build": 2,
+  "build": 5,
   "status": "development"
 }
 ```
@@ -25,7 +25,8 @@ precedence. `status` remains `development` until explicit release authorization.
 P4.1c closeout advanced the current authority to Build 2 without changing
 SemVer or development status.
 P4.1d-1 closeout advanced it to Build 3 under the same rule. P4.1d-2 advances
-the current authority to Build 4 at its closeout.
+the current authority to Build 4 at its closeout. The P4.1d-3 production
+runtime-handshake correction advances it to Build 5.
 
 `scripts/version-authority.mjs` provides separate `check`, `sync`, `bump`, and
 `trace` operations. Bump changes only `VERSION.json`; sync is explicit. Check is

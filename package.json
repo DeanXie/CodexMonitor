@@ -9,6 +9,7 @@
     "version:bump": "node scripts/version-authority.mjs bump",
     "version:trace": "node scripts/version-authority.mjs trace",
     "test:version-authority": "node --test scripts/version-authority.test.mjs",
+    "test:phase-4-1-closeout": "node --test scripts/phase-4-1-closeout-compatibility.test.mjs",
     "sync:material-icons": "node scripts/sync-material-icons.mjs",
     "postinstall": "npm run sync:material-icons && npm run storage:prepare -- --ensure-only",
     "predev": "npm run sync:material-icons",

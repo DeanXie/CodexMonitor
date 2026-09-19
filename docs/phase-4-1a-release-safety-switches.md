@@ -1,6 +1,6 @@
 # P4.1a — Release Safety Switches
 
-Status: **PASS / COMPLETE / FROZEN**.
+Status: **PASS / COMPLETE / FROZEN** under the completed P4.1 authority.
 
 P4.1a establishes the safety boundary for the first DeanX daily-use
 distribution. It does not select the future release identifier, migrate user
@@ -65,4 +65,5 @@ artifacts without an updater manifest.
 ## Scope exclusions
 
 P4.1a changes no `identifier`, `productName`, data directory, migration logic,
-real user configuration, credentials, or signing keys. P4.1b is not started.
+real user configuration, credentials, or signing keys. Later P4.1 slices select
+and activate the desktop identity while preserving these safety switches.

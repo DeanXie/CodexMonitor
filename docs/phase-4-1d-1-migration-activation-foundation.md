@@ -1,9 +1,9 @@
 # P4.1d-1 — Migration / Activation Safety Foundation
 
-Status: **PASS / COMPLETE / FROZEN**. P4.1d remains **IN PROGRESS**. P4.1d-2
-now consumes this foundation from the App, daemon, daemonctl, and desktop
-bootstrap path. The statements below describe the verified d-1 foundation and
-its limits; they are not a second current-state ledger.
+Status: **PASS / COMPLETE / FROZEN** under the completed P4.1 authority. P4.1d-2
+consumes this foundation from the App, daemon, daemonctl, and desktop bootstrap
+path. The statements below describe the verified d-1 foundation and its limits;
+they are not a second current-state ledger.
 
 ## Bootstrap and schema authority
 
@@ -11,8 +11,9 @@ its limits; they are not a second current-state ledger.
 permission: fresh and legacy profiles are activation-only; a complete valid
 activated profile may load normally; recovery-required, conflicting, and
 corrupt profiles fail closed. Inspection never generates defaults or a host
-identity. Fresh activation orders preparation and validation before the
-activation marker and target commit.
+identity. Fresh activation orders preparation before target commit, then
+requires a separate production typed runtime validation before recording
+`runtime_validated`.
 
 The migration source recognizes `LegacyV0` independently from target schema
 1. A missing source manifest is accepted only by the explicit legacy rule;

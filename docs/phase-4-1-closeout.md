@@ -6,7 +6,9 @@ P4.2 is not started.
 This document is the P4.1 closeout candidate for the first Windows daily-use
 release safety boundary; it is not a final P4.1 completion record. P4.1d-4a
 resolved R02, R05, and R07; P4.1d-4b resolves R01 and R03 for its supported
-Windows process scope. R04, R06, and R11 remain open before P4.1 can close. Its
+Windows process scope. P4.1d-4c resolves R04, R06, and R11. The R01–R12
+compliance inventory is now resolved, while P4.1 remains open because the
+separately scoped P4.1e closeout is still paused. Its
 machine-readable authority is
 `docs/fixtures/phase-4-1-closeout/contract.json`; the required failure behavior
 is summarized in `docs/phase-4-1-failure-matrix.md`.
@@ -14,7 +16,7 @@ is summarized in `docs/phase-4-1-failure-matrix.md`.
 ## Frozen authority
 
 - `VERSION.json` is the sole software version authority at
-  `v0.7.68 · Build 7 · development`. Build and configuration schema remain
+  `v0.7.68 · Build 8 · development`. Build and configuration schema remain
   independent.
 - Desktop product identity is `CodexMonitor DeanX` /
   `io.github.deanxie.codexmonitor`; iOS retains the legacy identifier pending a
@@ -54,9 +56,9 @@ All migration and activation verification uses synthetic roots, fake identities,
 fake settings, and controlled test processes. The aggregate compatibility suite
 freezes the accepted slice contracts and the current failure-case inventory.
 The Build 5 P4.1e run in `docs/evidence/phase-4-1e/README.md` is historical
-closeout-attempt evidence, not proof that the remaining compliance items are
-closed. P4.1d-4a and d-4b evidence is recorded separately under
-`docs/evidence/phase-4-1d-4a/` and `docs/evidence/phase-4-1d-4b/`.
+closeout-attempt evidence, not proof that P4.1e is complete. P4.1d-4a, d-4b, and
+d-4c evidence is recorded separately under `docs/evidence/phase-4-1d-4a/`,
+`docs/evidence/phase-4-1d-4b/`, and `docs/evidence/phase-4-1d-4c/`.
 
 Real user settings reads, workspace migration, HostIdentity reads or retirement,
 daemon stop, installation, and profile cutover are **NOT_EXECUTED**. Installed

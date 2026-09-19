@@ -33,6 +33,14 @@ pub(crate) struct BootstrapState {
     migration: Result<LegacyMigrationCoordinator, String>,
 }
 
+pub(crate) fn native_business_action_allowed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    use tauri::Manager;
+
+    app.try_state::<BootstrapState>()
+        .and_then(|state| state.business_access_allowed().ok())
+        .unwrap_or(false)
+}
+
 impl BootstrapState {
     pub(crate) fn inspect(target_root: PathBuf) -> Self {
         let provider = std::env::current_exe()
@@ -203,6 +211,13 @@ pub(crate) fn get_bootstrap_status(
 pub(crate) fn activate_fresh_profile(
     intent: String,
     state: tauri::State<'_, BootstrapState>,
+) -> Result<BootstrapStatus, String> {
+    activate_fresh_profile_inner(&intent, &state)
+}
+
+fn activate_fresh_profile_inner(
+    intent: &str,
+    state: &BootstrapState,
 ) -> Result<BootstrapStatus, String> {
     if intent != "create_fresh_profile" {
         return Err("explicit fresh-profile intent is required".to_string());
@@ -418,6 +433,41 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("explicit legacy migration intent"));
         assert!(!target.exists());
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn fresh_activation_commit_requires_restart_and_preserves_identity_for_next_process() {
+        let base =
+            std::env::temp_dir().join(format!("codex-monitor-p4-1d4c-fresh-{}", Uuid::new_v4()));
+        let target = base.join("io.github.deanxie.codexmonitor");
+        let state = BootstrapState::inspect(target.clone());
+
+        let committed = activate_fresh_profile_inner("create_fresh_profile", &state).unwrap();
+        assert_eq!(
+            committed.inspection.disposition,
+            StartupDisposition::RuntimeValidationRequired
+        );
+        assert!(committed.restart_required);
+        assert!(!committed.inspection.normal_load_allowed);
+        assert!(!state.business_access_allowed().unwrap());
+
+        let identity_before: Value =
+            serde_json::from_slice(&fs::read(target.join("remote-host-identity.json")).unwrap())
+                .unwrap();
+        let next_process = BootstrapState::inspect(target.clone());
+        let next_status = next_process.initial_status().unwrap();
+        assert_eq!(
+            next_status.inspection.disposition,
+            StartupDisposition::RuntimeValidationRequired
+        );
+        assert!(!next_status.restart_required);
+        let identity_after: Value =
+            serde_json::from_slice(&fs::read(target.join("remote-host-identity.json")).unwrap())
+                .unwrap();
+        assert_eq!(identity_after, identity_before);
+        assert!(!next_process.business_access_allowed().unwrap());
+
         let _ = fs::remove_dir_all(base);
     }
 

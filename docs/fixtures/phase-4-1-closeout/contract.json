@@ -1,8 +1,8 @@
 {
   "closeoutStatus": "IN_PROGRESS",
-  "resolvedCompliance": ["R01", "R02", "R03", "R05", "R07"],
-  "remainingCompliance": ["R04", "R06", "R11"],
-  "versionAuthority": { "version": "0.7.68", "build": 7, "status": "development" },
+  "resolvedCompliance": ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11", "R12"],
+  "remainingCompliance": [],
+  "versionAuthority": { "version": "0.7.68", "build": 8, "status": "development" },
   "configSchemaVersion": 1,
   "migration": {
     "forbiddenInputs": ["token", "auth.json", "CODEX_HOME", "canonical_thread_or_rollout", "runtime_generation_or_pending_mutation"],

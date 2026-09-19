@@ -69,6 +69,7 @@ describe("BootstrapBoundary", () => {
     );
     await screen.findByText("Activation complete. Restart the application.");
     expect(screen.queryByText("business-ui")).toBeNull();
+    expect(screen.queryByRole("button", { name: /continue|open|start/i })).toBeNull();
   });
 
   it("requires sanitized preview before explicit migration confirmation", async () => {

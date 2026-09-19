@@ -90,6 +90,26 @@ fn business_invoke_allowed(command: &str, runtime_ready: bool) -> bool {
     runtime_ready || is_bootstrap_invoke(command)
 }
 
+#[cfg(desktop)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StartupEffectPlan {
+    start_global_sources: bool,
+    spawn_daemon_management: bool,
+    workspace_session_creation_count: usize,
+}
+
+#[cfg(desktop)]
+fn startup_effect_plan(
+    runtime_state: shared::activation_foundation::RuntimeProcessState,
+) -> StartupEffectPlan {
+    let ready = runtime_state == shared::activation_foundation::RuntimeProcessState::Ready;
+    StartupEffectPlan {
+        start_global_sources: ready,
+        spawn_daemon_management: ready,
+        workspace_session_creation_count: 0,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -139,7 +159,7 @@ pub fn run() {
         })
         .setup(|app| {
             #[cfg(desktop)]
-            let normal_load_allowed = {
+            let (_normal_load_allowed, startup_plan) = {
                 let target_root = app.path().app_data_dir().map_err(|error| {
                     format!("failed to resolve activated app data root: {error}")
                 })?;
@@ -175,13 +195,20 @@ pub fn run() {
                 let normal_load_allowed = bootstrap_state
                     .business_access_allowed()
                     .unwrap_or(false);
+                let runtime_state = bootstrap_state
+                    .initial_status()
+                    .map(|status| status.runtime_state)
+                    .unwrap_or(shared::activation_foundation::RuntimeProcessState::Failed);
+                let startup_plan = startup_effect_plan(runtime_state);
+                debug_assert_eq!(normal_load_allowed, startup_plan.start_global_sources);
                 app.manage(bootstrap_state);
                 if let Some(state) = candidate_state {
                     app.manage(state);
-                    #[cfg(desktop)]
-                    global_sources::start(&app.handle())?;
+                    if startup_plan.start_global_sources {
+                        global_sources::start(&app.handle())?;
+                    }
                 }
-                normal_load_allowed
+                (normal_load_allowed, startup_plan)
             };
 
             #[cfg(not(desktop))]
@@ -204,7 +231,7 @@ pub fn run() {
             }
             #[cfg(desktop)]
             {
-                if normal_load_allowed {
+                if startup_plan.spawn_daemon_management {
                     let app_handle = app.handle().clone();
                     tauri::async_runtime::spawn(async move {
                         let Some(state) = app_handle.try_state::<state::AppState>() else {
@@ -446,7 +473,8 @@ pub fn run() {
 
 #[cfg(all(test, desktop))]
 mod startup_gate_tests {
-    use super::business_invoke_allowed;
+    use super::{business_invoke_allowed, startup_effect_plan};
+    use crate::shared::activation_foundation::RuntimeProcessState;
 
     #[test]
     fn validating_process_only_allows_bootstrap_commands() {
@@ -464,5 +492,24 @@ mod startup_gate_tests {
     fn ready_process_allows_registered_business_commands() {
         assert!(business_invoke_allowed("list_workspaces", true));
         assert!(business_invoke_allowed("resume_thread", true));
+    }
+
+    #[test]
+    fn startup_business_effects_are_zero_until_current_process_is_ready() {
+        for state in [
+            RuntimeProcessState::Blocked,
+            RuntimeProcessState::Validating,
+            RuntimeProcessState::Failed,
+        ] {
+            let plan = startup_effect_plan(state);
+            assert!(!plan.start_global_sources);
+            assert!(!plan.spawn_daemon_management);
+            assert_eq!(plan.workspace_session_creation_count, 0);
+        }
+
+        let ready = startup_effect_plan(RuntimeProcessState::Ready);
+        assert!(ready.start_global_sources);
+        assert!(ready.spawn_daemon_management);
+        assert_eq!(ready.workspace_session_creation_count, 0);
     }
 }

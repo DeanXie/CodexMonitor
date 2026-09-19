@@ -1,0 +1,41 @@
+{
+  "status": "pass_complete_frozen",
+  "nativeBusinessGate": {
+    "authority": "BootstrapState.current_process_runtime_gate",
+    "blockedStates": ["blocked", "validating", "failed"],
+    "allowedState": "ready",
+    "menuBusinessEmissionBeforeReady": 0,
+    "trayBusinessDispatchBeforeReady": 0,
+    "globalSourceStartBeforeReady": 0,
+    "daemonManagementStartBeforeReady": 0,
+    "workspaceSessionCreationBeforeReady": 0,
+    "shellOnlyActionsRemainAvailable": true,
+    "windowsTrayAdded": false
+  },
+  "activationUx": {
+    "decision": "restart_required",
+    "appliesTo": ["fresh_activation", "legacy_migration", "activation_recovery"],
+    "hotSwitch": false,
+    "businessUiBeforeRestart": false,
+    "nextProcessMustValidate": true,
+    "identityRegenerationOnRestart": false
+  },
+  "executedTestIsolation": {
+    "overriddenRoots": [
+      "APPDATA",
+      "LOCALAPPDATA",
+      "USERPROFILE",
+      "HOME",
+      "CODEX_HOME",
+      "TEMP",
+      "TMP",
+      "XDG_DATA_HOME",
+      "XDG_CACHE_HOME"
+    ],
+    "daemonTokenRemovedByDefault": true,
+    "explicitAbsoluteDataRootRequired": true,
+    "realUserDataReads": 0,
+    "realUserServiceOperations": 0,
+    "webviewOrInstalledPackageLaunches": 0
+  }
+}

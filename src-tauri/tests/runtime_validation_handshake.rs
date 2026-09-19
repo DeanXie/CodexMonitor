@@ -6,11 +6,53 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
 
+mod support;
+use support::IsolatedProcessEnvironment;
+
 const DAEMON: &str = env!("CARGO_BIN_EXE_codex_monitor_daemon");
 const DAEMONCTL: &str = env!("CARGO_BIN_EXE_codex_monitor_daemonctl");
 
+#[test]
+fn process_isolation_overrides_all_user_roots_and_rejects_escape() {
+    let base = temp_root("process-isolation");
+    let isolation = IsolatedProcessEnvironment::new(&base).unwrap();
+    let root = base.join("profile");
+    write_committed_profile(&root, json!([]), "target_committed");
+
+    let output = isolation
+        .command(DAEMONCTL)
+        .current_dir(&base)
+        .args([
+            "command-preview",
+            "--listen",
+            &free_loopback_addr(),
+            "--data-dir",
+            root.to_str().unwrap(),
+            "--daemon-path",
+            DAEMON,
+            "--insecure-no-auth",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    isolation.assert_confined().unwrap();
+    let _ = fs::remove_dir_all(base);
+}
+
 fn temp_root(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("codex-monitor-p4-1d3-{label}-{}", Uuid::new_v4()))
+}
+
+fn isolated_command(program: &str, test_root: &Path) -> Command {
+    IsolatedProcessEnvironment::new(test_root)
+        .expect("isolated process environment")
+        .command(program)
 }
 
 fn write_json(path: &Path, value: Value) {
@@ -130,7 +172,7 @@ fn daemonctl_start_waits_for_authenticated_child_readiness() {
     let listen = free_loopback_addr();
     let token = "p4-1d3-test-token";
 
-    let started = Command::new(DAEMONCTL)
+    let started = isolated_command(DAEMONCTL, &base)
         .args([
             "start",
             "--listen",
@@ -163,7 +205,7 @@ fn daemonctl_read_only_commands_do_not_advance_activation() {
     let listen = free_loopback_addr();
 
     for command in ["status", "command-preview"] {
-        let mut process = Command::new(DAEMONCTL);
+        let mut process = isolated_command(DAEMONCTL, &base);
         process.args([
             command,
             "--listen",
@@ -198,7 +240,7 @@ fn daemon_candidate_failure_never_claims_runtime_success() {
     );
     let listen = free_loopback_addr();
 
-    let output = Command::new(DAEMON)
+    let output = isolated_command(DAEMON, &base)
         .args([
             "--listen",
             &listen,
@@ -225,7 +267,7 @@ fn daemon_bind_failure_releases_candidate_resources_and_keeps_gate_closed() {
     let occupied = TcpListener::bind("127.0.0.1:0").unwrap();
     let listen = occupied.local_addr().unwrap().to_string();
 
-    let output = Command::new(DAEMON)
+    let output = isolated_command(DAEMON, &base)
         .args([
             "--listen",
             &listen,
@@ -253,7 +295,7 @@ fn daemonctl_start_does_not_report_success_before_child_is_ready() {
     );
     let listen = free_loopback_addr();
 
-    let output = Command::new(DAEMONCTL)
+    let output = isolated_command(DAEMONCTL, &base)
         .args([
             "start",
             "--listen",
@@ -285,7 +327,7 @@ fn historical_runtime_record_does_not_skip_current_daemon_validation() {
     );
     let listen = free_loopback_addr();
 
-    let output = Command::new(DAEMON)
+    let output = isolated_command(DAEMON, &base)
         .args([
             "--listen",
             &listen,
@@ -314,7 +356,7 @@ fn daemon_rejects_relative_data_dir_before_profile_access_or_listener_bind() {
         r"\profile",
     ] {
         let listen = free_loopback_addr();
-        let output = Command::new(DAEMON)
+        let output = isolated_command(DAEMON, &base)
             .current_dir(&base)
             .args([
                 "--listen",
@@ -351,7 +393,7 @@ fn daemonctl_rejects_relative_data_dir_before_profile_access_or_child_start() {
         r"\profile",
     ] {
         let listen = free_loopback_addr();
-        let output = Command::new(DAEMONCTL)
+        let output = isolated_command(DAEMONCTL, &base)
             .current_dir(&base)
             .args([
                 "command-preview",
@@ -385,7 +427,7 @@ fn daemonctl_accepts_supported_absolute_data_dir_with_spaces_and_unicode() {
     let root = base.join("profile with spaces 中文");
     write_committed_profile(&root, json!([]), "target_committed");
     let listen = free_loopback_addr();
-    let output = Command::new(DAEMONCTL)
+    let output = isolated_command(DAEMONCTL, &base)
         .current_dir(std::env::temp_dir())
         .args([
             "command-preview",
@@ -417,7 +459,7 @@ fn missing_default_data_base_never_falls_back_to_current_directory() {
     fs::create_dir_all(&base).unwrap();
 
     let daemon_listen = free_loopback_addr();
-    let daemon = Command::new(DAEMON)
+    let daemon = isolated_command(DAEMON, &base)
         .current_dir(&base)
         .env_remove("APPDATA")
         .args(["--listen", &daemon_listen, "--insecure-no-auth"])
@@ -432,7 +474,7 @@ fn missing_default_data_base_never_falls_back_to_current_directory() {
     assert!(TcpListener::bind(&daemon_listen).is_ok());
 
     let daemonctl_listen = free_loopback_addr();
-    let daemonctl = Command::new(DAEMONCTL)
+    let daemonctl = isolated_command(DAEMONCTL, &base)
         .current_dir(&base)
         .env_remove("APPDATA")
         .args([
@@ -453,6 +495,10 @@ fn missing_default_data_base_never_falls_back_to_current_directory() {
         String::from_utf8_lossy(&daemonctl.stderr)
     );
     assert!(TcpListener::bind(&daemonctl_listen).is_ok());
-    assert!(fs::read_dir(&base).unwrap().next().is_none());
+    let created = fs::read_dir(&base)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(created, ["process-environment"]);
     let _ = fs::remove_dir_all(base);
 }

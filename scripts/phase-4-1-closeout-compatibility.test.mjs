@@ -37,12 +37,33 @@ async function loadCloseoutContract() {
   return readJson("docs/fixtures/phase-4-1-closeout/contract.json");
 }
 
-test("closeout_remains_open_until_compliance_gaps_are_closed", async () => {
+test("compliance_inventory_is_closed_while_p4_1e_remains_pending", async () => {
   const contract = await loadCloseoutContract();
 
   assert.equal(contract.closeoutStatus, "IN_PROGRESS");
-  assert.deepEqual(contract.resolvedCompliance, ["R02", "R05", "R07"]);
-  assert.deepEqual(contract.remainingCompliance, ["R01", "R03", "R04", "R06", "R11"]);
+  assert.deepEqual(contract.resolvedCompliance, [
+    "R01", "R02", "R03", "R04", "R05", "R06",
+    "R07", "R08", "R09", "R10", "R11", "R12",
+  ]);
+  assert.deepEqual(contract.remainingCompliance, []);
+});
+
+test("d4c_freezes_native_gate_restart_and_process_isolation", async () => {
+  const contract = await readJson(
+    "docs/fixtures/phase-4-1d-4c-entry-isolation-closeout/contract.json",
+  );
+  assert.equal(contract.status, "pass_complete_frozen");
+  assert.equal(contract.nativeBusinessGate.menuBusinessEmissionBeforeReady, 0);
+  assert.equal(contract.nativeBusinessGate.trayBusinessDispatchBeforeReady, 0);
+  assert.equal(contract.nativeBusinessGate.globalSourceStartBeforeReady, 0);
+  assert.equal(contract.nativeBusinessGate.daemonManagementStartBeforeReady, 0);
+  assert.equal(contract.nativeBusinessGate.windowsTrayAdded, false);
+  assert.equal(contract.activationUx.decision, "restart_required");
+  assert.equal(contract.activationUx.hotSwitch, false);
+  assert.equal(contract.activationUx.nextProcessMustValidate, true);
+  assert.equal(contract.executedTestIsolation.daemonTokenRemovedByDefault, true);
+  assert.equal(contract.executedTestIsolation.realUserDataReads, 0);
+  assert.equal(contract.executedTestIsolation.realUserServiceOperations, 0);
 });
 
 test("updater_sentry_remain_disabled", async () => {

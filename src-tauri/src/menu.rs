@@ -325,6 +325,14 @@ pub(crate) fn handle_menu_event<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     event: tauri::menu::MenuEvent,
 ) {
+    if dispatch_business_menu_event(
+        event.id().as_ref(),
+        crate::bootstrap::native_business_action_allowed(app),
+        |event_name| emit_menu_event(app, event_name),
+    ) {
+        return;
+    }
+
     match event.id().as_ref() {
         "about" | "help_about" => {
             if let Some(window) = app.get_webview_window("about") {
@@ -339,12 +347,6 @@ pub(crate) fn handle_menu_event<R: tauri::Runtime>(
                 .center()
                 .build();
         }
-        "file_new_agent" => emit_menu_event(app, "menu-new-agent"),
-        "file_new_worktree_agent" => emit_menu_event(app, "menu-new-worktree-agent"),
-        "file_new_clone_agent" => emit_menu_event(app, "menu-new-clone-agent"),
-        "file_add_workspace" => emit_menu_event(app, "menu-add-workspace"),
-        "file_add_workspace_from_url" => emit_menu_event(app, "menu-add-workspace-from-url"),
-        "file_open_settings" => emit_menu_event(app, "menu-open-settings"),
         "file_close_window" | "window_close" => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.close();
@@ -359,18 +361,6 @@ pub(crate) fn handle_menu_event<R: tauri::Runtime>(
                 let _ = window.set_fullscreen(!is_fullscreen);
             }
         }
-        "view_toggle_projects_sidebar" => emit_menu_event(app, "menu-toggle-projects-sidebar"),
-        "view_toggle_git_sidebar" => emit_menu_event(app, "menu-toggle-git-sidebar"),
-        "view_toggle_debug_panel" => emit_menu_event(app, "menu-toggle-debug-panel"),
-        "view_toggle_terminal" => emit_menu_event(app, "menu-toggle-terminal"),
-        "view_next_agent" => emit_menu_event(app, "menu-next-agent"),
-        "view_prev_agent" => emit_menu_event(app, "menu-prev-agent"),
-        "view_next_workspace" => emit_menu_event(app, "menu-next-workspace"),
-        "view_prev_workspace" => emit_menu_event(app, "menu-prev-workspace"),
-        "composer_cycle_model" => emit_menu_event(app, "menu-composer-cycle-model"),
-        "composer_cycle_access" => emit_menu_event(app, "menu-composer-cycle-access"),
-        "composer_cycle_reasoning" => emit_menu_event(app, "menu-composer-cycle-reasoning"),
-        "composer_cycle_collaboration" => emit_menu_event(app, "menu-composer-cycle-collaboration"),
         "window_minimize" => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.minimize();
@@ -392,5 +382,115 @@ fn emit_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: &str) {
         let _ = window.emit(event, ());
     } else {
         let _ = app.emit(event, ());
+    }
+}
+
+fn dispatch_business_menu_event(
+    menu_id: &str,
+    business_ready: bool,
+    mut emit: impl FnMut(&str),
+) -> bool {
+    let event = match menu_id {
+        "file_new_agent" => "menu-new-agent",
+        "file_new_worktree_agent" => "menu-new-worktree-agent",
+        "file_new_clone_agent" => "menu-new-clone-agent",
+        "file_add_workspace" => "menu-add-workspace",
+        "file_add_workspace_from_url" => "menu-add-workspace-from-url",
+        "file_open_settings" => "menu-open-settings",
+        "view_toggle_projects_sidebar" => "menu-toggle-projects-sidebar",
+        "view_toggle_git_sidebar" => "menu-toggle-git-sidebar",
+        "view_toggle_debug_panel" => "menu-toggle-debug-panel",
+        "view_toggle_terminal" => "menu-toggle-terminal",
+        "view_next_agent" => "menu-next-agent",
+        "view_prev_agent" => "menu-prev-agent",
+        "view_next_workspace" => "menu-next-workspace",
+        "view_prev_workspace" => "menu-prev-workspace",
+        "composer_cycle_model" => "menu-composer-cycle-model",
+        "composer_cycle_access" => "menu-composer-cycle-access",
+        "composer_cycle_reasoning" => "menu-composer-cycle-reasoning",
+        "composer_cycle_collaboration" => "menu-composer-cycle-collaboration",
+        _ => return false,
+    };
+    if business_ready {
+        emit(event);
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dispatch_business_menu_event;
+
+    #[test]
+    fn blocked_native_business_menu_event_emits_no_business_event() {
+        let mut emitted = Vec::new();
+        let handled = dispatch_business_menu_event("file_new_agent", false, |event| {
+            emitted.push(event.to_string());
+        });
+
+        assert!(handled);
+        assert!(emitted.is_empty());
+    }
+
+    #[test]
+    fn every_native_business_menu_action_requires_ready_and_maps_once() {
+        let cases = [
+            ("file_new_agent", "menu-new-agent"),
+            ("file_new_worktree_agent", "menu-new-worktree-agent"),
+            ("file_new_clone_agent", "menu-new-clone-agent"),
+            ("file_add_workspace", "menu-add-workspace"),
+            ("file_add_workspace_from_url", "menu-add-workspace-from-url"),
+            ("file_open_settings", "menu-open-settings"),
+            (
+                "view_toggle_projects_sidebar",
+                "menu-toggle-projects-sidebar",
+            ),
+            ("view_toggle_git_sidebar", "menu-toggle-git-sidebar"),
+            ("view_toggle_debug_panel", "menu-toggle-debug-panel"),
+            ("view_toggle_terminal", "menu-toggle-terminal"),
+            ("view_next_agent", "menu-next-agent"),
+            ("view_prev_agent", "menu-prev-agent"),
+            ("view_next_workspace", "menu-next-workspace"),
+            ("view_prev_workspace", "menu-prev-workspace"),
+            ("composer_cycle_model", "menu-composer-cycle-model"),
+            ("composer_cycle_access", "menu-composer-cycle-access"),
+            ("composer_cycle_reasoning", "menu-composer-cycle-reasoning"),
+            (
+                "composer_cycle_collaboration",
+                "menu-composer-cycle-collaboration",
+            ),
+        ];
+
+        for (menu_id, expected_event) in cases {
+            let mut blocked = Vec::new();
+            assert!(dispatch_business_menu_event(menu_id, false, |event| {
+                blocked.push(event.to_string());
+            }));
+            assert!(blocked.is_empty(), "blocked action emitted: {menu_id}");
+
+            let mut ready = Vec::new();
+            assert!(dispatch_business_menu_event(menu_id, true, |event| {
+                ready.push(event.to_string());
+            }));
+            assert_eq!(ready, [expected_event], "wrong mapping for {menu_id}");
+        }
+    }
+
+    #[test]
+    fn shell_only_menu_actions_are_not_consumed_by_business_dispatch() {
+        for menu_id in [
+            "about",
+            "help_about",
+            "file_close_window",
+            "window_close",
+            "file_quit",
+            "view_fullscreen",
+            "window_minimize",
+            "window_maximize",
+        ] {
+            assert!(!dispatch_business_menu_event(menu_id, false, |_| {
+                panic!("shell-only action emitted a business event")
+            }));
+        }
     }
 }

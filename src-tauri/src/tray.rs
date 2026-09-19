@@ -453,21 +453,42 @@ fn build_usage_menu_labels(usage: Option<&TraySessionUsage>) -> (String, String,
     )
 }
 
+fn dispatch_tray_business_action<T>(
+    business_ready: bool,
+    resolve_payload: impl FnOnce() -> Option<T>,
+    dispatch: impl FnOnce(T),
+) -> bool {
+    if !business_ready {
+        return false;
+    }
+    let Some(payload) = resolve_payload() else {
+        return false;
+    };
+    dispatch(payload);
+    true
+}
+
 #[cfg(target_os = "macos")]
 fn handle_tray_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: MenuEvent) {
     match event.id().as_ref() {
         TRAY_QUIT_ID => app.exit(0),
         id => {
-            let state = app.state::<TrayState>();
-            let payload = state
-                .thread_targets_by_menu_id
-                .lock()
-                .ok()
-                .and_then(|targets| targets.get(id).cloned());
-            if let Some(payload) = payload {
-                show_main_window(app);
-                emit_open_thread_event(app, payload);
-            }
+            dispatch_tray_business_action(
+                crate::bootstrap::native_business_action_allowed(app),
+                || {
+                    app.try_state::<TrayState>().and_then(|state| {
+                        state
+                            .thread_targets_by_menu_id
+                            .lock()
+                            .ok()
+                            .and_then(|targets| targets.get(id).cloned())
+                    })
+                },
+                |payload| {
+                    show_main_window(app);
+                    emit_open_thread_event(app, payload);
+                },
+            );
         }
     }
 }
@@ -499,8 +520,9 @@ fn load_tray_icon() -> tauri::Result<Image<'static>> {
 mod tests {
     use super::{
         build_thread_menu_sections, build_usage_menu_labels, collect_thread_menu_targets,
-        normalize_session_usage, normalize_tray_threads, TrayOpenThreadPayload,
-        TrayRecentThreadEntry, TraySessionUsage, RECENT_THREADS_SECTION_LIMIT,
+        dispatch_tray_business_action, normalize_session_usage, normalize_tray_threads,
+        TrayOpenThreadPayload, TrayRecentThreadEntry, TraySessionUsage,
+        RECENT_THREADS_SECTION_LIMIT,
     };
 
     fn recent_entry(
@@ -697,5 +719,43 @@ mod tests {
             build_usage_menu_labels(None),
             ("Current Usage".into(), "No active session".into(), None)
         );
+    }
+
+    #[test]
+    fn blocked_tray_business_action_never_reads_state_or_dispatches() {
+        let mut state_accesses = 0;
+        let mut dispatches = 0;
+
+        let handled = dispatch_tray_business_action(
+            false,
+            || {
+                state_accesses += 1;
+                Some("thread")
+            },
+            |_| dispatches += 1,
+        );
+
+        assert!(!handled);
+        assert_eq!(state_accesses, 0);
+        assert_eq!(dispatches, 0);
+    }
+
+    #[test]
+    fn ready_tray_business_action_resolves_and_dispatches_once() {
+        let mut state_accesses = 0;
+        let mut dispatched = Vec::new();
+
+        let handled = dispatch_tray_business_action(
+            true,
+            || {
+                state_accesses += 1;
+                Some("thread-1")
+            },
+            |payload| dispatched.push(payload),
+        );
+
+        assert!(handled);
+        assert_eq!(state_accesses, 1);
+        assert_eq!(dispatched, ["thread-1"]);
     }
 }

@@ -132,15 +132,45 @@ export function managedBudgetInputs(entries, currentTargetPath, freeBytes) {
   };
 }
 
-export function classifyExternalTarget({ manifest, registeredWorktrees, closeoutEligiblePaths, now = Date.now(), policy }) {
+export function classifyManagedTarget({
+  activeBuild = false,
+  gitClean = false,
+  manifestValid = true,
+  mergedIntoMain = false,
+  registered,
+  targetKind,
+}) {
+  if (targetKind === STATUS.MAIN || targetKind === STATUS.RELEASE) {
+    return { cleanupEligible: false, status: targetKind, targetClass: targetKind };
+  }
+  if (!registered) {
+    return { cleanupEligible: false, status: STATUS.ORPHAN, targetClass: STATUS.ORPHAN };
+  }
+  const closeoutEligible = manifestValid && gitClean && mergedIntoMain && !activeBuild;
+  const targetClass = closeoutEligible ? STATUS.CLOSEOUT_ELIGIBLE : STATUS.ACTIVE;
+  return { cleanupEligible: closeoutEligible, status: targetClass, targetClass };
+}
+
+export function classifyExternalTarget({
+  activeBuild = false,
+  manifest,
+  registeredWorktrees,
+  worktreeStates = new Map(),
+  now = Date.now(),
+  policy,
+}) {
   const key = comparisonPath(manifest.worktreePath);
   const registered = new Set([...registeredWorktrees].map((value) => comparisonPath(value)));
-  const closeoutEligible = new Set([...closeoutEligiblePaths].map((value) => comparisonPath(value)));
+  const states = new Map(
+    [...worktreeStates].map(([worktreePath, state]) => [comparisonPath(worktreePath), state]),
+  );
   if (registered.has(key)) {
-    return {
-      cleanupEligible: closeoutEligible.has(key),
-      status: closeoutEligible.has(key) ? STATUS.CLOSEOUT_ELIGIBLE : STATUS.ACTIVE,
-    };
+    return classifyManagedTarget({
+      activeBuild,
+      gitClean: states.get(key)?.gitClean,
+      mergedIntoMain: states.get(key)?.mergedIntoMain,
+      registered: true,
+    });
   }
   const lastUsedAt = Date.parse(manifest.lastUsedAt || manifest.createdAt || 0);
   const ageMs = Number.isFinite(lastUsedAt) ? Math.max(0, now - lastUsedAt) : 0;
@@ -148,6 +178,7 @@ export function classifyExternalTarget({ manifest, registeredWorktrees, closeout
     ageDays: ageMs / DAY_MS,
     cleanupEligible: ageMs >= policy.orphanMinimumAgeDays * DAY_MS,
     status: STATUS.ORPHAN,
+    targetClass: STATUS.ORPHAN,
   };
 }
 
@@ -499,18 +530,21 @@ export async function planCloseout({
   commonDir,
   gitClean,
   isLinkedWorktree,
+  mergedIntoMain,
   policy,
-  targetClass = STATUS.ACTIVE,
+  targetKind,
   worktreePath,
 }) {
   const targetPath = resolveAgentTarget({ buildRoot, commonDir, worktreePath });
   const reasons = [];
   if (!isLinkedWorktree) reasons.push("MAIN_NOT_ELIGIBLE");
   if (!gitClean) reasons.push("WORKTREE_DIRTY");
+  if (isLinkedWorktree && !mergedIntoMain) reasons.push("NOT_MERGED_INTO_MAIN");
   if (!accepted) reasons.push("ACCEPTED_REQUIRED");
-  if (targetClass === STATUS.MAIN || targetClass === STATUS.RELEASE) reasons.push("PROTECTED_TARGET_CLASS");
 
   let manifest = null;
+  let manifestValid = false;
+  let activeBuild = false;
   let scan = { bytes: 0, elapsedMs: 0, files: 0, truncated: false };
   try {
     ({ manifest } = await validateManagedTargetIdentity({
@@ -518,18 +552,32 @@ export async function planCloseout({
       candidate: targetPath,
       currentCommonDir: commonDir,
     }));
+    manifestValid = true;
     if (comparisonPath(manifest.worktreePath) !== comparisonPath(worktreePath)) reasons.push("MANIFEST_WORKTREE_MISMATCH");
     const lockState = await inspectOperationLock({
       buildRoot,
       staleAfterMs: (policy?.operationLockStaleMinutes ?? 5) * 60 * 1000,
       targetPath,
     });
-    if (lockState.state === "LIVE") reasons.push("ACTIVE_BUILD_LEASE");
+    activeBuild = lockState.state === "LIVE";
+    if (activeBuild) reasons.push("ACTIVE_BUILD_LEASE");
     await validateCleanupCandidate({ buildRoot, candidate: targetPath, worktreeRoot: worktreePath });
     scan = await scanDirectoryOnce(targetPath);
     if (scan.reparsePoints > 0) reasons.push("REPARSE_POINT_PRESENT");
   } catch (error) {
     reasons.push(error?.code === "ENOENT" ? "TARGET_NOT_FOUND" : `TARGET_INVALID: ${error.message}`);
+  }
+
+  const classification = classifyManagedTarget({
+    activeBuild,
+    gitClean,
+    manifestValid,
+    mergedIntoMain,
+    registered: Boolean(isLinkedWorktree),
+    targetKind: isLinkedWorktree ? targetKind : STATUS.MAIN,
+  });
+  if (classification.status === STATUS.MAIN || classification.status === STATUS.RELEASE) {
+    reasons.push("PROTECTED_TARGET_CLASS");
   }
 
   return {
@@ -542,7 +590,7 @@ export async function planCloseout({
     gitClean: Boolean(gitClean),
     manifest,
     reasons,
-    targetClass,
+    targetClass: classification.targetClass,
     targetPath,
     worktreePath: normalizedAbsolute(worktreePath),
   };
@@ -624,6 +672,7 @@ export async function planAgentCleanup({
   now = Date.now(),
   policy,
   registeredWorktrees,
+  worktreeStates = new Map(),
 }) {
   const agentsRoot = path.resolve(buildRoot, "agents");
   const entries = [];
@@ -646,13 +695,6 @@ export async function planAgentCleanup({
         candidate: targetPath,
         currentCommonDir: commonDir,
       });
-      const classification = classifyExternalTarget({
-        closeoutEligiblePaths: new Set(),
-        manifest,
-        now,
-        policy,
-        registeredWorktrees,
-      });
       const scan = await scanDirectoryOnce(targetPath, {
         maxEntries: policy.report.maxEntriesPerScan,
         timeoutMs: Math.max(
@@ -670,6 +712,14 @@ export async function planAgentCleanup({
         targetPath,
       });
       const activeBuild = lockState.state === "LIVE";
+      const classification = classifyExternalTarget({
+        activeBuild,
+        manifest,
+        now,
+        policy,
+        registeredWorktrees,
+        worktreeStates,
+      });
       entries.push({
         ...classification,
         activeBuild,
@@ -692,6 +742,7 @@ export async function planAgentCleanup({
         error: error.message,
         selected: false,
         status: STATUS.ORPHAN,
+        targetClass: STATUS.ORPHAN,
         targetPath,
       });
     }

@@ -54,10 +54,14 @@ test("prepare resolves an external target and closeout preserves the linked Work
 
     const report = JSON.parse(runCli(repo, buildRoot, "report", "--json").stdout);
     assert.equal(report.entries.some((entry) => entry.status === "LEGACY-IN-TREE"), false);
+    const reportTarget = report.entries.find((entry) => entry.targetPath === prepared.targetPath);
+    assert.equal(reportTarget.targetClass, "CLOSEOUT-ELIGIBLE");
 
     const dryRun = runCli(worktree, buildRoot, "closeout", "--accepted", "--json");
     assert.equal(dryRun.status, 0, dryRun.stderr);
-    assert.equal(JSON.parse(dryRun.stdout).eligible, true);
+    const dryRunPayload = JSON.parse(dryRun.stdout);
+    assert.equal(dryRunPayload.targetClass, reportTarget.targetClass);
+    assert.equal(dryRunPayload.eligible, true);
     assert.ok((await stat(prepared.targetPath)).isDirectory());
 
     const appliedRun = runCli(worktree, buildRoot, "closeout", "--accepted", "--apply", "--json");

@@ -251,6 +251,15 @@ async function collectReport() {
   const targetRoot = resolveBuildRoot({ mainRoot: topology.mainRoot });
   const registered = listRegisteredWorktrees(topology.mainRoot);
   const registeredSet = new Set(registered);
+  const worktreeStates = new Map(
+    registered.map((worktreePath) => [
+      worktreePath,
+      {
+        gitClean: isGitClean(worktreePath),
+        mergedIntoMain: isMergedIntoMain(worktreePath),
+      },
+    ]),
+  );
   const external = await planAgentCleanup({
     apply: false,
     buildRoot: targetRoot,
@@ -258,15 +267,9 @@ async function collectReport() {
     deadlineMs,
     policy,
     registeredWorktrees: registeredSet,
+    worktreeStates,
   });
-  const entries = [];
-  for (const entry of external.entries) {
-    if (entry.status === STATUS.ACTIVE && isGitClean(entry.manifest.worktreePath) && isMergedIntoMain(entry.manifest.worktreePath)) {
-      entries.push({ ...entry, cleanupEligible: true, status: STATUS.CLOSEOUT_ELIGIBLE });
-    } else {
-      entries.push(entry);
-    }
-  }
+  const entries = [...external.entries];
 
   const mainTarget = path.join(topology.mainRoot, "src-tauri", "target");
   const releaseTarget = path.join(mainTarget, "release");
@@ -462,6 +465,7 @@ async function main(argv = process.argv.slice(2)) {
       commonDir: topology.commonDir,
       gitClean: isGitClean(topology.worktreePath),
       isLinkedWorktree: topology.isLinkedWorktree,
+      mergedIntoMain: isMergedIntoMain(topology.worktreePath),
       policy,
       worktreePath: topology.worktreePath,
     });

@@ -156,7 +156,7 @@ test("external target classification distinguishes active, closeout, and orphan 
     classifyExternalTarget({
       manifest: activeManifest,
       registeredWorktrees: new Set([activeManifest.worktreePath.toLowerCase()]),
-      closeoutEligiblePaths: new Set(),
+      worktreeStates: new Map([[activeManifest.worktreePath, { gitClean: false, mergedIntoMain: true }]]),
       now,
       policy,
     }).status,
@@ -166,7 +166,7 @@ test("external target classification distinguishes active, closeout, and orphan 
     classifyExternalTarget({
       manifest: activeManifest,
       registeredWorktrees: new Set([activeManifest.worktreePath.toLowerCase()]),
-      closeoutEligiblePaths: new Set([activeManifest.worktreePath.toLowerCase()]),
+      worktreeStates: new Map([[activeManifest.worktreePath, { gitClean: true, mergedIntoMain: true }]]),
       now,
       policy,
     }).status,
@@ -176,7 +176,6 @@ test("external target classification distinguishes active, closeout, and orphan 
   const newOrphan = classifyExternalTarget({
     manifest: activeManifest,
     registeredWorktrees: new Set(),
-    closeoutEligiblePaths: new Set(),
     now,
     policy,
   });
@@ -186,7 +185,6 @@ test("external target classification distinguishes active, closeout, and orphan 
   const oldOrphan = classifyExternalTarget({
     manifest: { ...activeManifest, lastUsedAt: "2026-09-01T00:00:00Z" },
     registeredWorktrees: new Set(),
-    closeoutEligiblePaths: new Set(),
     now,
     policy,
   });
@@ -266,8 +264,10 @@ test("closeout apply deletes only a verified external target and preserves Workt
       commonDir: path.join(root, "repo", ".git"),
       gitClean: true,
       isLinkedWorktree: true,
+      mergedIntoMain: true,
       worktreePath: worktreeRoot,
     });
+    assert.equal(dryRun.targetClass, STATUS.CLOSEOUT_ELIGIBLE);
     assert.equal(dryRun.eligible, true);
     assert.equal(dryRun.apply, false);
     assert.ok((await stat(target)).isDirectory());
@@ -280,6 +280,80 @@ test("closeout apply deletes only a verified external target and preserves Workt
   });
 });
 
+test("managed target classification is shared by report planning and closeout", async () => {
+  await withTempDir(async (root) => {
+    const buildRoot = path.join(root, "build");
+    const commonDir = path.join(root, "repo", ".git");
+    const worktreePath = path.join(root, "worktree");
+    await ensureAgentTarget({ buildRoot, commonDir, worktreePath });
+
+    const reportPlan = await planAgentCleanup({
+      apply: false,
+      buildRoot,
+      commonDir,
+      policy,
+      registeredWorktrees: new Set([worktreePath]),
+      worktreeStates: new Map([[worktreePath, { gitClean: true, mergedIntoMain: true }]]),
+    });
+    const closeoutPlan = await planCloseout({
+      accepted: true,
+      apply: false,
+      buildRoot,
+      commonDir,
+      gitClean: true,
+      isLinkedWorktree: true,
+      mergedIntoMain: true,
+      policy,
+      worktreePath,
+    });
+
+    assert.equal(reportPlan.entries[0].targetClass, STATUS.CLOSEOUT_ELIGIBLE);
+    assert.equal(reportPlan.entries[0].targetClass, closeoutPlan.targetClass);
+
+    const unacceptedPlan = await planCloseout({
+      accepted: false,
+      apply: false,
+      buildRoot,
+      commonDir,
+      gitClean: true,
+      isLinkedWorktree: true,
+      mergedIntoMain: true,
+      policy,
+      worktreePath,
+    });
+    assert.equal(unacceptedPlan.targetClass, STATUS.CLOSEOUT_ELIGIBLE);
+    assert.equal(unacceptedPlan.eligible, false);
+    assert.ok(unacceptedPlan.reasons.includes("ACCEPTED_REQUIRED"));
+  });
+});
+
+test("closeout keeps dirty and unmerged registered targets active", async () => {
+  await withTempDir(async (root) => {
+    const buildRoot = path.join(root, "build");
+    const commonDir = path.join(root, "repo", ".git");
+    const worktreePath = path.join(root, "worktree");
+    await ensureAgentTarget({ buildRoot, commonDir, worktreePath });
+    const base = {
+      accepted: true,
+      apply: true,
+      buildRoot,
+      commonDir,
+      isLinkedWorktree: true,
+      policy,
+      worktreePath,
+    };
+
+    const dirty = await planCloseout({ ...base, gitClean: false, mergedIntoMain: true });
+    assert.equal(dirty.targetClass, STATUS.ACTIVE);
+    assert.equal(dirty.eligible, false);
+
+    const unmerged = await planCloseout({ ...base, gitClean: true, mergedIntoMain: false });
+    assert.equal(unmerged.targetClass, STATUS.ACTIVE);
+    assert.equal(unmerged.eligible, false);
+    assert.ok(unmerged.reasons.includes("NOT_MERGED_INTO_MAIN"));
+  });
+});
+
 test("closeout refuses missing acceptance, dirty source, main, and release targets", async () => {
   await withTempDir(async (root) => {
     const base = {
@@ -288,15 +362,17 @@ test("closeout refuses missing acceptance, dirty source, main, and release targe
       commonDir: path.join(root, "repo", ".git"),
       gitClean: true,
       isLinkedWorktree: true,
+      mergedIntoMain: true,
       worktreePath: path.join(root, "worktree"),
     };
     assert.equal((await planCloseout({ ...base, accepted: false })).eligible, false);
     assert.equal((await planCloseout({ ...base, accepted: true, gitClean: false })).eligible, false);
-    assert.equal((await planCloseout({ ...base, accepted: true, isLinkedWorktree: false })).eligible, false);
-    assert.equal(
-      (await planCloseout({ ...base, accepted: true, targetClass: STATUS.RELEASE })).eligible,
-      false,
-    );
+    const main = await planCloseout({ ...base, accepted: true, isLinkedWorktree: false });
+    assert.equal(main.targetClass, STATUS.MAIN);
+    assert.equal(main.eligible, false);
+    const release = await planCloseout({ ...base, accepted: true, targetKind: STATUS.RELEASE });
+    assert.equal(release.targetClass, STATUS.RELEASE);
+    assert.equal(release.eligible, false);
   });
 });
 
@@ -465,6 +541,7 @@ test("managed target identity rejects copied manifests and apply re-reads identi
       commonDir,
       gitClean: true,
       isLinkedWorktree: true,
+      mergedIntoMain: true,
       worktreePath,
     });
     await writeTargetManifest(ensured.targetPath, {
@@ -500,9 +577,11 @@ test("active build lease blocks closeout and orphan cleanup selection", async ()
       commonDir,
       gitClean: true,
       isLinkedWorktree: true,
+      mergedIntoMain: true,
       worktreePath,
     });
     assert.equal(closeout.eligible, false);
+    assert.equal(closeout.targetClass, STATUS.ACTIVE);
     assert.ok(closeout.reasons.includes("ACTIVE_BUILD_LEASE"));
 
     const cleanup = await planAgentCleanup({
@@ -610,6 +689,7 @@ test("closeout and orphan cleanup recover dead stale locks but reject live owner
       commonDir,
       gitClean: true,
       isLinkedWorktree: true,
+      mergedIntoMain: true,
       policy,
       worktreePath: staleWorktree,
     });

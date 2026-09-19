@@ -1,0 +1,22 @@
+{
+  "phase": "P4.1d-4a",
+  "status": "pass_complete_frozen",
+  "recovery": {
+    "laggingCommittedTarget": "recovery_required",
+    "convergedJournalState": "target_committed",
+    "businessReadyAfterRecovery": false,
+    "currentProcessValidationRequired": true,
+    "continueBeforeRetirementRequiresNewStopEvidence": true,
+    "missingRecoveryMaterial": "blocked_corrupt",
+    "mismatchedBinding": "blocked_corrupt"
+  },
+  "dataRoot": {
+    "explicitMustBeAbsolute": true,
+    "relativeCwdFallback": false,
+    "invalidExplicitFallsBackToDefault": false,
+    "defaultResolverFailureFallsBackToCwd": false,
+    "sharedBy": ["app", "daemon", "daemonctl"]
+  },
+  "nonGoals": ["R01", "R03", "R04-full-audit", "R06-product-decision", "R11-full-installed-isolation"],
+  "realUserOperations": 0
+}

@@ -1,11 +1,21 @@
+use super::activation_foundation::recover_activation;
 use super::startup_activation::{
-    inspect_startup_roots, validate_activated_profile, validate_committed_profile,
-    PersistedActivationState, StartupDisposition, LEGACY_DESKTOP_IDENTIFIER,
-    TARGET_DESKTOP_IDENTIFIER,
+    inspect_startup_roots as inspect_startup_roots_with_recovery, validate_activated_profile,
+    validate_committed_profile, PersistedActivationState, StartupDisposition,
+    LEGACY_DESKTOP_IDENTIFIER, TARGET_DESKTOP_IDENTIFIER,
 };
 use serde_json::json;
 use std::fs;
 use std::path::Path;
+
+fn inspect_startup_roots(
+    target_root: &Path,
+    legacy_root: &Path,
+) -> Result<super::startup_activation::StartupInspection, String> {
+    inspect_startup_roots_with_recovery(target_root, legacy_root, |root| {
+        recover_activation(root).map(Into::into)
+    })
+}
 
 fn temp_root(name: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
@@ -184,4 +194,34 @@ fn identity_manifest_transaction_mismatch_is_blocked() {
         }),
     );
     assert!(validate_activated_profile(&root).is_err());
+}
+
+#[test]
+fn committed_target_with_lagging_journal_requires_recovery() {
+    for state in ["prepared", "legacy_identity_retired"] {
+        let base = temp_root(&format!("lagging-{state}"));
+        let target = base.join(TARGET_DESKTOP_IDENTIFIER);
+        let legacy = base.join(LEGACY_DESKTOP_IDENTIFIER);
+        write_profile(&target, "tx-lagging", state);
+
+        let inspection = inspect_startup_roots(&target, &legacy).unwrap();
+        assert_eq!(inspection.disposition, StartupDisposition::RecoveryRequired);
+        assert!(!inspection.normal_load_allowed);
+    }
+}
+
+#[test]
+fn relative_data_roots_are_rejected_instead_of_resolved_from_cwd() {
+    for value in [".", "./profile", "../profile", "profile"] {
+        let error = inspect_startup_roots(Path::new(value), Path::new("legacy"))
+            .expect_err("relative data roots must fail closed");
+        assert!(error.contains("absolute"), "unexpected error: {error}");
+    }
+
+    #[cfg(windows)]
+    for value in [r"C:profile", r"\profile"] {
+        let error = inspect_startup_roots(Path::new(value), Path::new(r"C:\legacy"))
+            .expect_err("drive-relative or root-relative paths must fail closed");
+        assert!(error.contains("absolute"), "unexpected error: {error}");
+    }
 }

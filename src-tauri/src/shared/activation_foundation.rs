@@ -502,20 +502,32 @@ pub(crate) fn recover_activation(target_root: &Path) -> Result<RecoveryDispositi
     {
         return Ok(RecoveryDisposition::BlockedInconsistent);
     }
+    let is_migration = !journal.source_root.as_os_str().is_empty();
+    let source_identity = journal.source_root.join("remote-host-identity.json");
+    let source_active = is_migration && read_v1_identity(&source_identity).is_ok();
+    let source_retired = is_migration
+        && retired_identity_matches_transaction(&source_identity, &journal.transaction_id);
     let staging_exists = journal.staging_root.is_dir();
     let staging_valid = staging_exists
         && validate_prepared_profile_for_transaction(
             &journal.staging_root,
             &journal.transaction_id,
         )
-        .is_ok();
+        .is_ok()
+        && (!is_migration
+            || migration_recovery_material_matches(
+                &journal.staging_root,
+                &journal.transaction_id,
+                source_active,
+            ));
     let target_valid =
-        validate_prepared_profile_for_transaction(target_root, &journal.transaction_id).is_ok();
-    let is_migration = !journal.source_root.as_os_str().is_empty();
-    let source_identity = journal.source_root.join("remote-host-identity.json");
-    let source_active = is_migration && read_v1_identity(&source_identity).is_ok();
-    let source_retired = is_migration
-        && retired_identity_matches_transaction(&source_identity, &journal.transaction_id);
+        validate_prepared_profile_for_transaction(target_root, &journal.transaction_id).is_ok()
+            && (!is_migration
+                || migration_recovery_material_matches(
+                    target_root,
+                    &journal.transaction_id,
+                    source_active,
+                ));
     let source_consistent_after_retirement = !is_migration || source_retired;
     Ok(match journal.state {
         ActivationJournalState::Prepared if source_retired && staging_valid => {
@@ -544,6 +556,81 @@ pub(crate) fn recover_activation(target_root: &Path) -> Result<RecoveryDispositi
         }
         _ => RecoveryDisposition::BlockedInconsistent,
     })
+}
+
+fn migration_recovery_material_matches(
+    root: &Path,
+    transaction_id: &str,
+    require_retired_candidate: bool,
+) -> bool {
+    let recovery = root.join("identity-recovery");
+    let Ok(active) = read_recovery_identity(&recovery.join("remote-host-identity.v2.active.json"))
+    else {
+        return false;
+    };
+    if active.state != super::remote_host_identity_activation::HostIdentityV2State::Active
+        || active.transaction_id.as_deref() != Some(transaction_id)
+    {
+        return false;
+    }
+    let retired_path = recovery.join("remote-host-identity.v2.retired.json");
+    if !retired_path.exists() {
+        return !require_retired_candidate;
+    }
+    let Ok(retired) = read_recovery_identity(&retired_path) else {
+        return false;
+    };
+    retired.state == super::remote_host_identity_activation::HostIdentityV2State::Retired
+        && retired.transaction_id.as_deref() == Some(transaction_id)
+        && active.remote_host_identity == retired.remote_host_identity
+}
+
+fn read_recovery_identity(
+    path: &Path,
+) -> Result<super::remote_host_identity_activation::HostIdentityV2Store, String> {
+    let bytes = fs::read(path).map_err(|error| format!("read identity recovery: {error}"))?;
+    let store: super::remote_host_identity_activation::HostIdentityV2Store =
+        serde_json::from_slice(&bytes)
+            .map_err(|error| format!("parse identity recovery: {error}"))?;
+    if store.schema_version != 2
+        || Uuid::parse_str(&store.remote_host_identity)
+            .map(|identity| identity.is_nil())
+            .unwrap_or(true)
+    {
+        return Err("identity recovery material is invalid".to_string());
+    }
+    Ok(store)
+}
+
+impl From<RecoveryDisposition> for super::startup_activation::StartupRecoveryDisposition {
+    fn from(value: RecoveryDisposition) -> Self {
+        match value {
+            RecoveryDisposition::ContinueBeforeRetirement => Self::ContinueBeforeRetirement,
+            RecoveryDisposition::ContinueAfterRetirement => Self::ContinueAfterRetirement,
+            RecoveryDisposition::ValidateCommittedTarget => Self::ValidateCommittedTarget,
+            RecoveryDisposition::Complete => Self::Complete,
+            RecoveryDisposition::BlockedInconsistent => Self::BlockedInconsistent,
+        }
+    }
+}
+
+pub(crate) fn converge_recovered_committed_target(target_root: &Path) -> Result<(), String> {
+    let _lock = ActivationCommitLock::acquire(target_root)?;
+    if recover_activation(target_root)? != RecoveryDisposition::ValidateCommittedTarget {
+        return Err("activation recovery is not a committed-target convergence".to_string());
+    }
+    let mut journal = read_journal(target_root)?;
+    validate_prepared_profile_for_transaction(target_root, &journal.transaction_id)?;
+    journal.state = ActivationJournalState::TargetCommitted;
+    write_activation_journal(target_root, &journal)?;
+    let metadata = super::startup_activation::validate_committed_profile(target_root)?;
+    if metadata.transaction_id != journal.transaction_id
+        || metadata.persisted_state
+            != super::startup_activation::PersistedActivationState::TargetCommitted
+    {
+        return Err("recovered committed target validation changed".to_string());
+    }
+    Ok(())
 }
 
 pub(crate) fn activation_recovery_is_migration(target_root: &Path) -> Result<bool, String> {

@@ -1865,7 +1865,7 @@ fn parse_args() -> Result<DaemonConfig, String> {
         listen,
         token,
         data_dir: match data_dir {
-            Some(path) => path,
+            Some(path) => shared::startup_activation::validate_data_root(&path)?,
             None => shared::startup_activation::default_target_root()?,
         },
     })

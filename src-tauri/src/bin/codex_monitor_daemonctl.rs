@@ -248,7 +248,7 @@ NOTES:\n  - Defaults read token/host from <data-dir>/settings.json\n  - If no --
 
 fn resolve_data_dir(data_dir: Option<PathBuf>) -> Result<PathBuf, String> {
     match data_dir {
-        Some(path) => Ok(path),
+        Some(path) => startup_activation::validate_data_root(&path),
         None => startup_activation::default_target_root(),
     }
 }

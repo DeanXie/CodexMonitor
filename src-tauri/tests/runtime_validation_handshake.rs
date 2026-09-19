@@ -300,3 +300,159 @@ fn historical_runtime_record_does_not_skip_current_daemon_validation() {
     assert!(TcpListener::bind(&listen).is_ok());
     let _ = fs::remove_dir_all(base);
 }
+
+#[test]
+fn daemon_rejects_relative_data_dir_before_profile_access_or_listener_bind() {
+    let base = temp_root("daemon-relative-root");
+    fs::create_dir_all(&base).unwrap();
+    for value in [
+        ".",
+        "./profile",
+        "../profile",
+        "profile",
+        r"C:profile",
+        r"\profile",
+    ] {
+        let listen = free_loopback_addr();
+        let output = Command::new(DAEMON)
+            .current_dir(&base)
+            .args([
+                "--listen",
+                &listen,
+                "--data-dir",
+                value,
+                "--insecure-no-auth",
+            ])
+            .output()
+            .unwrap();
+
+        assert!(!output.status.success(), "relative root accepted: {value}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("absolute data root"),
+            "unexpected stderr for {value}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(TcpListener::bind(&listen).is_ok());
+    }
+    assert!(!base.join("relative-profile").exists());
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn daemonctl_rejects_relative_data_dir_before_profile_access_or_child_start() {
+    let base = temp_root("daemonctl-relative-root");
+    fs::create_dir_all(&base).unwrap();
+    for value in [
+        ".",
+        "./profile",
+        "../profile",
+        "profile",
+        r"C:profile",
+        r"\profile",
+    ] {
+        let listen = free_loopback_addr();
+        let output = Command::new(DAEMONCTL)
+            .current_dir(&base)
+            .args([
+                "command-preview",
+                "--listen",
+                &listen,
+                "--data-dir",
+                value,
+                "--daemon-path",
+                DAEMON,
+                "--insecure-no-auth",
+                "--json",
+            ])
+            .output()
+            .unwrap();
+
+        assert!(!output.status.success(), "relative root accepted: {value}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("absolute data root"),
+            "unexpected stderr for {value}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(TcpListener::bind(&listen).is_ok());
+    }
+    assert!(!base.join("relative-profile").exists());
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn daemonctl_accepts_supported_absolute_data_dir_with_spaces_and_unicode() {
+    let base = temp_root("daemonctl-absolute-root");
+    let root = base.join("profile with spaces 中文");
+    write_committed_profile(&root, json!([]), "target_committed");
+    let listen = free_loopback_addr();
+    let output = Command::new(DAEMONCTL)
+        .current_dir(std::env::temp_dir())
+        .args([
+            "command-preview",
+            "--listen",
+            &listen,
+            "--data-dir",
+            root.to_str().unwrap(),
+            "--daemon-path",
+            DAEMON,
+            "--insecure-no-auth",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "unexpected stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(TcpListener::bind(&listen).is_ok());
+    let _ = fs::remove_dir_all(base);
+}
+
+#[cfg(windows)]
+#[test]
+fn missing_default_data_base_never_falls_back_to_current_directory() {
+    let base = temp_root("missing-default-root");
+    fs::create_dir_all(&base).unwrap();
+
+    let daemon_listen = free_loopback_addr();
+    let daemon = Command::new(DAEMON)
+        .current_dir(&base)
+        .env_remove("APPDATA")
+        .args(["--listen", &daemon_listen, "--insecure-no-auth"])
+        .output()
+        .unwrap();
+    assert!(!daemon.status.success());
+    assert!(
+        String::from_utf8_lossy(&daemon.stderr).contains("APPDATA is unavailable"),
+        "unexpected daemon stderr: {}",
+        String::from_utf8_lossy(&daemon.stderr)
+    );
+    assert!(TcpListener::bind(&daemon_listen).is_ok());
+
+    let daemonctl_listen = free_loopback_addr();
+    let daemonctl = Command::new(DAEMONCTL)
+        .current_dir(&base)
+        .env_remove("APPDATA")
+        .args([
+            "command-preview",
+            "--listen",
+            &daemonctl_listen,
+            "--daemon-path",
+            DAEMON,
+            "--insecure-no-auth",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(!daemonctl.status.success());
+    assert!(
+        String::from_utf8_lossy(&daemonctl.stderr).contains("APPDATA is unavailable"),
+        "unexpected daemonctl stderr: {}",
+        String::from_utf8_lossy(&daemonctl.stderr)
+    );
+    assert!(TcpListener::bind(&daemonctl_listen).is_ok());
+    assert!(fs::read_dir(&base).unwrap().next().is_none());
+    let _ = fs::remove_dir_all(base);
+}

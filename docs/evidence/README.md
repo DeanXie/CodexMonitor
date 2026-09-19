@@ -170,7 +170,14 @@ current-process `blocked/validating/ready/failed` gate, authenticated daemonctl
 child readiness, and zero-real-cutover scope. The evidence index is
 `phase-4-1d-3/README.md`.
 
-P4.1e aggregate closeout evidence is stored in `phase-4-1e/README.md`. The
-machine-readable authority is `../fixtures/phase-4-1-closeout/contract.json`;
-it freezes the P4.1a-d compatibility and failure matrix without claiming real
-user cutover, installed-package acceptance, or sudden power-loss durability.
+P4.1d-4a recovery/root-authority fixtures are stored in
+`../fixtures/phase-4-1d-4a-recovery-root-authority/`. They correct the R02/R07
+journal-lag recovery reachability defect and the R05 current-directory-derived
+explicit-root defect while preserving the d-3 process-local readiness gate.
+The evidence index is `phase-4-1d-4a/README.md`.
+
+The Build 5 P4.1e aggregate closeout attempt remains at
+`phase-4-1e/README.md`; it is historical evidence, not current final closeout
+authority. The current machine-readable closeout candidate is
+`../fixtures/phase-4-1-closeout/contract.json` and must remain in progress until
+R01/R03/R04/R06/R11 are resolved and fresh P4.1e acceptance is rerun.

@@ -48,6 +48,15 @@ pub(crate) enum PersistedActivationState {
     RuntimeValidated,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StartupRecoveryDisposition {
+    ContinueBeforeRetirement,
+    ContinueAfterRetirement,
+    ValidateCommittedTarget,
+    Complete,
+    BlockedInconsistent,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ActivationManifest {
@@ -76,12 +85,16 @@ struct RuntimeActivationJournal {
     state: String,
 }
 
-pub(crate) fn inspect_startup_roots(
+pub(crate) fn inspect_startup_roots<F>(
     target_root: &Path,
     legacy_root: &Path,
-) -> Result<StartupInspection, String> {
-    let target_root = absolute_path(target_root)?;
-    let legacy_root = absolute_path(legacy_root)?;
+    recover: F,
+) -> Result<StartupInspection, String>
+where
+    F: Fn(&Path) -> Result<StartupRecoveryDisposition, String>,
+{
+    let target_root = validate_data_root(target_root)?;
+    let legacy_root = validate_data_root(legacy_root)?;
     if target_root == legacy_root {
         return Ok(inspection(
             StartupDisposition::BlockedConflict,
@@ -108,6 +121,9 @@ pub(crate) fn inspect_startup_roots(
                     legacy_root,
                     "committed profile requires current-process runtime validation",
                 )),
+                Err(error) if external_journal_path(&target_root).exists() => {
+                    classify_recovery(&target_root, &legacy_root, Some(&error), &recover)
+                }
                 Err(error) => Ok(inspection(
                     StartupDisposition::BlockedCorrupt,
                     target_root,
@@ -115,14 +131,6 @@ pub(crate) fn inspect_startup_roots(
                     &error,
                 )),
             };
-        }
-        if external_journal_path(&target_root).exists() {
-            return Ok(inspection(
-                StartupDisposition::RecoveryRequired,
-                target_root,
-                legacy_root,
-                "activation recovery evidence exists",
-            ));
         }
         if fs::read_dir(&target_root)
             .map_err(|error| format!("inspect target root: {error}"))?
@@ -139,12 +147,7 @@ pub(crate) fn inspect_startup_roots(
     }
 
     if external_journal_path(&target_root).exists() {
-        return Ok(inspection(
-            StartupDisposition::RecoveryRequired,
-            target_root,
-            legacy_root,
-            "activation recovery evidence exists",
-        ));
+        return classify_recovery(&target_root, &legacy_root, None, &recover);
     }
 
     if legacy_root.exists() {
@@ -187,6 +190,43 @@ pub(crate) fn inspect_startup_roots(
     ))
 }
 
+fn classify_recovery<F>(
+    target_root: &Path,
+    legacy_root: &Path,
+    committed_error: Option<&str>,
+    recover: &F,
+) -> Result<StartupInspection, String>
+where
+    F: Fn(&Path) -> Result<StartupRecoveryDisposition, String>,
+{
+    let (disposition, reason) = match recover(target_root) {
+        Ok(StartupRecoveryDisposition::ContinueBeforeRetirement)
+        | Ok(StartupRecoveryDisposition::ContinueAfterRetirement)
+        | Ok(StartupRecoveryDisposition::ValidateCommittedTarget) => (
+            StartupDisposition::RecoveryRequired,
+            "activation recovery evidence is consistent and requires controlled recovery"
+                .to_string(),
+        ),
+        Ok(StartupRecoveryDisposition::Complete) => (
+            StartupDisposition::BlockedCorrupt,
+            committed_error
+                .unwrap_or("completed activation is missing its committed target")
+                .to_string(),
+        ),
+        Ok(StartupRecoveryDisposition::BlockedInconsistent) => (
+            StartupDisposition::BlockedCorrupt,
+            "activation recovery evidence is inconsistent".to_string(),
+        ),
+        Err(error) => (StartupDisposition::BlockedCorrupt, error),
+    };
+    Ok(inspection(
+        disposition,
+        target_root.to_path_buf(),
+        legacy_root.to_path_buf(),
+        &reason,
+    ))
+}
+
 pub(crate) fn validate_activated_profile(root: &Path) -> Result<ActivatedProfileMetadata, String> {
     let metadata = validate_committed_profile(root)?;
     if metadata.persisted_state != PersistedActivationState::RuntimeValidated {
@@ -196,6 +236,7 @@ pub(crate) fn validate_activated_profile(root: &Path) -> Result<ActivatedProfile
 }
 
 pub(crate) fn validate_committed_profile(root: &Path) -> Result<ActivatedProfileMetadata, String> {
+    let root = validate_data_root(root)?;
     if !root.is_dir() {
         return Err("activated profile root is unavailable".to_string());
     }
@@ -220,8 +261,8 @@ pub(crate) fn validate_committed_profile(root: &Path) -> Result<ActivatedProfile
         return Err("activation and identity transaction bindings differ".to_string());
     }
     let journal: RuntimeActivationJournal =
-        read_json(&external_journal_path(root), "activation journal")?;
-    let canonical_root = fs::canonicalize(root)
+        read_json(&external_journal_path(&root), "activation journal")?;
+    let canonical_root = fs::canonicalize(&root)
         .map_err(|error| format!("canonicalize activated profile root: {error}"))?;
     let persisted_state = match journal.state.as_str() {
         "target_committed" => PersistedActivationState::TargetCommitted,
@@ -256,14 +297,22 @@ pub(crate) fn validate_committed_profile(root: &Path) -> Result<ActivatedProfile
 }
 
 pub(crate) fn default_target_root() -> Result<PathBuf, String> {
-    Ok(platform_data_base()?.join(TARGET_DESKTOP_IDENTIFIER))
+    validate_data_root(&platform_data_base()?.join(TARGET_DESKTOP_IDENTIFIER))
 }
 
 pub(crate) fn legacy_root_for_target(target_root: &Path) -> Result<PathBuf, String> {
+    let target_root = validate_data_root(target_root)?;
     let parent = target_root
         .parent()
         .ok_or("target data root has no parent")?;
-    Ok(parent.join(LEGACY_DESKTOP_IDENTIFIER))
+    validate_data_root(&parent.join(LEGACY_DESKTOP_IDENTIFIER))
+}
+
+pub(crate) fn validate_data_root(path: &Path) -> Result<PathBuf, String> {
+    if !path.is_absolute() {
+        return Err("explicit data root must be an absolute data root".to_string());
+    }
+    Ok(path.to_path_buf())
 }
 
 fn platform_data_base() -> Result<PathBuf, String> {
@@ -332,14 +381,4 @@ fn external_journal_path(target_root: &Path) -> PathBuf {
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join(format!(".{name}.codexmonitor-activation-journal.json"))
-}
-
-fn absolute_path(path: &Path) -> Result<PathBuf, String> {
-    if path.is_absolute() {
-        Ok(path.to_path_buf())
-    } else {
-        std::env::current_dir()
-            .map(|current| current.join(path))
-            .map_err(|error| format!("resolve data root: {error}"))
-    }
 }

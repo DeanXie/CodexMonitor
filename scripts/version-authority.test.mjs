@@ -76,7 +76,7 @@ test("canonical_version_manifest_exists", async () => {
   const authority = await readJson(path.join(repoRoot, "VERSION.json"));
   assert.deepEqual(authority, {
     version: "0.7.68",
-    build: 5,
+    build: 6,
     status: "development",
   });
 });

@@ -690,9 +690,8 @@ Project
 
 ## 当前状态
 
-**IN PROGRESS**。P4.0 与 P4.1 已完成并冻结；P4.1d-3 已纠正
-runtime-validation 启动契约缺陷，P4.1e 已冻结聚合兼容性与失败矩阵并完成收口。
-P4.2 尚未开始，真实用户迁移和安装版验收仍未执行。完整且唯一的 Phase 4 产品/发行合同见
+**IN PROGRESS**。P4.0、P4.1a、P4.1b、P4.1c、P4.1d-1、P4.1d-2、P4.1d-3 与 P4.1d-4a 已完成并冻结；
+P4.1d-4a 已纠正 recovery reachability 与 data-root authority。P4.1d 仍有 R01/R03/R04/R06/R11 合规缺口，P4.1e 保持 PAUSED / RESUME PENDING。真实用户迁移和安装版验收仍未执行。完整且唯一的 Phase 4 产品/发行合同见
 [`docs/phase-4-0-truth-release-boundary.md`](docs/phase-4-0-truth-release-boundary.md)。
 
 ## 目标与平台顺序
@@ -971,7 +970,8 @@ IN PROGRESS
    ├─ P4.1d-1 Migration / Activation Safety Foundation PASS / COMPLETE / FROZEN
    ├─ P4.1d-2 Startup Cutover PASS / COMPLETE / FROZEN
    ├─ P4.1d-3 Runtime Validation Handshake / Startup Gate Correction PASS / COMPLETE / FROZEN
-   └─ P4.1e Compatibility / Migration Safety / Docs Closeout PASS / COMPLETE / FROZEN
+   ├─ P4.1d-4a Recovery Reachability / Root Authority Correction PASS / COMPLETE / FROZEN
+   └─ P4.1e PAUSED / RESUME PENDING
 
 Advanced — Adaptive Model Router
 RESERVED
@@ -983,7 +983,7 @@ RESERVED
 
 下一任务：
 
-**P4.1e — PASS / COMPLETE / FROZEN; P4.2 NOT STARTED**
+**P4.1d-4a — PASS / COMPLETE / FROZEN; P4.1d COMPLIANCE GAPS REMAIN**
 
 Phase 1、Phase 2、Phase 3（through Phase 3.5）均已完成；Phase 3.5 为
 PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项产品决策、
@@ -994,9 +994,10 @@ PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项
 protocol、v2 HostIdentity 候选格式与 Windows retirement/lifetime 原语；
 P4.1d-2 已将门禁接入 App/daemon/daemonctl 并切换获批桌面身份；P4.1d-3
 保留该历史记录并纠正“文件提交即 runtime validated”的缺陷，要求 App/daemon
-各自完成当前进程验证后才开放业务。P4.1e 已冻结聚合兼容性、失败矩阵与文档
-权威并完成收口。真实用户数据迁移、真实 HostIdentity 退休与安装版验收均未执行；
-P4.2 尚未开始。
+各自完成当前进程验证后才开放业务；P4.1d-4a 修正 journal 落后时的恢复可达性、
+恢复适配器收敛和 App/daemon/daemonctl 绝对数据根。真实用户数据迁移、真实
+HostIdentity 退休与安装版验收均未执行；R01/R03/R04/R06/R11 仍未收口，P4.1e
+保持暂停，不得把 d-4a 解释为父阶段已具备封板条件。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 

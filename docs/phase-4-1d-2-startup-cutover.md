@@ -8,7 +8,9 @@ Historical correction: P4.1d-3 later proved that this slice's file commit path
 wrote `runtime_validated` before a real runtime handshake. The d-2 acceptance
 record remains historical; current startup authority is the corrected
 `target_committed` plus current-process validation contract in
-`phase-4-1d-3-runtime-validation-handshake.md`.
+`phase-4-1d-3-runtime-validation-handshake.md`. P4.1d-4a later corrected the
+R02/R07 lagging-journal recovery reachability and R05 absolute-root authority;
+those defects remain part of this slice's historical record.
 
 Canonical software authority is `v0.7.68 · Build 5 · development`.
 

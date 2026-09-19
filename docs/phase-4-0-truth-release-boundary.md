@@ -93,9 +93,9 @@ These decisions are approved requirements, not open design questions.
 - P4.5 still owns local logging, diagnostics export, and crash recovery.
 
 P4.1b establishes root `VERSION.json` as the single software version authority;
-P4.1d-1 advanced the authority to `v0.7.68 · Build 3 · development`; P4.1d-2
-advanced it to Build 4, and the P4.1d-3 runtime-handshake correction advances
-it to `v0.7.68 · Build 5 · development` without changing SemVer or status.
+P4.1d-1 advanced the authority to `v0.7.68 · Build 3 · development`, P4.1d-2
+advanced it to Build 4, P4.1d-3 advanced it to Build 5, and P4.1d-4a advances
+it to `v0.7.68 · Build 6 · development` without changing SemVer or status.
 Build 1 remains the first formal unified
 version-authority baseline. Package/Cargo/Tauri/Apple projections,
 drift checks, deterministic bump/sync tooling, and commit trace output all flow

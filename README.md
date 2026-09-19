@@ -243,11 +243,14 @@ into the App, daemon, and daemonctl. Normal business initialization requires a
 valid committed target profile. P4.1d-3 corrects the runtime handshake: file
 commit stops at `target_committed`, each App/daemon process validates itself,
 and normal business IPC/RPC opens only after that process is `ready`. Real user
-migration has not been executed, and the iOS identifier remains legacy pending
-a separate platform decision.
-P4.1 is complete and frozen by `docs/phase-4-1-closeout.md`; its aggregate
-contract distinguishes target commitment, persisted runtime history, and
-current-process readiness while preserving the explicit no-real-cutover limits.
+migration has not been executed. P4.1d-4a makes target-moved/journal-lagged
+recovery reachable without repeating migration or opening business access, and
+requires App, daemon, and daemonctl data roots to be absolute rather than
+current-directory-derived. The iOS identifier remains legacy pending a
+separate platform decision.
+`docs/phase-4-1-closeout.md` remains the P4.1 closeout candidate, not final
+acceptance authority: P4.1 is still in progress while R01/R03/R04/R06/R11
+remain open and P4.1e is paused.
 
 Build the production Tauri bundle:
 

@@ -187,8 +187,13 @@ that authority and `../fixtures/phase-4-1-closeout/contract.json` freeze the
 final P4.1 compatibility result. P4.1 is PASS / COMPLETE / FROZEN; P4.2 is
 IN PROGRESS.
 
-P4.2a clean-build installer forensics and its draft A–Q installed acceptance
+P4.2a clean-build installer forensics and its A–Q installed acceptance
 contract are indexed at `phase-4-2a/README.md` and frozen as observed data in
-`../fixtures/phase-4-2a-windows-installer-forensics/contract.json`. P4.2a is
-**FORENSICS COMPLETE / DECISION REQUIRED**: no MSI/NSIS install, installed-app
-launch, uninstall, real profile migration, or P4.2b implementation has run.
+`../fixtures/phase-4-2a-windows-installer-forensics/contract.json`.
+
+P4.2b canonical packaging corrections are indexed at
+`phase-4-2b/README.md` and frozen in
+`../fixtures/phase-4-2b-windows-packaging-corrections/contract.json`.
+P4.2b is **PASS / COMPLETE / FROZEN** at Build 9. No MSI/NSIS install,
+installed-app launch, uninstall, or real profile migration has run; those
+remain later P4.2 acceptance work.

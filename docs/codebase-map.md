@@ -175,6 +175,9 @@ All cross-runtime domain behavior belongs in `src-tauri/src/shared/*`:
 - Remote host and daemon-process identity: `src-tauri/src/shared/remote_host_identity.rs`
 - Remote TCP request correlation and reconnect isolation: `src-tauri/src/shared/remote_request_provenance.rs`
 - Remote coordination compatibility fixtures: `docs/fixtures/remote-transport-coordination/*`; shared App/daemon fixture tests: `src-tauri/src/shared/remote_transport_compatibility_tests.rs`
+- Windows canonical packaging: `src-tauri/tauri.windows.conf.json`,
+  `src-tauri/windows/nsis/installer.nsi`, and
+  `docs/phase-4-2b-windows-packaging-corrections.md`
 
 ## Events Map (Backend -> Frontend)
 

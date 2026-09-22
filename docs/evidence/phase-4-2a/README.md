@@ -1,7 +1,7 @@
 # P4.2a Evidence
 
-Status: **FORENSICS COMPLETE / DECISION REQUIRED**. The P4.2 acceptance
-contract is draft and no installed-app E2E has been executed.
+Status: **PASS / COMPLETE / FROZEN** as the Build 8 forensic baseline. P4.2b
+resolved its decisions; no installed-app E2E has been executed.
 
 Evidence authority:
 
@@ -20,6 +20,7 @@ and A–Q acceptance cases are frozen as observed evidence in
 `../../fixtures/phase-4-2a-windows-installer-forensics/contract.json` and
 explained in `../../phase-4-2a-windows-installer-forensics.md`.
 
-No MSI/NSIS install, silent install, uninstall, installed-app launch, registry
-write, real shortcut, real AppData write, real profile migration, or P4.2b
-implementation occurred. Temporary extraction contained package payload only.
+At the time of this capture, no MSI/NSIS install, silent install, uninstall,
+installed-app launch, registry write, real shortcut, real AppData write, real
+profile migration, or P4.2b implementation had occurred. Temporary extraction
+contained package payload only.

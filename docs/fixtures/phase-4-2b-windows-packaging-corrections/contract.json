@@ -1,0 +1,73 @@
+{
+  "phase": "P4.2b",
+  "contractStatus": "PASS_COMPLETE_FROZEN",
+  "observedAt": "2026-09-22",
+  "versionAuthority": {
+    "version": "0.7.68",
+    "build": 9,
+    "status": "development"
+  },
+  "installer": {
+    "canonical": "nsis",
+    "scope": "per_user",
+    "adminRequiredForNormalInstall": false,
+    "nonCanonicalArtifacts": ["msi"],
+    "sameSemverDifferentBuildIsUpgrade": false
+  },
+  "shortcuts": {
+    "startMenu": { "default": true },
+    "desktop": { "defaultChecked": true, "userCanOptOut": true }
+  },
+  "webView2": {
+    "mode": "offlineInstaller",
+    "installerTimeDownload": false,
+    "buildTimeOfficialMicrosoftPayloadDownload": true,
+    "generatedNsisContainsOnlineBootstrapperUrl": false
+  },
+  "daemon": {
+    "bundled": true,
+    "lookup": "executable-relative"
+  },
+  "daemonctl": { "required": false, "bundled": false },
+  "dictation": {
+    "appDataResolutionFailure": "FAIL_CLOSED",
+    "currentWorkingDirectoryFallback": false
+  },
+  "artifacts": {
+    "nsis": {
+      "name": "CodexMonitor DeanX_0.7.68_x64-setup.exe",
+      "size": 228436251,
+      "sha256": "F9A4B935A923ED8ADFA22550F44FF0A64E4A795EBCA562FDDE4E077FE2304B81"
+    },
+    "msi": {
+      "name": "CodexMonitor DeanX_0.7.68_x64_en-US.msi",
+      "size": 230002688,
+      "sha256": "D3AB9F6B92FB628971B681849110EF10868FA6480AFB53F9C767D35CC6945BCD"
+    },
+    "mainExecutable": {
+      "name": "codex-monitor.exe",
+      "size": 32592384,
+      "sha256": "24415897A57425E16FFB20030AF534EB774CB2ADAA788944CB8F13D64869D3C6"
+    },
+    "daemon": {
+      "name": "codex_monitor_daemon.exe",
+      "size": 11001856,
+      "sha256": "880E5CA5E6E90F9BCC4C2DE542EF35AFF4DE1D25FAF5BB65050F01B6182D6687"
+    }
+  },
+  "releaseSafety": {
+    "updaterDisabled": true,
+    "updaterArtifacts": false,
+    "sentryDisabled": true
+  },
+  "installedAcceptance": "NOT_EXECUTED",
+  "operations": {
+    "installerExecuted": false,
+    "installedAppLaunched": false,
+    "uninstallerExecuted": false,
+    "registryModified": false,
+    "shortcutModified": false,
+    "realProfileWritten": false,
+    "realMigrationExecuted": false
+  }
+}

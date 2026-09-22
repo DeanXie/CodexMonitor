@@ -254,9 +254,11 @@ the aggregate compatibility matrix at `v0.7.68 · Build 8 · development`.
 The iOS identifier remains legacy pending a
 separate platform decision.
 P4.1 is complete and frozen; `docs/phase-4-1-closeout.md` is its final
-acceptance authority. P4.2 is in progress: P4.2a installer forensics are
-complete with product decisions still required, and no installed-app E2E or
-P4.2b implementation has started.
+acceptance authority. P4.2 is in progress. P4.2a installer forensics are
+frozen, and P4.2b freezes NSIS per-user as the canonical package, embeds the
+offline WebView2 runtime, removes the dictation cwd fallback, and advances the
+authority to `v0.7.68 · Build 9 · development`. Installed-app E2E remains
+P4.2c and has not started.
 
 Build the production Tauri bundle:
 

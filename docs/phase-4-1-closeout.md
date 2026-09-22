@@ -2,8 +2,8 @@
 
 Status: **PASS / COMPLETE / FROZEN** at `v0.7.68 · Build 8 · development`.
 P4.1d and P4.1e are **PASS / COMPLETE / FROZEN**. P4.2 is **IN PROGRESS**;
-P4.2a is **FORENSICS COMPLETE / DECISION REQUIRED** and installed E2E remains
-not executed.
+P4.2a/P4.2b are **PASS / COMPLETE / FROZEN** and installed E2E remains not
+executed.
 
 This document is the final P4.1 closeout record for the first Windows daily-use
 release safety boundary. P4.1d-4a resolved R02, R05, and R07; P4.1d-4b

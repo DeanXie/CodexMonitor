@@ -9,6 +9,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
 
 use crate::state::AppState;
+use super::resolve_dictation_model_dir;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, SizedSample};
@@ -234,12 +235,8 @@ impl Default for DictationState {
     }
 }
 
-fn model_dir(app: &AppHandle) -> PathBuf {
-    app.path()
-        .app_data_dir()
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| ".".into()))
-        .join("models")
-        .join("whisper")
+fn model_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    resolve_dictation_model_dir(app.path().app_data_dir().map_err(|error| error.to_string()))
 }
 
 fn model_info(model_id: &str) -> Option<&'static DictationModelInfo> {
@@ -249,13 +246,13 @@ fn model_info(model_id: &str) -> Option<&'static DictationModelInfo> {
 fn model_path(app: &AppHandle, model_id: &str) -> Result<PathBuf, String> {
     let info =
         model_info(model_id).ok_or_else(|| format!("Unknown dictation model: {model_id}"))?;
-    Ok(model_dir(app).join(info.filename))
+    Ok(model_dir(app)?.join(info.filename))
 }
 
 fn model_temp_path(app: &AppHandle, model_id: &str) -> Result<PathBuf, String> {
     let info =
         model_info(model_id).ok_or_else(|| format!("Unknown dictation model: {model_id}"))?;
-    Ok(model_dir(app).join(format!("{}.partial", info.filename)))
+    Ok(model_dir(app)?.join(format!("{}.partial", info.filename)))
 }
 
 fn missing_status(model_id: &str) -> DictationModelStatus {
@@ -422,7 +419,21 @@ pub(crate) async fn dictation_download_model(
     let model_id_clone = model_id.clone();
     let task = tokio::spawn(async move {
         let state = app_handle.state::<AppState>();
-        let model_dir = model_dir(&app_handle);
+        let model_dir = match model_dir(&app_handle) {
+            Ok(path) => path,
+            Err(error) => {
+                let status = DictationModelStatus {
+                    state: DictationModelState::Error,
+                    model_id: model_id_clone.clone(),
+                    progress: None,
+                    error: Some(error),
+                    path: None,
+                };
+                update_status(&app_handle, &state, status).await;
+                clear_download_state(&state).await;
+                return;
+            }
+        };
         let model_path = match model_path(&app_handle, &model_id_clone) {
             Ok(path) => path,
             Err(error) => {

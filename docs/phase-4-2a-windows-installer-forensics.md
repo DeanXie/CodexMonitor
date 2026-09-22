@@ -1,7 +1,8 @@
 # P4.2a — Windows Installer Forensics / Acceptance Contract
 
-Status: **FORENSICS COMPLETE / DECISION REQUIRED**. The acceptance contract is
-**DRAFT**, P4.2 remains **IN PROGRESS**, and P4.2b is **NOT STARTED**.
+Status: **PASS / COMPLETE / FROZEN** as the Build 8 forensic baseline. Its
+three product decisions and cwd defect were resolved by P4.2b; installed-app
+acceptance remains unexecuted and P4.2 remains **IN PROGRESS**.
 
 ## Evidence boundary
 
@@ -148,20 +149,13 @@ silence is therefore **false**. Installed runtime network silence is
 **STATIC CONTRACT VERIFIED / DYNAMIC ACCEPTANCE NOT_EXECUTED**, excluding
 normal user-requested Codex/GitHub/remote-backend traffic.
 
-## Blockers and decisions
+## Resolved decisions
 
-1. **Canonical format/scope:** choose NSIS per-user (recommended), MSI
-   per-machine, or fund parity. The current two-package release cannot have one
-   deterministic ordinary-user contract.
-2. **WebView2 delivery:** choose offline bundled installer (recommended for
-   deterministic silence), embedded bootstrapper, or explicit prerequisite.
-3. **Windows versioning:** require a SemVer advance for every published
-   Windows installer (recommended), or define and test another Windows-visible
-   strategy.
-4. **Cwd fallback:** remove the dictation app-data-to-cwd fallback before
-   declaring the installed runtime path-safe.
-
-No product or installer correction is authorized by this slice.
+P4.2b selected NSIS per-user, offlineInstaller, and SemVer-based Windows
+upgrade identity, and removed the dictation cwd fallback. MSI remains a
+non-canonical compatibility artifact. This report remains the unmodified Build
+8 observation authority; the corrected Build 9 authority is
+`docs/phase-4-2b-windows-packaging-corrections.md`.
 
 ## Disposable installed E2E recommendation
 
@@ -181,14 +175,12 @@ machine-readable A–Q matrix is
 
 ## Slice recommendation
 
-- **P4.2a:** this forensics/design record; decision required, not frozen.
-- **P4.2b:** only if the chosen contract requires packaging corrections
-  (currently expected for WebView2, cwd fallback, and MSI/NSIS selection).
+- **P4.2a:** this forensics/design record; frozen.
+- **P4.2b:** canonical packaging corrections; frozen.
 - **P4.2c:** disposable clean install, first launch, bootstrap, daemon, dev-tool
   independence, and network evidence.
 - **P4.2d:** uninstall/reinstall/upgrade/shortcut and retention matrix.
 - **P4.2e:** aggregate Windows daily-use closeout.
 
-P4.2b must not be skipped merely because artifacts build; it may be omitted
-only after the user selects a contract already satisfied by the generated
-package and all listed blockers are resolved.
+P4.2c is the next slice and must not treat static packaging evidence as an
+installed-app acceptance result.

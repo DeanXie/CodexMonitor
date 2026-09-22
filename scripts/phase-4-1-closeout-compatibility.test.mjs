@@ -98,7 +98,12 @@ test("version_authority_stable_and_schema_independent", async () => {
   const contract = await loadCloseoutContract();
   const version = await readJson("VERSION.json");
   const releaseIdentity = await readJson("release-identity.json");
-  assert.deepEqual(version, contract.versionAuthority);
+  assert.equal(version.version, contract.versionAuthority.version);
+  assert.equal(version.status, contract.versionAuthority.status);
+  assert.ok(
+    version.build >= contract.versionAuthority.build,
+    "current monotonic Build must not regress below the frozen P4.1 baseline",
+  );
   assert.equal(releaseIdentity.configSchemaVersion, contract.configSchemaVersion);
   assert.notEqual(version.build, releaseIdentity.configSchemaVersion);
 });

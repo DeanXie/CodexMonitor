@@ -254,7 +254,9 @@ the aggregate compatibility matrix at `v0.7.68 · Build 8 · development`.
 The iOS identifier remains legacy pending a
 separate platform decision.
 P4.1 is complete and frozen; `docs/phase-4-1-closeout.md` is its final
-acceptance authority. P4.2 is not started.
+acceptance authority. P4.2 is in progress: P4.2a installer forensics are
+complete with product decisions still required, and no installed-app E2E or
+P4.2b implementation has started.
 
 Build the production Tauri bundle:
 

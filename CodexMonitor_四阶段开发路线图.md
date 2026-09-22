@@ -691,7 +691,9 @@ Project
 ## 当前状态
 
 **IN PROGRESS**。P4.0 与 P4.1 已 PASS / COMPLETE / FROZEN，当前版本为
-`v0.7.68 · Build 8 · development`；P4.2 保持 NOT STARTED。真实用户迁移和安装版验收仍未执行。完整且唯一的 Phase 4 产品/发行合同见
+`v0.7.68 · Build 8 · development`。P4.2a 已完成安装包静态取证，当前为
+**FORENSICS COMPLETE / DECISION REQUIRED**；P4.2 已进入 **IN PROGRESS**，但真实安装、首次启动、
+真实用户迁移和 P4.2b 仍未执行。完整且唯一的 Phase 4 产品/发行合同见
 [`docs/phase-4-0-truth-release-boundary.md`](docs/phase-4-0-truth-release-boundary.md)。
 
 ## 目标与平台顺序
@@ -974,7 +976,8 @@ IN PROGRESS
    ├─ P4.1d-4b Controlled Legacy Migration Entry / Stop Evidence PASS / COMPLETE / FROZEN
    ├─ P4.1d-4c Entry Gate Evidence / Restart UX / Isolation Closeout PASS / COMPLETE / FROZEN
    └─ P4.1e Compatibility / Migration Safety / Final Closeout PASS / COMPLETE / FROZEN
-└─ P4.2 — Windows Installable Daily-use Baseline NOT STARTED
+└─ P4.2 — Windows Installable Daily-use Baseline IN PROGRESS
+   └─ P4.2a Installer Forensics / Acceptance Contract FORENSICS COMPLETE / DECISION REQUIRED
 
 Advanced — Adaptive Model Router
 RESERVED
@@ -986,7 +989,7 @@ RESERVED
 
 下一任务：
 
-**P4.2 — NOT STARTED**
+**P4.2a — FORENSICS COMPLETE / DECISION REQUIRED**
 
 Phase 1、Phase 2、Phase 3（through Phase 3.5）均已完成；Phase 3.5 为
 PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项产品决策、
@@ -1002,7 +1005,10 @@ P4.1d-2 已将门禁接入 App/daemon/daemonctl 并切换获批桌面身份；P4
 migration entry 与 Windows stop evidence；P4.1d-4c 冻结 native non-READY
 入口、restart-required 激活边界与隔离子进程环境；P4.1e 已完成 Build 8 聚合兼容性
 封板。P4.1d 与 P4.1e 均为 PASS / COMPLETE / FROZEN。真实用户数据迁移、真实
-HostIdentity 退休与安装版验收均未执行；P4.2 未开始。
+HostIdentity 退休与安装版验收均未执行。P4.2a 已证明当前 MSI/NSIS 可从 clean checkout
+构建，且 daemon 实际进入两种 payload；同时冻结了 installer scope/shortcut 差异、WebView2 自动网络
+bootstrap 以及 Build 未投影到 Windows version 的决策阻断项。未执行 install/launch/uninstall，
+P4.2 acceptance contract 仍为 DRAFT，P4.2b 未开始。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 

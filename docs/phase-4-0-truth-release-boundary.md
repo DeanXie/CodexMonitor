@@ -1,7 +1,8 @@
 # Phase 4.0 — Truth / Release Boundary Freeze
 
 Status: **PASS / COMPLETE / FROZEN**. Phase 4 is **IN PROGRESS**. P4.1 is
-**PASS / COMPLETE / FROZEN**; P4.2 is not started. The approved desktop identity,
+**PASS / COMPLETE / FROZEN**; P4.2 is in progress and P4.2a is **FORENSICS
+COMPLETE / DECISION REQUIRED**. The approved desktop identity,
 version authority, migration preparation, activation protocol, and fail-closed
 startup gate are complete. Real-user migration and installed acceptance remain
 unexecuted.

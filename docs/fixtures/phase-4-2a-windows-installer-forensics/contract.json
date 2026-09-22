@@ -1,0 +1,132 @@
+{
+  "phase": "P4.2a",
+  "contractStatus": "DRAFT_DECISION_REQUIRED",
+  "sourceCommit": "a3346513b1eab4710ff853de67ab693d06998dd4",
+  "observedAt": "2026-09-22",
+  "versionAuthority": { "version": "0.7.68", "build": 8, "status": "development" },
+  "build": {
+    "commands": ["npm ci", "npm run version:check", "npm run doctor:win", "npm run tauri:build:win"],
+    "cargoTarget": "F:/AI/_cargo-target/CodexMonitor/agents/phase-4-2a-windows-installer-forensics-0d02e372144e",
+    "cleanWorktree": true,
+    "mainCheckoutLocalFilesUsed": false
+  },
+  "artifacts": {
+    "msi": { "name": "CodexMonitor DeanX_0.7.68_x64_en-US.msi", "size": 16736256, "sha256": "DD7CABF9BCD1E777E6E7701A9C123FBB43207F7FE7B005B85884D6B8C0067D8E" },
+    "nsis": { "name": "CodexMonitor DeanX_0.7.68_x64-setup.exe", "size": 12617853, "sha256": "C3B671152DA9ED6E0F896FF53AC207EF7E1AE3AE87536726D43AD093E334D76B" },
+    "mainExecutable": { "name": "codex-monitor.exe", "size": 32592384, "sha256": "84CAF7F38082F2E971DE929B38BC32A21343E3C8347E6AA172056217FA492741" },
+    "daemon": { "name": "codex_monitor_daemon.exe", "size": 11001856, "sha256": "20E2C00306A60B17C8B979D2A55E3B68DC767C3BD94E83F9242D54AFD23EADBC" },
+    "daemonctl": { "name": "codex_monitor_daemonctl.exe", "size": 1574912, "sha256": "029A7BB17F9CFC918B8C2400431DD46E59BFE8D11B221E921468CAAAA3C7E959" }
+  },
+  "effectiveConfiguration": {
+    "productName": "CodexMonitor DeanX",
+    "identifier": "io.github.deanxie.codexmonitor",
+    "version": "0.7.68",
+    "bundleTargets": "all",
+    "createUpdaterArtifacts": false,
+    "updaterPluginConfigured": false,
+    "installerTypes": ["msi", "nsis"],
+    "mainExecutable": "codex-monitor.exe",
+    "icon": "src-tauri/icons/icon.ico",
+    "webView2Mode": { "value": "downloadBootstrapper", "authority": "TAURI_SCHEMA_DEFAULT_CONFIRMED_IN_GENERATED_INSTALLERS" }
+  },
+  "payload": {
+    "daemon": { "packaged": true, "targetName": "codex_monitor_daemon.exe", "sameDirectoryAsMainExecutable": true, "resolvedByInstalledMainWithoutEnvironmentOverride": "STATIC_PATH_CONTRACT_PASS" },
+    "daemonctl": { "packaged": false, "ordinaryGuiInstallerRequirement": false, "futureHeadlessManagementDecision": "DEFERRED_TO_LATER_PHASE" },
+    "resources": [],
+    "generatedExternalFiles": ["codex_monitor_daemon.exe"]
+  },
+  "installerContracts": {
+    "msi": {
+      "scope": "per_machine",
+      "requiresAdministrator": true,
+      "installDirectory": "ProgramFiles64Folder/CodexMonitor DeanX",
+      "installedFiles": ["codex-monitor.exe", "codex_monitor_daemon.exe"],
+      "startMenuShortcut": { "created": true, "default": true },
+      "desktopShortcut": { "created": true, "defaultChecked": true, "userCanOptOut": false, "authority": "GENERATED_WIX_SOURCE_AND_MSI_TABLE" },
+      "uninstallEntry": { "created": true, "scope": "per_machine" },
+      "dataRetentionDefault": "retained",
+      "productCode": "{26CD2216-DD74-4244-AFA7-43598EF57FF6}",
+      "upgradeCode": "{EF5D62BE-6AAC-54C9-BDBA-8DE1EE80B86A}",
+      "allowDowngrades": true
+    },
+    "nsis": {
+      "scope": "per_user",
+      "requiresAdministrator": false,
+      "installDirectory": "$LOCALAPPDATA/CodexMonitor DeanX",
+      "installedFiles": ["codex-monitor.exe", "codex_monitor_daemon.exe", "uninstall.exe"],
+      "startMenuShortcut": { "created": true, "default": true },
+      "desktopShortcut": { "created": "finish_page_or_silent_install", "defaultChecked": true, "userCanOptOut": true, "authority": "GENERATED_NSIS_SOURCE_AND_MUI2_DEFAULT" },
+      "uninstallEntry": { "created": true, "scope": "per_user" },
+      "dataRetentionDefault": "retained_unless_delete_data_option_is_selected",
+      "productIdentity": "CodexMonitor DeanX"
+    }
+  },
+  "webView2": {
+    "mode": "download_bootstrapper",
+    "automaticNetworkBootstrap": true,
+    "downloadUrl": "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+    "staticNetworkSilence": false,
+    "decision": "OFFLINE_OR_PREREQUISITE_STRATEGY_REQUIRED"
+  },
+  "windowsVersioning": {
+    "displayVersion": "0.7.68",
+    "msiProductVersion": "0.7.68",
+    "peFileVersion": "0.7.68.0",
+    "buildNumberProjected": false,
+    "stableMsiUpgradeCode": "{EF5D62BE-6AAC-54C9-BDBA-8DE1EE80B86A}",
+    "sameSemverDifferentBuildUpgrade": "NOT_PROVEN_BY_STATIC_INSPECTION",
+    "blocker": "Windows installers do not distinguish Build 8 from a later Build with the same SemVer"
+  },
+  "networkAndTelemetry": {
+    "updaterArtifacts": false,
+    "updaterEndpointOrPubkey": false,
+    "sentrySdkOrInitialization": false,
+    "installerWebView2BootstrapNetwork": true,
+    "installedRuntimeDynamicSilence": "NOT_EXECUTED"
+  },
+  "runtimeDependencies": [
+    { "name": "Node/npm", "classification": "BUILD_ONLY_DEPENDENCY" },
+    { "name": "Rust/Cargo", "classification": "BUILD_ONLY_DEPENDENCY" },
+    { "name": "CMake", "classification": "BUILD_ONLY_DEPENDENCY" },
+    { "name": "LLVM/libclang", "classification": "BUILD_ONLY_DEPENDENCY" },
+    { "name": "WebView2 Runtime", "classification": "REQUIRED_INSTALLED_RUNTIME_DEPENDENCY" },
+    { "name": "Codex CLI", "classification": "OPTIONAL_FEATURE_DEPENDENCY", "impact": "workspace app-server features unavailable; shell startup is not statically blocked" },
+    { "name": "Git", "classification": "OPTIONAL_FEATURE_DEPENDENCY", "impact": "Git features unavailable" },
+    { "name": "gh", "classification": "OPTIONAL_FEATURE_DEPENDENCY", "impact": "GitHub features unavailable" },
+    { "name": "PowerShell", "classification": "INSTALLER_BOOTSTRAP_DEPENDENCY_MSI_ONLY" },
+    { "name": "CODEX_MONITOR_DAEMON_PATH", "classification": "DEV_ONLY_OVERRIDE" },
+    { "name": "repository/current working directory", "classification": "UNEXPECTED_DEV_DEPENDENCY", "impact": "dictation model root has a cwd fallback when app_data_dir resolution fails" }
+  ],
+  "decisionRequired": [
+    { "id": "canonical-installer-scope", "question": "Select one canonical Windows installer/scope or fund behavioral parity across MSI and NSIS", "recommended": "NSIS per-user as the daily-use baseline; keep MSI non-authoritative until its shortcut and privilege contract is aligned" },
+    { "id": "webview2-delivery", "question": "Choose offline bundled runtime/installer, embedded bootstrapper, or explicit prerequisite behavior", "recommended": "offline installer for deterministic network-silent acceptance, accepting the larger artifact" },
+    { "id": "windows-version-strategy", "question": "Define how every publishable Windows build advances Windows-visible version identity", "recommended": "require a SemVer bump for every published installer while retaining monotonic Build as internal authority" }
+  ],
+  "acceptanceCases": [
+    { "id": "A", "name": "Clean Source Build", "precondition": "clean checkout at frozen commit; no main-checkout local files", "action": "run repository Windows production build wrappers", "expectedResult": "MSI and NSIS are generated from VERSION and release identity authority", "forbiddenResult": "build reads user-local BAT files or main-checkout modifications", "evidenceType": "source/config evidence", "destructiveScope": "isolated worktree and external Cargo target only", "cleanup": "storage closeout for accepted worktree", "status": "PASS_SOURCE_BUILD" },
+    { "id": "B", "name": "Installer Payload", "precondition": "fresh artifacts from case A", "action": "inspect MSI tables, generated WiX/NSIS sources, and extracted payload read-only", "expectedResult": "main and daemon binaries are colocated; required resources are present", "forbiddenResult": "daemon exists only in Cargo output or installer depends on repo paths", "evidenceType": "installer static evidence", "destructiveScope": "temporary extraction only", "cleanup": "delete extraction directory", "status": "PASS_STATIC_INSPECTION" },
+    { "id": "C", "name": "Install", "precondition": "clean disposable Windows Sandbox or VM snapshot", "action": "perform interactive ordinary-user installation", "expectedResult": "canonical installer completes at documented scope and location", "forbiddenResult": "hidden dev-tool/repository dependency or unexplained elevation", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest filesystem and registry", "cleanup": "revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "D", "name": "First Launch", "precondition": "case C installed; no repo or developer toolchain", "action": "launch from installed Start Menu shortcut", "expectedResult": "installed shell starts and remains responsive", "forbiddenResult": "lookup of dist, target, worktree, repo, Node, Rust, CMake, or LLVM", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest user profile", "cleanup": "revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "E", "name": "Fresh Profile Bootstrap", "precondition": "clean guest app-data root", "action": "complete explicit fresh-profile activation", "expectedResult": "prepared profile validates before activation and current process reaches READY", "forbiddenResult": "implicit legacy migration, cwd fallback, or premature business access", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest app-data root", "cleanup": "revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "F", "name": "Existing Legacy Migration", "precondition": "sanitized synthetic legacy profile in disposable guest", "action": "preview, confirm, retire synthetic identity, activate, and validate", "expectedResult": "only allowlisted state migrates and restart boundary is enforced", "forbiddenResult": "credential/canonical data copy or real-user data access", "evidenceType": "disposable installed-app E2E", "destructiveScope": "synthetic guest profile only", "cleanup": "revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "G", "name": "App Restart", "precondition": "activated guest profile", "action": "exit and relaunch installed app", "expectedResult": "same identity/profile loads after current-process validation", "forbiddenResult": "new UUID, repeat migration, or duplicate daemon", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest processes", "cleanup": "stop guest processes and revert snapshot", "status": "NOT_EXECUTED" },
+    { "id": "H", "name": "Start Menu Shortcut", "precondition": "interactive install", "action": "inspect and launch the created Start Menu shortcut", "expectedResult": "shortcut exists and targets installed main executable", "forbiddenResult": "shortcut targets build tree or missing executable", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest shortcuts", "cleanup": "uninstall or revert snapshot", "status": "NOT_EXECUTED" },
+    { "id": "I", "name": "Desktop Shortcut Opt-out", "precondition": "interactive canonical installer", "action": "verify default checked, then opt out before installation completes", "expectedResult": "no Desktop shortcut is created after opt-out", "forbiddenResult": "unconditional Desktop shortcut or default unchecked", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest Desktop", "cleanup": "uninstall or revert snapshot", "status": "NOT_EXECUTED" },
+    { "id": "J", "name": "Daemon Availability", "precondition": "installed app with no CODEX_MONITOR_DAEMON_PATH", "action": "exercise app-owned daemon discovery/start in guest", "expectedResult": "daemon is found beside main executable and authenticated readiness succeeds", "forbiddenResult": "Cargo-target lookup, PATH-only lookup, or missing daemon", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest loopback process", "cleanup": "stop guest daemon and revert snapshot", "status": "NOT_EXECUTED" },
+    { "id": "K", "name": "Dev-tool Independence", "precondition": "guest has no Node, npm, Rust, Cargo, CMake, LLVM, repo, or local BAT files", "action": "launch and use core app shell", "expectedResult": "core app and daemon readiness work; optional dependency failures remain scoped", "forbiddenResult": "core startup failure from absent developer toolchain", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest only", "cleanup": "revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "L", "name": "Updater and Network Silence", "precondition": "network-observed disposable guest with chosen WebView2 strategy", "action": "install and launch while capturing process/network activity", "expectedResult": "no updater or telemetry request; only explicitly approved product traffic", "forbiddenResult": "Dimillian updater, Sentry, or undisclosed installer bootstrap traffic", "evidenceType": "disposable installed-app E2E", "destructiveScope": "guest network and processes", "cleanup": "discard capture and revert snapshot after evidence export", "status": "NOT_EXECUTED" },
+    { "id": "M", "name": "Uninstall", "precondition": "installed guest package with retained test data", "action": "run normal uninstaller", "expectedResult": "program files, shortcuts, and uninstall entry are removed at documented scope", "forbiddenResult": "unexpected app-data deletion or unrelated registry deletion", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest install state", "cleanup": "revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "N", "name": "Reinstall", "precondition": "case M completed with retained test profile", "action": "install same canonical package again and launch", "expectedResult": "package registration and retained profile remain coherent", "forbiddenResult": "new identity, data loss, or duplicate install registration", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest install state", "cleanup": "uninstall and revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "O", "name": "Upgrade Same Product Identity", "precondition": "two signed-off test packages with defined Windows-visible version progression", "action": "install older package then upgrade with newer package", "expectedResult": "one product identity upgrades in place and retains allowed data", "forbiddenResult": "side-by-side duplicate, downgrade ambiguity, or same-version conflict", "evidenceType": "disposable installed-app E2E", "destructiveScope": "disposable guest install state", "cleanup": "uninstall and revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "P", "name": "Data Retention on Uninstall", "precondition": "installed guest app with sentinel profile data", "action": "uninstall once with default choices and once with explicit delete-data choice where supported", "expectedResult": "default retains data; explicit destructive choice is clear and bounded", "forbiddenResult": "silent/default deletion of user data", "evidenceType": "disposable installed-app E2E", "destructiveScope": "synthetic guest app data", "cleanup": "revert guest snapshot", "status": "NOT_EXECUTED" },
+    { "id": "Q", "name": "Wrong or Corrupt Profile Fail-closed", "precondition": "guest contains malformed, future-schema, wrong-root, and retired-identity fixtures", "action": "launch installed app and direct daemon entrypoints against each fixture", "expectedResult": "bootstrap/recovery UI or explicit error; zero business initialization", "forbiddenResult": "default profile generation, cwd fallback, auto-connect, or business access", "evidenceType": "disposable installed-app E2E", "destructiveScope": "synthetic guest profiles", "cleanup": "revert guest snapshot", "status": "NOT_EXECUTED" }
+  ],
+  "operations": {
+    "installerExecuted": false,
+    "installedAppLaunched": false,
+    "uninstallerExecuted": false,
+    "registryModified": false,
+    "realProfileWritten": false,
+    "phase42bStarted": false
+  }
+}

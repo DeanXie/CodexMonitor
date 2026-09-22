@@ -27,6 +27,10 @@ Related docs:
   `docs/phase-4-1-closeout.md`, `docs/phase-4-1-failure-matrix.md`,
   `docs/fixtures/phase-4-1-closeout/contract.json`,
   `scripts/phase-4-1-closeout-compatibility.test.mjs`
+- Windows installer forensics and draft installed acceptance authority:
+  `docs/phase-4-2a-windows-installer-forensics.md`,
+  `docs/fixtures/phase-4-2a-windows-installer-forensics/contract.json`,
+  `scripts/phase-4-2a-windows-installer-forensics.test.mjs`
 - Creation-intent / first-Turn coordination: `docs/phase-3-3-2-creation-coordination.md`
 - iOS remote over Tailscale (TCP): `docs/mobile-ios-tailscale-blueprint.md`
 

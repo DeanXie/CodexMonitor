@@ -691,10 +691,11 @@ Project
 ## 当前状态
 
 **IN PROGRESS**。P4.0 与 P4.1 已 PASS / COMPLETE / FROZEN，当前版本为
-`v0.7.68 · Build 9 · development`。P4.2a 安装包取证与 P4.2b 打包纠偏已完成并冻结；
+`v0.7.68 · Build 10 · development`。P4.2a 安装包取证与 P4.2b 打包纠偏已完成并冻结；
 NSIS per-user 为 canonical Windows installer，WebView2 使用 offlineInstaller，MSI 仅保留为
-非 canonical 兼容产物。P4.2 仍为 **IN PROGRESS**，真实安装、首次启动、真实用户迁移
-和安装态 E2E 尚未执行。完整且唯一的 Phase 4 产品/发行合同见
+非 canonical 兼容产物。P4.2 仍为 **IN PROGRESS**：隔离 Guest 安装与首次启动已执行，
+Build 9 的 D 为 FAIL，C 为 BLOCKED / EVIDENCE INCOMPLETE。Build 10 仅完成源码纠偏，
+尚无新安装包或安装态复验；真实用户迁移未执行。完整且唯一的 Phase 4 产品/发行合同见
 [`docs/phase-4-0-truth-release-boundary.md`](docs/phase-4-0-truth-release-boundary.md)。
 
 ## 目标与平台顺序
@@ -980,7 +981,7 @@ IN PROGRESS
 └─ P4.2 — Windows Installable Daily-use Baseline IN PROGRESS
    ├─ P4.2a Installer Forensics / Acceptance Contract PASS / COMPLETE / FROZEN
    ├─ P4.2b Canonical Windows Packaging Corrections PASS / COMPLETE / FROZEN
-   └─ P4.2c Disposable Installed Acceptance NOT STARTED
+   └─ P4.2c Disposable Installed Acceptance IN PROGRESS / BLOCKED
 
 Advanced — Adaptive Model Router
 RESERVED
@@ -992,7 +993,13 @@ RESERVED
 
 下一任务：
 
-**P4.2c — DISPOSABLE INSTALLED ACCEPTANCE**
+**P4.2c — BUILD 10 ARTIFACT AUTHORITY BEFORE FRESH INSTALLED ACCEPTANCE**
+
+First Launch 最小源码纠偏已验证：仅将只读 `is_mobile_runtime` 加入 pre-READY
+bootstrap allowlist，业务门禁不放宽。下一步须单独批准 Build 10 打包、冻结新 artifact，
+之后另行批准 fresh installed acceptance；不得复用或覆盖 Build 9 artifact，
+不得将历史 D FAIL 改为 PASS。证据与范围见
+[`docs/phase-4-2c-first-launch-correction.md`](docs/phase-4-2c-first-launch-correction.md)。
 
 Phase 1、Phase 2、Phase 3（through Phase 3.5）均已完成；Phase 3.5 为
 PASS / COMPLETE / FROZEN。P4.0 已冻结证据分类、发行边界、十一项产品决策、
@@ -1008,13 +1015,13 @@ P4.1d-2 已将门禁接入 App/daemon/daemonctl 并切换获批桌面身份；P4
 migration entry 与 Windows stop evidence；P4.1d-4c 冻结 native non-READY
 入口、restart-required 激活边界与隔离子进程环境；P4.1e 已完成 Build 8 聚合兼容性
 封板。P4.1d 与 P4.1e 均为 PASS / COMPLETE / FROZEN。真实用户数据迁移、真实
-HostIdentity 退休与安装版验收均未执行。P4.2a 已证明当前 MSI/NSIS 可从 clean checkout
+HostIdentity 退休仍未执行。P4.2a 已证明当时 MSI/NSIS 可从 clean checkout
 构建，且 daemon 实际进入两种 payload；同时冻结了 installer scope/shortcut 差异、WebView2 自动网络
-bootstrap 以及 Build 未投影到 Windows version 的决策阻断项。未执行 install/launch/uninstall，
+bootstrap 以及 Build 未投影到 Windows version 的决策阻断项。该取证 Slice 未执行 install/launch/uninstall，
 P4.2a 的决策项已在 P4.2b 落地：NSIS per-user 为 canonical，WebView2 离线 payload
 嵌入安装包，dictation 解析 app data 失败时 fail closed，Windows installer 升级依赖
-SemVer，Build 仅为内部单调修订号。当前下一任务是 P4.2c，仅在可丢弃 Windows
-环境中执行真实 install/launch/bootstrap/daemon/network 验收。
+SemVer，Build 仅为内部单调修订号。P4.2c 的后续安装验收必须等待 Build 10 新 artifact
+authority 和独立授权，仅可在可丢弃 Windows 环境中执行，不在本纠偏 Slice 中恢复。
 
 真实取证报告：`docs/desktop-near-live-forensics.md`。
 

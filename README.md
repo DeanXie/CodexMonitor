@@ -258,7 +258,11 @@ acceptance authority. P4.2 is in progress. P4.2a installer forensics are
 frozen, and P4.2b freezes NSIS per-user as the canonical package, embeds the
 offline WebView2 runtime, removes the dictation cwd fallback, and advances the
 authority to `v0.7.68 · Build 9 · development`. Installed-app E2E remains
-P4.2c and has not started.
+P4.2c, which is in progress and blocked: the Build 9 First Launch result is
+FAIL and Case C's non-admin evidence is incomplete. The source-only
+[First Launch correction](docs/phase-4-2c-first-launch-correction.md) is verified
+at `v0.7.68 · Build 10 · development`; no corrected installer or installed
+retest has been produced. Those require separate authorization.
 
 Build the production Tauri bundle:
 

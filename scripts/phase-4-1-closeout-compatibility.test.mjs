@@ -310,7 +310,7 @@ test("final_current_state_authorities_are_consistent", async () => {
     assert.doesNotMatch(authority, /P4\.1e (?:is )?(?:PAUSED|RESUME PENDING)/);
   }
   assert.match(roadmap, /P4\.1e[^\n]*PASS \/ COMPLETE \/ FROZEN/);
-  assert.match(roadmap, /P4\.2[^\n]*NOT STARTED/);
+  assert.match(roadmap, /P4\.2c[^\n]*IN PROGRESS \/ BLOCKED/);
   assert.match(phase40, /P4\.1 is \*\*PASS \/ COMPLETE \/ FROZEN\*\*/);
   assert.match(phase41, /Status: \*\*PASS \/ COMPLETE \/ FROZEN\*\*/);
   assert.match(phase41e, /Status: \*\*PASS \/ COMPLETE \/ FROZEN\*\*/);

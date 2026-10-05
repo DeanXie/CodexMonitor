@@ -77,7 +77,8 @@ fn is_mobile_runtime() -> bool {
 fn is_bootstrap_invoke(command: &str) -> bool {
     matches!(
         command,
-        "get_bootstrap_status"
+        "is_mobile_runtime"
+            | "get_bootstrap_status"
             | "activate_fresh_profile"
             | "recover_profile_activation"
             | "preview_legacy_migration"
@@ -475,6 +476,23 @@ pub fn run() {
 mod startup_gate_tests {
     use super::{business_invoke_allowed, startup_effect_plan};
     use crate::shared::activation_foundation::RuntimeProcessState;
+
+    #[test]
+    fn platform_bootstrap_probe_is_allowed_before_ready_without_business_access() {
+        assert!(business_invoke_allowed("is_mobile_runtime", false));
+        for command in [
+            "get_app_settings",
+            "list_workspaces",
+            "connect_workspace",
+            "resume_thread",
+            "respond_to_server_request",
+            "delete_thread",
+            "thread_upstream_unsubscribe",
+            "tailscale_daemon_start",
+        ] {
+            assert!(!business_invoke_allowed(command, false), "{command}");
+        }
+    }
 
     #[test]
     fn validating_process_only_allows_bootstrap_commands() {

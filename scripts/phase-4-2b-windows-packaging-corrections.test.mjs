@@ -80,7 +80,9 @@ test("Windows installer release identity is SemVer while Build stays internal", 
 
   assert.equal(tauri.version, version.version);
   assert.equal(packageJson.version, version.version);
-  assert.equal(version.build, 9);
+  // The frozen package is Build 9; later source corrections retain SemVer and
+  // must not reset the monotonic engineering Build to that historical package.
+  assert.ok(Number.isSafeInteger(version.build) && version.build >= 9);
   assert.equal(tauri.version.split(".").length, 3);
   assert.equal(tauri.version.includes(String(version.build)), false);
 });

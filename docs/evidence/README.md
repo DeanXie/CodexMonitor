@@ -195,5 +195,10 @@ P4.2b canonical packaging corrections are indexed at
 `phase-4-2b/README.md` and frozen in
 `../fixtures/phase-4-2b-windows-packaging-corrections/contract.json`.
 P4.2b is **PASS / COMPLETE / FROZEN** at Build 9. No MSI/NSIS install,
-installed-app launch, uninstall, or real profile migration has run; those
-remain later P4.2 acceptance work.
+installed-app launch, uninstall, or real profile migration ran in that slice.
+
+Current P4.2c installed evidence and the Build 10 source-only First Launch
+correction are indexed in `../phase-4-2c-first-launch-correction.md`. Build 9
+Case D remains **FAIL**; Case C remains **BLOCKED / EVIDENCE INCOMPLETE**.
+Source correction verification is **PASS**, not installed acceptance. P4.2c
+remains blocked pending a new artifact and separately authorized acceptance.
